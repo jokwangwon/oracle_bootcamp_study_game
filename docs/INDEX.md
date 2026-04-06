@@ -21,6 +21,7 @@
 8. **[generative-ai-extensibility-design.md](architecture/generative-ai-extensibility-design.md)** — 생성 AI 확장성: 학습/모델교체/확장 (3+1 합의 완료)
 9. **[ai-backend-stack-convention.md](architecture/ai-backend-stack-convention.md)** — AI 백엔드 스택 가이드라인: Python 분리 기준 (3+1 합의 완료)
 10. **[environment-and-docker-design.md](architecture/environment-and-docker-design.md)** — 환경 변수 중앙 관리 + Docker-First (3+1 합의 완료)
+11. **[change-impact-analysis-design.md](architecture/change-impact-analysis-design.md)** — 변경 영향 분석: 의존성/장애 사전 검증 (3+1 합의 완료)
 
 ### 3. 원칙 문서
 5. **[ARCHITECTURE_PRINCIPLES.md](constitution/ARCHITECTURE_PRINCIPLES.md)** — 아키텍처 10대 원칙
@@ -55,7 +56,8 @@ docs/
 │   ├── generative-ai-asset-pipeline-design.md   # 생성 AI 에셋 파이프라인
 │   ├── generative-ai-extensibility-design.md    # 생성 AI 확장성
 │   ├── ai-backend-stack-convention.md           # AI 백엔드 스택 가이드라인
-│   └── environment-and-docker-design.md         # 환경 변수 + Docker-First
+│   ├── environment-and-docker-design.md         # 환경 변수 + Docker-First
+│   └── change-impact-analysis-design.md         # 변경 영향 분석
 │
 ├── guides/                               # 개발 가이드
 │   ├── DEVELOPMENT_GUIDE.md              # 개발 프로세스, Git 규칙
@@ -69,6 +71,7 @@ docs/
 │   ├── ADR-004-generative-ai-extensibility.md    # 생성 AI 확장성
 │   ├── ADR-005-ai-backend-stack-guideline.md     # AI 백엔드 스택
 │   ├── ADR-006-environment-and-docker.md         # 환경 변수 + Docker
+│   ├── ADR-007-change-impact-analysis.md         # 변경 영향 분석
 │   └── ...
 │
 ├── sessions/                             # 세션 로그
@@ -125,6 +128,7 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-06 | 생성 AI 확장성 — 학습/모델교체/확장 (3+1 합의 완료) | `generative-ai-extensibility-design.md`, `ADR-004` |
 | 2026-04-06 | AI 백엔드 스택 가이드라인 (3+1 합의 완료) | `ai-backend-stack-convention.md`, `ADR-005` |
 | 2026-04-06 | 환경 변수 중앙 관리 + Docker-First (3+1 합의 완료) | `environment-and-docker-design.md`, `ADR-006` |
+| 2026-04-06 | 변경 영향 분석 (3+1 합의 완료) | `change-impact-analysis-design.md`, `ADR-007` |
 
 ---
 
