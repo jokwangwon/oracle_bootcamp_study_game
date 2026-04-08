@@ -102,11 +102,27 @@ Phase 4: 통합 테스트 + 배포
 - **2단계** (Week 3-4): 결과예측 + 카테고리분류 + 랭킹
 - **3단계** (Week 5+): 시나리오 시뮬레이션 + 실시간 대전
 
-### 다음 단계
+### 진행 현황
 
-- [ ] TDD로 MVP 1단계 구현 시작
-- [ ] 프로젝트 스캐폴딩 (NestJS + Next.js monorepo)
-- [ ] Docker Compose 환경 구성
+상세 매핑은 **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** 참조 (SDD ↔ 코드 ↔ 남은 작업).
+
+요약:
+- ✅ 모노레포 스캐폴딩 (NestJS + Next.js + shared)
+- ✅ Docker Compose 환경 (postgres/redis/api/web)
+- ✅ 게임 모드 2/5 (BlankTyping, TermMatch) + Strategy Pattern
+- ✅ 솔로 게임 start/answer + 프론트 플레이 화면
+- ✅ 인증 (JWT + bcrypt), 학습 범위 검증 (계산적 키워드 매칭)
+- ✅ 테스트 29개 GREEN
+- 🔴 사전 생성 문제 풀 시드 (없으면 게임 실행 불가)
+- 🔴 BullMQ 워커 + AI 문제 생성
+- 🔴 노션 import → 범위 추론
+
+### 다음 우선순위
+
+1. 시드 데이터 작성 (1주차 sql-basics 빈칸/용어 30문제)
+2. 솔로 게임 종료 흐름 (`/finish` + `user_progress` 갱신 + `answer_history`)
+3. 로그인/회원가입 UI
+4. BullMQ 워커 + AI 문제 생성
 
 ---
 

@@ -14,6 +14,7 @@
 
 ### 2. 프로젝트 설계 (Oracle DBA 학습 게임)
 3. **[oracle-dba-learning-game-design.md](architecture/oracle-dba-learning-game-design.md)** — Oracle DBA 학습 게임 SDD (3+1 합의 완료)
+3-1. **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** — SDD ↔ 실제 코드 매핑 + 진행률 (살아있는 체크리스트)
 
 ### 3. 아키텍처 이해
 4. **[harness-engineering-design.md](architecture/harness-engineering-design.md)** — 하네스 엔지니어링 설계
@@ -45,6 +46,7 @@
 docs/
 ├── INDEX.md                              # 현재 문서 (문서 인덱스)
 ├── CONTEXT.md                            # 프로젝트 현재 상태
+├── IMPLEMENTATION_STATUS.md              # SDD ↔ 코드 매핑 (살아있는 체크리스트)
 │
 ├── constitution/                         # 헌법 및 원칙
 │   ├── PROJECT_CONSTITUTION.md           # 프로젝트 헌법 (11개 조항)
@@ -135,6 +137,7 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-06 | 환경 변수 중앙 관리 + Docker-First (3+1 합의 완료) | `environment-and-docker-design.md`, `ADR-006` |
 | 2026-04-06 | 변경 영향 분석 (3+1 합의 완료) | `change-impact-analysis-design.md`, `ADR-007` |
 | 2026-04-08 | Oracle DBA 학습 게임 SDD + 기술 스택 결정 (3+1 합의 완료) | `oracle-dba-learning-game-design.md`, `ADR-008`, `consensus-001` |
+| 2026-04-08 | MVP 1단계 스캐폴딩 + 구현 현황 매핑 문서 추가 | `IMPLEMENTATION_STATUS.md`, `SESSION_2026-04-08.md` |
 
 ---
 
