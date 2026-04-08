@@ -29,7 +29,7 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 
 | 단계 | 목표 | 진행률 |
 |------|------|--------|
-| **1단계** | 솔로 퀴즈 (빈칸타이핑 + 용어맞추기) + AI 문제 생성 | **약 80%** |
+| **1단계** | 솔로 퀴즈 (빈칸타이핑 + 용어맞추기) + AI 문제 생성 | **약 90%** |
 | 2단계 | 결과예측 + 카테고리분류 + 랭킹 | 0% (⚪) |
 | 3단계 | 시나리오 시뮬레이션 + 실시간 대전 | 0% (⚪) |
 
@@ -45,14 +45,14 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 | 문제 풀 조회 | ✅ | 누적 화이트리스트 적용 |
 | 학습 범위 검증 | ✅ | 계산적 키워드 매칭 |
 | 시드 데이터 (사전 생성 문제 풀) | 🟡 | 1주차 sql-basics 30문제 + scope 시드 작성 (다른 주차는 미작성) |
-| AI 클라이언트 (LangChain + Langfuse) | 🟡 | LlmClient + AiModule 완료. BullMQ Processor + 비즈니스 로직은 다음 PR |
-| AI 문제 생성 워커 (BullMQ) | 🔴 | LlmClient는 준비됨, Processor 미구현 |
+| AI 클라이언트 (LangChain + Langfuse) | ✅ | LlmClient + PromptManager + AiQuestionGenerator + Langfuse trace |
+| AI 문제 생성 워커 (BullMQ) | ✅ | Queue + Processor + REST 엔드포인트 (blank-typing/term-match) |
 | 노션 import → 범위 추론 | 🔴 | 미시작 |
 | 프론트 솔로 화면 | ✅ | 정식 로그인/회원가입 + 인증 가드 + 헤더 |
 | Docker Compose 환경 | ✅ | postgres/redis/api/web 정의 완료 |
-| 테스트 (Vitest) | ✅ | 8 파일 / 58 케이스 GREEN |
+| 테스트 (Vitest) | ✅ | 10 파일 / 70 케이스 GREEN |
 
-> **다음 세션 우선순위 제안**: BullMQ 워커 + AI 문제 생성 (LangChain + Langfuse, ADR-009) → 노션 import → 범위 추론.
+> **다음 세션 우선순위 제안**: 노션 import → 범위 추론 → 관리자 review UI(/api/questions/:id/review) → 2주차 sql-functions 시드.
 
 ---
 
@@ -74,12 +74,12 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 |--------|--------|------|------|
 | Next.js 14 + App Router | `next` | ✅ | ✅ |
 | NestJS 10 | `@nestjs/*` | ✅ | ✅ |
-| Socket.IO | `socket.io`, `@nestjs/platform-socket.io` | ✅ | 🔴 import 0건 |
-| BullMQ | `bullmq`, `@nestjs/bullmq` | ✅ | 🔴 import 0건 |
+| Socket.IO | `socket.io`, `@nestjs/platform-socket.io` | ✅ | 🔴 import 0건 (⚪ MVP 3단계) |
 | TypeORM + pg | `typeorm`, `pg` | ✅ | ✅ |
-| ioredis | `ioredis` | ✅ | 🔴 import 0건 |
-| **LangChain JS** (ADR-009) | `langchain`, `@langchain/core`, `@langchain/anthropic` | ✅ | 🟡 LlmClient 팩토리만 (실 호출은 다음 PR) |
-| **Langfuse** (ADR-009) | `langfuse`, `langfuse-langchain` | ✅ | 🟡 callback handler factory만 (key 부재 시 NoOp) |
+| **LangChain JS** (ADR-009) | `langchain`, `@langchain/core`, `@langchain/anthropic` | ✅ | ✅ LlmClient + AiQuestionGenerator (StructuredOutputParser + ChatPromptTemplate) |
+| **Langfuse** (ADR-009) | `langfuse`, `langfuse-langchain` | ✅ | ✅ CallbackHandler 자동 부착 + Prompt Management fetch (PromptManager) |
+| BullMQ | `bullmq`, `@nestjs/bullmq` | ✅ | ✅ ai-question-generation 큐 + Processor (WorkerHost) |
+| ioredis | `ioredis` | ✅ | ✅ BullMQ connection으로 사용 |
 | ~~Anthropic SDK~~ | ~~`@anthropic-ai/sdk`~~ | ✅ **제거 완료** (ADR-009 §마이그레이션) | — |
 | bcrypt + JWT | `bcrypt`, `@nestjs/jwt`, `passport-jwt` | ✅ | ✅ |
 | Zod | `zod` | ✅ | ✅ |
@@ -142,15 +142,15 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 | 단계 | SDD | 코드 | 상태 |
 |------|-----|------|------|
 | 노션 자료 입력/import | §4.1 | — | 🔴 |
-| 범위 추론 (키워드 추출) | §4.2 | — | 🔴 (LangChain 호출 — ADR-009) |
+| 범위 추론 (키워드 추출) | §4.2 | — | 🔴 (LangChain 호출 — 다음 PR) |
 | 주차/주제 매핑 | §4.2 Step 2 | — | 🔴 |
-| 범위 태깅 | §4.2 Step 3 | — | 🔴 (수동 INSERT만 가능) |
-| AI 문제 생성 (LLM 호출) | §4.3 | `apps/api/src/modules/ai/llm-client.ts` | 🟡 클라이언트 팩토리만, 비즈니스 로직 미구현 |
-| BullMQ 워커 격리 | §4.3 | — | 🔴 (`bullmq` 미사용) |
-| ① 스키마 검증 (Zod) | §4.4 ① | `packages/shared/src/schemas/question.schema.ts` | ✅ (스키마만, 호출처는 없음) |
-| ② 키워드 화이트리스트 매칭 | §4.4 ② | `apps/api/src/modules/content/services/scope-validator.service.ts` | ✅ |
+| 범위 태깅 | §4.2 Step 3 | — | 🔴 (시드 + 수동 INSERT만 가능) |
+| AI 문제 생성 (LLM 호출) | §4.3 | `apps/api/src/modules/ai/ai-question-generator.ts` | ✅ blank-typing + term-match (LangChain + Langfuse) |
+| BullMQ 워커 격리 | §4.3 | `apps/api/src/modules/ai/queue/ai-question-generation.processor.ts` | ✅ |
+| ① 스키마 검증 (Zod) | §4.4 ① | `packages/shared/src/schemas/question.schema.ts` + AiQuestionGenerator 호출 | ✅ |
+| ② 키워드 화이트리스트 매칭 | §4.4 ② | `apps/api/src/modules/content/services/scope-validator.service.ts` + AiQuestionGenerator 호출 | ✅ |
 | ③ 중복 검사 (유사도) | §4.4 ③ | — | 🔴 |
-| ④ 문제 풀 저장 | §4.4 ④ | `apps/api/src/modules/content/services/question-pool.service.ts:58` | ✅ (`save()` 메서드) |
+| ④ 문제 풀 저장 | §4.4 ④ | `apps/api/src/modules/content/services/question-pool.service.ts` (`save()`, `SaveQuestionInput`) | ✅ (status='pending_review') |
 
 ### 4.3 사전 생성 문제 풀 (Pre-generated Pool)
 
@@ -235,8 +235,8 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 | GET | `/api/users/me/progress` | §7.1 | `users.controller.ts:24` | ✅ (조회만, 갱신 X) |
 | GET | `/api/users/me/history` | §7.1 | — | 🔴 |
 | GET | `/api/questions` | §7.1 | `content.controller.ts:13` | ✅ |
-| POST | `/api/questions/generate` | §7.1 | — | 🔴 (BullMQ 종속) |
-| GET | `/api/questions/generate/:jobId` | §7.1 | — | 🔴 |
+| POST | `/api/questions/generate` | §7.1 | `ai/ai-question.controller.ts` (`enqueue`) | ✅ |
+| GET | `/api/questions/generate/:jobId` | §7.1 | `ai/ai-question.controller.ts` (`status`) | ✅ |
 | PATCH | `/api/questions/:id/review` | §7.1 | — | 🔴 (관리자 승인) |
 | POST | `/api/games/solo/start` | §7.1 | `game.controller.ts:71` | ✅ |
 | POST | `/api/games/solo/answer` | §7.1 | `game.controller.ts:76` | ✅ |
@@ -247,7 +247,7 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 | POST | `/api/scope/import` | §7.1 | — | 🔴 (노션 import) |
 | PATCH | `/api/scope/:weekId` | §7.1 | — | 🔴 (관리자 편집) |
 
-**구현된 엔드포인트: 8 / 18 (44%)**
+**구현된 엔드포인트: 10 / 18 (56%)**
 
 ### 7.2 WebSocket Events (§7.2)
 
@@ -280,7 +280,7 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 | ADR-005 | 로컬 추론 시 Python 분리 | ✅ (현재는 LLM API 호출만 → TS 충분) |
 | ADR-006 | Docker-First | ✅ |
 | ADR-007 | 변경 영향 분석 | 🟡 (이 문서 자체가 그 일환) |
-| ADR-009 | LangChain + Langfuse 강제 | 🟡 LlmClient/AiModule 인프라 완료, BullMQ Processor 다음 PR |
+| ADR-009 | LangChain + Langfuse 강제 | ✅ 전체 적용 — LlmClient + PromptManager + AiQuestionGenerator + BullMQ |
 | TEST_STRATEGY | 70% 커버리지 | ⚪ (커버리지 측정 미실행) |
 
 ---
@@ -292,7 +292,7 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 1. ~~**시드 데이터 작성**~~ ✅ 완료 (1주차 sql-basics 30문제 + scope, 11개 검증 테스트)
 2. ~~**솔로 게임 종료 흐름**~~ ✅ 완료 (`/finish`, `user_progress` 갱신, `answer_history` INSERT, 12개 신규 테스트)
 3. ~~**로그인 UI**~~ ✅ 완료 (`/login`, `/register`, 토큰 헬퍼, Header, solo 가드)
-4. **BullMQ 워커 + AI 문제 생성** — LlmClient는 준비 완료. 다음 PR에서 BullMQ Queue + Processor + AiQuestionGenerator + `/questions/generate` 엔드포인트. `StructuredOutputParser` + Zod 검증 → ScopeValidator → 풀 저장.
+4. ~~**BullMQ 워커 + AI 문제 생성**~~ ✅ 완료 (LangChain ChatAnthropic + StructuredOutputParser + Langfuse trace + Prompt Management fetch + 로컬 fallback). blank-typing + term-match 모드 모두 지원, status='pending_review'로 저장. 12개 신규 테스트.
 5. **노션 import → 범위 추론** — 노션 API 또는 마크다운 업로드 → 키워드 추출 → `weekly_scope` 저장
 6. **MVP 2단계 진입** — 결과예측/카테고리분류 모드 + 랭킹 (Redis Sorted Set)
 

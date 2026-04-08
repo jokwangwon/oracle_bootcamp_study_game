@@ -20,10 +20,10 @@ const envSchema = z.object({
   LLM_PROVIDER: z.enum(['anthropic', 'openai']).default('anthropic'),
   LLM_API_KEY: z.string().min(1),
   LLM_MODEL: z.string().default('claude-opus-4-6'),
-  // ADR-009: Langfuse는 LangChain과 함께 강제. 다만 AI 코드가 추가되기
-  // 전까지는 옵셔널로 둔다. 첫 AI 워커 PR에서 .min(1)로 승격할 것.
-  LANGFUSE_PUBLIC_KEY: z.string().optional(),
-  LANGFUSE_SECRET_KEY: z.string().optional(),
+  // ADR-009: AI 워커가 도입되었으므로 Langfuse 키는 필수.
+  // 운영 정책상 모든 LLM 호출은 Langfuse trace로 기록되어야 한다.
+  LANGFUSE_PUBLIC_KEY: z.string().min(1, 'LANGFUSE_PUBLIC_KEY는 필수 (ADR-009)'),
+  LANGFUSE_SECRET_KEY: z.string().min(1, 'LANGFUSE_SECRET_KEY는 필수 (ADR-009)'),
   LANGFUSE_HOST: z.string().url().default('https://cloud.langfuse.com'),
   SEED_ON_BOOT: z
     .enum(['true', 'false'])

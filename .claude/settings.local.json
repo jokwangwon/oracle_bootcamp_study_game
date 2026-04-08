@@ -28,7 +28,10 @@
       "Bash(git check-ignore:*)",
       "Bash(echo \"EXIT_SHARED=$?\")",
       "Bash(echo \"EXIT_API=$?\")",
-      "Bash(echo \"EXIT_WEB=$?\")"
+      "Bash(echo \"EXIT_WEB=$?\")",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(echo \"WEB_EXIT=$?\")",
+      "Bash(echo \"TSC=$?\")"
     ]
   }
 }
