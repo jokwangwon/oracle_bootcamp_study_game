@@ -12,8 +12,11 @@
 1. **[README.md](../README.md)** — 프로젝트 개요, 비전, 개발 방법론
 2. **[PROJECT_CONSTITUTION.md](constitution/PROJECT_CONSTITUTION.md)** — 프로젝트 헌법 (최상위 규칙)
 
-### 2. 아키텍처 이해
-3. **[harness-engineering-design.md](architecture/harness-engineering-design.md)** — 하네스 엔지니어링 설계
+### 2. 프로젝트 설계 (Oracle DBA 학습 게임)
+3. **[oracle-dba-learning-game-design.md](architecture/oracle-dba-learning-game-design.md)** — Oracle DBA 학습 게임 SDD (3+1 합의 완료)
+
+### 3. 아키텍처 이해
+4. **[harness-engineering-design.md](architecture/harness-engineering-design.md)** — 하네스 엔지니어링 설계
 4. **[multi-agent-system-design.md](architecture/multi-agent-system-design.md)** — 3+1 멀티 에이전트 합의 시스템
 5. **[automated-review-questionnaire-design.md](architecture/automated-review-questionnaire-design.md)** — 자동화 검토 질문지 (3+1 합의 완료)
 6. **[idea-driven-stack-decision-design.md](architecture/idea-driven-stack-decision-design.md)** — 아이디어 기반 스택 결정 (3+1 합의 완료)
@@ -57,7 +60,8 @@ docs/
 │   ├── generative-ai-extensibility-design.md    # 생성 AI 확장성
 │   ├── ai-backend-stack-convention.md           # AI 백엔드 스택 가이드라인
 │   ├── environment-and-docker-design.md         # 환경 변수 + Docker-First
-│   └── change-impact-analysis-design.md         # 변경 영향 분석
+│   ├── change-impact-analysis-design.md         # 변경 영향 분석
+│   └── oracle-dba-learning-game-design.md       # Oracle DBA 학습 게임 SDD
 │
 ├── guides/                               # 개발 가이드
 │   ├── DEVELOPMENT_GUIDE.md              # 개발 프로세스, Git 규칙
@@ -72,6 +76,7 @@ docs/
 │   ├── ADR-005-ai-backend-stack-guideline.md     # AI 백엔드 스택
 │   ├── ADR-006-environment-and-docker.md         # 환경 변수 + Docker
 │   ├── ADR-007-change-impact-analysis.md         # 변경 영향 분석
+│   ├── ADR-008-oracle-dba-game-tech-stack.md    # Oracle DBA 게임 기술 스택
 │   └── ...
 │
 ├── sessions/                             # 세션 로그
@@ -129,6 +134,7 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-06 | AI 백엔드 스택 가이드라인 (3+1 합의 완료) | `ai-backend-stack-convention.md`, `ADR-005` |
 | 2026-04-06 | 환경 변수 중앙 관리 + Docker-First (3+1 합의 완료) | `environment-and-docker-design.md`, `ADR-006` |
 | 2026-04-06 | 변경 영향 분석 (3+1 합의 완료) | `change-impact-analysis-design.md`, `ADR-007` |
+| 2026-04-08 | Oracle DBA 학습 게임 SDD + 기술 스택 결정 (3+1 합의 완료) | `oracle-dba-learning-game-design.md`, `ADR-008`, `consensus-001` |
 
 ---
 

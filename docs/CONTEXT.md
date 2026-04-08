@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-06
+**최종 업데이트**: 2026-04-08
 
 ---
 
@@ -63,6 +63,50 @@ Phase 4: 통합 테스트 + 배포
 - 실동작 CI Pipeline
 
 > 이 제한사항은 템플릿의 한계가 아니라, **프로젝트별로 아이디어에 맞게 구현해야 할 부분**이다.
+
+---
+
+## 현재 진행 중: Oracle DBA 학습 게임
+
+### Phase 0 → Phase 1 완료 (2026-04-08)
+
+이 템플릿을 적용한 첫 번째 프로젝트. Oracle DBA 부트캠프 수강생 ~20명을 위한 학습 게임.
+
+**3+1 합의 완료 → SDD 설계 문서 작성 완료.**
+
+| 문서 | 경로 | 설명 |
+|------|------|------|
+| SDD 설계서 | `docs/architecture/oracle-dba-learning-game-design.md` | 전체 시스템 설계 |
+| 합의 보고서 | `docs/review/consensus-001-oracle-dba-game.md` | Phase 0 브리프 + 3+1 합의 |
+| ADR-008 | `docs/decisions/ADR-008-oracle-dba-game-tech-stack.md` | 기술 스택 결정 |
+
+### 확정 기술 스택
+
+- **아키텍처**: Modular Monolith + WebSocket Gateway
+- **언어**: TypeScript (Full-Stack)
+- **프레임워크**: Next.js + NestJS + Socket.IO + BullMQ
+- **저장소**: PostgreSQL + Redis
+- **배포**: Docker Compose (단일 VPS)
+
+### 게임 모드 (5가지)
+
+1. 빈칸 타이핑 — SQL 문법 암기
+2. 용어 맞추기 — 용어 ↔ 의미 연결
+3. 결과 예측 — 함수 동작 이해
+4. 카테고리 분류 — 개념 체계화
+5. 시나리오 시뮬레이션 — 종합 응용력
+
+### MVP 로드맵
+
+- **1단계** (Week 1-2): 솔로 퀴즈 (빈칸타이핑 + 용어맞추기) + AI 문제 생성
+- **2단계** (Week 3-4): 결과예측 + 카테고리분류 + 랭킹
+- **3단계** (Week 5+): 시나리오 시뮬레이션 + 실시간 대전
+
+### 다음 단계
+
+- [ ] TDD로 MVP 1단계 구현 시작
+- [ ] 프로젝트 스캐폴딩 (NestJS + Next.js monorepo)
+- [ ] Docker Compose 환경 구성
 
 ---
 
