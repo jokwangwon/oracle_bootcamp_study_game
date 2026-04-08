@@ -18,7 +18,14 @@
       "Bash(gh repo:*)",
       "Bash(git push:*)",
       "Bash(gh release:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npm --version)",
+      "Bash(npm install:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls -lt /home/delangi/.claude/projects/-home-delangi----project-category-bootcamp-game/*.jsonl)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(git check-ignore:*)"
     ]
   }
 }

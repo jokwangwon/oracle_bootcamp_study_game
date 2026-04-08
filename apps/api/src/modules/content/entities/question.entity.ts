@@ -11,6 +11,7 @@ import type {
   QuestionContent,
   QuestionSource,
   QuestionStatus,
+  Topic,
 } from '@oracle-game/shared';
 
 @Entity('questions')
@@ -20,7 +21,7 @@ export class QuestionEntity {
   id!: string;
 
   @Column({ type: 'varchar', length: 50 })
-  topic!: string;
+  topic!: Topic;
 
   @Column({ type: 'int' })
   week!: number;

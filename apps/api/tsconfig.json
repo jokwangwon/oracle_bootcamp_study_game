@@ -9,11 +9,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "strictPropertyInitialization": false,
-    "baseUrl": "./",
-    "paths": {
-      "@oracle-game/shared": ["../../packages/shared/src"],
-      "@oracle-game/shared/*": ["../../packages/shared/src/*"]
-    }
+    "baseUrl": "./"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

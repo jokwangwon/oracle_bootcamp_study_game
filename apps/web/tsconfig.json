@@ -13,9 +13,7 @@
     "plugins": [{ "name": "next" }],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@oracle-game/shared": ["../../packages/shared/src"],
-      "@oracle-game/shared/*": ["../../packages/shared/src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["next-env.d.ts", "src/**/*", ".next/types/**/*.ts"],

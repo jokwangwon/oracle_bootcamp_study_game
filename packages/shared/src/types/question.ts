@@ -67,7 +67,7 @@ export interface Question {
   difficulty: Difficulty;
   content: QuestionContent;
   answer: string[]; // 정답 (복수 허용)
-  explanation?: string;
+  explanation?: string | null;
   status: QuestionStatus;
   source: QuestionSource;
   createdAt: Date;
