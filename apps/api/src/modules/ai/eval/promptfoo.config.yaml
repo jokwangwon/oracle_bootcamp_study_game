@@ -1,0 +1,139 @@
+# promptfoo.config.yaml — OSS 모델 평가 (SDD v2 §5.2)
+#
+# 본 파일은 단계 5의 산출물이다. 단계 8(Phase 0 Claude 베이스라인 R0) 이전에는
+# Anthropic API 크레딧 미충전으로 실제 실행이 불가하지만, 설정 자체는 단계 9까지
+# 그대로 사용된다.
+#
+# 사용법:
+#   cd apps/api/src/modules/ai/eval
+#   promptfoo eval --config promptfoo.config.yaml
+#
+# 사전 조건:
+#   1. promptfoo CLI 설치 (단계 5 완료 후 별도 npm install — README 참조)
+#   2. docker-compose ollama + langfuse 컨테이너 기동 (단계 1)
+#   3. 5개 모델 모두 ollama list에 존재 (단계 2 sanity 5/5 PASS)
+#   4. .env에 LLM_API_KEY (Claude 베이스라인용), LANGFUSE_PUBLIC_KEY/SECRET_KEY 설정
+#
+# 결정론 (SDD v2 §10.2):
+#   - temperature 0.2 (ollama) / 0.0 (anthropic, 베이스라인)
+#   - 모든 LLM 호출은 langfuse-wrapped provider → LlmClient → Langfuse trace
+#   - 단일 testCase 1회 호출, repeat은 별도 라운드 단위로 실행 (단계 9 R1~R4)
+
+description: 'Oracle DBA 학습 게임 — OSS 모델 평가 라운드'
+
+# ============================================================================
+# Providers — 5개 OSS 모델 + Claude 베이스라인
+# ============================================================================
+#
+# 모든 provider는 langfuse-wrapped.ts를 경유한다 (ADR-009 ③ 정합).
+# id는 SDD v2 §2 후보 모델 매트릭스의 라벨과 일치.
+#
+# 평가 라운드별로 promptfoo CLI의 --filter-providers 옵션으로 1~5개 모델을
+# 선택해 실행한다 (R0=anthropic, R1~R4=ollama).
+providers:
+  - id: 'M1 — EXAONE 4.0 32B'
+    label: 'M1 — EXAONE 4.0 32B'
+    config:
+      provider: ollama
+      model: exaone4:32b
+      baseUrl: http://ollama:11434
+      temperature: 0.2
+    file: 'file://providers/langfuse-wrapped.ts'
+
+  - id: 'M2 — EXAONE 3.5 32B'
+    label: 'M2 — EXAONE 3.5 32B'
+    config:
+      provider: ollama
+      model: exaone3.5:32b
+      baseUrl: http://ollama:11434
+      temperature: 0.2
+    file: 'file://providers/langfuse-wrapped.ts'
+
+  - id: 'M3 — Qwen3-Coder-Next 80B MoE'
+    label: 'M3 — Qwen3-Coder-Next 80B MoE'
+    config:
+      provider: ollama
+      model: qwen3-coder:30b
+      baseUrl: http://ollama:11434
+      temperature: 0.2
+    file: 'file://providers/langfuse-wrapped.ts'
+
+  - id: 'M4 — Qwen2.5-Coder 32B'
+    label: 'M4 — Qwen2.5-Coder 32B'
+    config:
+      provider: ollama
+      model: qwen2.5-coder:32b
+      baseUrl: http://ollama:11434
+      temperature: 0.2
+    file: 'file://providers/langfuse-wrapped.ts'
+
+  - id: 'M5 — Llama 3.3 70B'
+    label: 'M5 — Llama 3.3 70B'
+    config:
+      provider: ollama
+      model: llama3.3:70b
+      baseUrl: http://ollama:11434
+      temperature: 0.2
+    file: 'file://providers/langfuse-wrapped.ts'
+
+  - id: 'R0 — Claude Opus 4.6 (baseline)'
+    label: 'R0 — Claude Opus 4.6 (baseline)'
+    config:
+      provider: anthropic
+      model: claude-opus-4-6
+      temperature: 0.0
+    file: 'file://providers/langfuse-wrapped.ts'
+
+# ============================================================================
+# Prompts — 운영 PromptManager와 동일한 system+user 메시지 사용
+# ============================================================================
+#
+# build-eval-prompt.ts의 default export 함수가 vars를 받아 JSON-encoded
+# multi-message 문자열을 반환. langfuse-wrapped provider의 parsePromptToMessages가
+# 자동 파싱해 운영과 동일한 SystemMessage + HumanMessage 두 개로 invoke한다.
+prompts:
+  - id: 'eval-prompt (운영 동일 + 중심 토큰 강제)'
+    file: 'file://prompts/build-eval-prompt.ts'
+
+# ============================================================================
+# Tests — Gold Set A 30 + Gold Set B 30 = 60 testCase
+# ============================================================================
+#
+# promptfoo-testcases.ts의 default export가 PromptfooTestCase[] 배열을 반환.
+# 각 testCase의 vars는 build-eval-prompt + assertion 양쪽에 전달된다.
+tests: 'file://datasets/promptfoo-testcases.ts'
+
+# ============================================================================
+# Default assertions — 모든 testCase에 적용되는 7개 메트릭
+# ============================================================================
+#
+# SDD v2 §3.1 Tier 1 + §3.2 MT6 계산적 보조.
+# Tier 2 (LLM-as-judge MT6/MT7)는 별도 config (`promptfoo.tier2.config.yaml`)로
+# Tier 1 통과 모델만 추가 실행 — 단계 9에서 작성.
+defaultTest:
+  assert:
+    - type: javascript
+      value: 'file://assertions/json-parse.ts'
+    - type: javascript
+      value: 'file://assertions/zod-schema.ts'
+    - type: javascript
+      value: 'file://assertions/scope-whitelist.ts'
+    - type: javascript
+      value: 'file://assertions/blank-consistency.ts'
+    - type: javascript
+      value: 'file://assertions/latency.ts'
+    - type: javascript
+      value: 'file://assertions/sanitization.ts'
+    - type: javascript
+      value: 'file://assertions/korean-features.ts'
+
+# ============================================================================
+# Output — 결과는 로컬 JSON + HTML + Langfuse(self-host) trace에 동시 기록
+# ============================================================================
+outputPath: '../../../../../eval-results/promptfoo-{{date}}.json'
+
+# 실행 옵션 (단계 9 라운드 시 CLI override 가능)
+evaluateOptions:
+  maxConcurrency: 1   # 결정론 — Ollama OLLAMA_NUM_PARALLEL=1과 정합
+  repeat: 1           # 라운드당 1회. 5 run은 별도 라운드(R1a~R1e)로 분리
+  delay: 0            # OSS는 자체 호스팅이므로 rate-limit 불필요

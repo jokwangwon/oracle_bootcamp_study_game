@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { StructuredOutputParser } from '@langchain/core/output_parsers';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { z } from 'zod';
+import type { z } from 'zod';
 import type {
   BlankTypingContent,
   Difficulty,
@@ -13,6 +13,10 @@ import { questionContentSchema } from '@oracle-game/shared';
 
 import { LlmClient } from './llm-client';
 import { PromptManager } from './prompt-manager';
+import {
+  blankTypingOutputSchema,
+  termMatchOutputSchema,
+} from './eval/output-schemas';
 import { QuestionEntity } from '../content/entities/question.entity';
 import {
   QuestionPoolService,
@@ -59,28 +63,6 @@ export interface AiGenerationResult {
   attempted: number;
   rejected: Array<{ reason: string; raw?: string }>;
 }
-
-const blankTypingOutputSchema = z.object({
-  sql: z.string().min(1),
-  blanks: z
-    .array(
-      z.object({
-        position: z.number().int().nonnegative(),
-        answer: z.string().min(1),
-        hint: z.string().optional(),
-      }),
-    )
-    .min(1),
-  answer: z.array(z.string().min(1)).min(1),
-  explanation: z.string().min(1),
-});
-
-const termMatchOutputSchema = z.object({
-  description: z.string().min(1),
-  category: z.string().optional(),
-  answer: z.array(z.string().min(1)).min(1),
-  explanation: z.string().min(1),
-});
 
 @Injectable()
 export class AiQuestionGenerator {
