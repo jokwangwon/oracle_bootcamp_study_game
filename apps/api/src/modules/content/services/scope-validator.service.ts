@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { extractOracleTokens } from '@oracle-game/shared';
 import { LessThanOrEqual, Repository } from 'typeorm';
 
 import { WeeklyScopeEntity } from '../entities/weekly-scope.entity';
@@ -51,21 +52,12 @@ export class ScopeValidatorService {
       return { valid: true, outOfScope: [] };
     }
 
-    const candidates = this.extractOracleTokens(text);
+    const candidates = extractOracleTokens(text);
     const outOfScope = candidates.filter((token) => !allowed.has(token));
 
     return {
       valid: outOfScope.length === 0,
       outOfScope: [...new Set(outOfScope)],
     };
-  }
-
-  /**
-   * 텍스트에서 Oracle 식별자 후보를 추출한다.
-   * 대문자로만 구성된 2글자 이상 토큰을 후보로 본다.
-   */
-  private extractOracleTokens(text: string): string[] {
-    const matches = text.match(/\b[A-Z][A-Z_0-9]{1,}\b/g) ?? [];
-    return matches;
   }
 }

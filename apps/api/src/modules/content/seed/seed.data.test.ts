@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   GAME_MODE_IDS,
+  extractOracleTokens,
   questionContentSchema,
 } from '@oracle-game/shared';
 
@@ -15,18 +16,11 @@ import { WEEK1_SQL_BASICS_SCOPE } from './data/week1-sql-basics.scope';
  * 데이터 ↔ 화이트리스트 drift를 가능한 한 일찍(=빌드 전) 잡아야 한다.
  *
  * 헌법 §3 — 계산적 검증 우선.
+ *
+ * extractOracleTokens는 packages/shared/src/utils/oracle-tokens.ts에서
+ * import — ScopeValidator와 평가 하네스(MT4)와 동일 함수를 공유한다
+ * (SDD v2 단계 0).
  */
-
-/**
- * ScopeValidator.extractOracleTokens 와 동일한 정규식.
- * 두 곳에서 같은 규칙을 써야 하므로 의도적으로 복제한다.
- * (불일치하면 시드 테스트가 통과해도 런타임에서 거부될 수 있음)
- */
-const ORACLE_TOKEN_REGEX = /\b[A-Z][A-Z_0-9]{1,}\b/g;
-
-function extractOracleTokens(text: string): string[] {
-  return text.match(ORACLE_TOKEN_REGEX) ?? [];
-}
 
 describe('seed data: week1-sql-basics', () => {
   const allowed = new Set(WEEK1_SQL_BASICS_SCOPE.keywords);
