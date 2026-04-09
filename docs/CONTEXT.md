@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-08
+**최종 업데이트**: 2026-04-09 (저녁 — OSS 평가 트랙 단계 2~4 + week2-transactions 추가)
 
 ---
 
@@ -108,34 +108,57 @@ Phase 4: 통합 테스트 + 배포
 
 요약:
 - ✅ 모노레포 스캐폴딩 (NestJS + Next.js + shared)
-- ✅ Docker Compose 환경 (postgres/redis/api/web)
+- ✅ Docker Compose 환경 (postgres/redis/api/web + ollama + langfuse v3 풀 인프라 5컨테이너)
 - ✅ 게임 모드 2/5 (BlankTyping, TermMatch) + Strategy Pattern
 - ✅ 솔로 게임 start/answer + 프론트 플레이 화면
 - ✅ 인증 (JWT + bcrypt), 학습 범위 검증 (계산적 키워드 매칭)
-- ✅ 테스트 52개 GREEN
+- ✅ **테스트 118개 GREEN** (단계 2~4 후)
 - ✅ 1주차 sql-basics 시드 (빈칸 15 + 용어 15 + 화이트리스트, 멱등 부트 INSERT)
+- ✅ **2주차 transactions 시드 (빈칸 15 + 용어 15 + 화이트리스트 24개)** ← 본 세션 추가
 - ✅ 솔로 게임 종료 흐름 (`/finish` + `user_progress` 가중평균 갱신 + `answer_history` 자동 INSERT)
 - ✅ 로그인/회원가입 UI + 인증 가드 + 전역 헤더 (토큰 헬퍼)
-- ✅ AI 클라이언트 인프라 (LlmClient + AiModule) — LangChain ChatAnthropic + Langfuse callback (key 부재 시 NoOp)
+- ✅ AI 클라이언트 인프라 — `LlmClient` + **`LlmClientFactory`** (ollama provider 분기, opts override) + LangChain ChatAnthropic + ChatOllama + Langfuse callback
 - ✅ `@anthropic-ai/sdk` 제거 (ADR-009 §마이그레이션)
-- ✅ AI 문제 생성 파이프라인 — PromptManager (Langfuse Prompt Management fetch + 로컬 fallback) + AiQuestionGenerator (StructuredOutputParser + Zod + ScopeValidator) + BullMQ Processor + REST 엔드포인트 (blank-typing/term-match)
+- ✅ AI 문제 생성 파이프라인 — PromptManager + AiQuestionGenerator + BullMQ Processor + REST 엔드포인트
+- ✅ **OSS 모델 평가 인프라** — Ollama 컨테이너, Langfuse self-host, sanity-check 5/5 PASS, EXAONE 4.0 GGUF import, Gold Set A/B 30+30
 - 🔴 BullMQ 워커 + AI 문제 생성
 - 🔴 노션 import → 범위 추론
+- 🔴 **promptfoo 평가 하네스** (단계 5) — 다음 세션 시작점
 
-### 다음 우선순위
+### OSS 모델 평가 트랙 (feature/oss-model-eval 브랜치) — 단계 진행도
 
-**OSS 모델 평가 트랙 (feature/oss-model-eval 브랜치)**:
-1. 단계 2: EXAONE 4.0 GGUF 수동 import (Modelfile 대괄호 토큰)
-2. 단계 3: LlmClientFactory + ChatOllama provider 분기
-3. 단계 4~7: Gold Set + promptfoo assertion + eval controller
-4. 단계 8~9: Phase 0 (Claude 베이스라인) → R1~R4 평가 라운드
-5. 단계 10: ADR-010 + 운영 모델 교체
+| 단계 | 작업 | 상태 | 커밋 |
+|---|---|---|---|
+| 0 | extractOracleTokens 공용 utils + TDD | ✅ | `c4bd454` |
+| 1 | docker-compose 평가 인프라 + sanity check | ✅ | `9373de7` |
+| 2 | EXAONE 4.0 GGUF 수동 import + 5/5 sanity | ✅ | `bab498a` |
+| 3 | LlmClientFactory + ChatOllama + format/parser 실증 | ✅ | `f048951` |
+| 4 | Gold Set A 30 + Gold Set B 30 (합성 → 검수 → 컴파일) | ✅ | `7c8850e` |
+| (추가) | week2-transactions 시드 30 + 화이트리스트 24 | ✅ | `16dfbc9` |
+| **5** | **promptfoo 설정 + assertion 7개 + langfuse-wrapped provider** | 🔴 다음 |
+| 6 | 결과 JSON schema (감사용 N-05) + report-generator | 🔴 |
+| 7 | eval.controller (관리자 전용 트리거) | 🔴 |
+| 8 | Phase 0 Claude 베이스라인 R0 (300 호출) | 🔴 |
+| 9 | R1~R4 평가 라운드 실행 | 🔴 |
+| 10 | ADR-010 + 운영 모델 교체 | 🔴 |
+
+### 다음 세션 우선순위
+
+1. **단계 5 진입** — promptfoo 설정 + assertion 7개 (MT1~MT5/MT8 + korean-features) + langfuse-wrapped provider
+2. **단계 6** — 결과 JSON schema + report-generator
+3. **단계 7** — eval.controller
+4. **단계 8** — Phase 0 Claude 베이스라인 (Anthropic API 크레딧 충전 필요)
+
+### 환경/운영 메모
+
+- **Claude Code root 실행 문제**: Write 도구 결과물이 root 소유. 매 세션 종료 시 또는 사용자 IDE 작업 직전에 `chown -R delangi:delangi apps docs scripts packages .gitignore apps/api/eval-results` 실행 필요.
+- **Anthropic API 크레딧**: 본 세션 단계 4에서 "credit balance is too low" 에러 발견. 평가 라운드(R0~R4)에는 5모델 × 30~60문제 × 5 run = 750+ 호출 필요해 우회 불가. 단계 8 시작 전 충전 필수 (예상 $5~10).
+- **`feature/oss-model-eval` 브랜치**에 단계 0~4 + week2 누적, main merge 시점은 단계 10 (ADR-010) 이후.
 
 **MVP 1단계 잔여 (feature/mvp-phase1 브랜치)**:
 1. 노션 import → 범위 추론 파이프라인 (LangChain + 노션 API)
 2. 관리자 문제 review UI/API (`PATCH /api/questions/:id/review`)
-3. 2주차 sql-functions 시드 + 화이트리스트
-4. 결과 페이지 취약 분야 분석 + 라운드 결과에 정답/해설 노출
+3. 결과 페이지 취약 분야 분석 + 라운드 결과에 정답/해설 노출
 
 ---
 
