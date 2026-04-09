@@ -481,25 +481,50 @@ export class LlmClientFactory {
 
 이로써 평가 중 **judge=Claude + eval target=Ollama 동시 인스턴스** 가능.
 
-### 7.2 ChatOllama 어댑터 추가 + format 충돌 회피 (C-02)
+### 7.2 ChatOllama 어댑터 추가 + format 충돌 회피 (v2.3 patch — C-02 결정)
+
+> **§14 미해결 #9 해소 (v2.3 patch, 2026-04-09)**: 단계 3에서 실증 비교 후 결정.
+>
+> 실증 스크립트: `apps/api/src/modules/ai/eval/scripts/format-vs-parser-experiment.ts`
+> 결과 파일: `apps/api/eval-results/format-vs-parser-2026-04-09T06-29-30-566Z.json`
+>
+> | 옵션 | 모델 | N | 성공률 | 평균 latency | 평균 응답 길이 |
+> |---|---|---|---|---|---|
+> | (a) `format: 'json'` (Ollama native) | qwen2.5-coder:32b | 10 | 100% | 12,130ms | 237b |
+> | (b) StructuredOutputParser only | qwen2.5-coder:32b | 10 | 100% | **9,043ms** | 203b |
+>
+> **결정: (b) StructuredOutputParser only** (`format` 옵션 미지정).
+>
+> 근거 (4가지):
+> 1. **운영 일관성**: `AiQuestionGenerator` (운영 코드, `apps/api/src/modules/ai/ai-question-generator.ts`)가 이미 StructuredOutputParser 사용. 평가 경로가 운영 경로와 동일해야 평가 결과가 운영 동작을 예측 가능.
+> 2. **실측 성능**: parser-only가 −25% latency (9.0s vs 12.1s), 100% 성공률 동일.
+> 3. **충돌 회피**: LangChain Issue #28753 (format+parser 충돌, SDD §11 R7) 위험 완전 차단.
+> 4. **단일 진실 소스**: prompt instruction = schema의 단일 출처. `format='json'`을 동시에 쓰면 grammar 강제와 prompt instruction이 두 출처가 되어 디버깅 복잡.
+>
+> **fallback 정책 (R3 시점)**: 다른 모델(특히 작은 EXAONE/Llama)에서 parser-only 실패율 > 5%면 해당 모델 한정으로 `format: 'json'`을 활성화. 이때도 `AiQuestionGenerator` 운영 경로는 그대로 두고, `LlmClientFactory.createFor`에 모델별 옵션 분기만 추가.
+
+> **§14 미해결 #8 해소 (v2.3 patch, 2026-04-09)**: ChatOllama가 `seed` 옵션을 노출한다.
+>
+> 검증: `node_modules/@langchain/ollama/dist/chat_models.d.ts:382` (`seed?: number;`).
+> 또한 `ChatOllamaCallOptions`(line 12)에도 호출 시점 override가 가능 (`bind({ seed: 42 })`).
+> 평가 라운드에서 `seed=42` 고정은 `LlmClientFactory.createFor()` 또는 `client.invoke(messages, { seed: 42 })`로 주입한다.
 
 ```typescript
-// LlmClient.createModel() 안에:
-if (provider === 'ollama') {
-  const baseUrl = opts.baseUrl ?? this.config.get<string>('OLLAMA_BASE_URL');
-  return new ChatOllama({
-    baseUrl,
-    model: opts.model,
-    temperature: 0.2,
-    // C-02: format: 'json' 또는 StructuredOutputParser 둘 중 하나만
-    // → 단계 3 전 실증 테스트로 결정. 아래 둘 중 하나만 활성화
-    // format: 'json',           // (a) Ollama native JSON mode
-    // ↑↓ 둘 다 비활성화하고 StructuredOutputParser만 사용  // (b) LangChain parser
-  });
+// apps/api/src/modules/ai/llm-client.ts (실제 구현, SDD v2.3 반영)
+private createModel(opts: ResolvedOptions): BaseChatModel {
+  // ... anthropic 분기 생략 ...
+  if (opts.provider === 'ollama') {
+    return new ChatOllama({
+      baseUrl: opts.baseUrl,
+      model: opts.model,
+      temperature: opts.temperature,
+      // format 미지정 — StructuredOutputParser 사용 (v2.3 결정)
+      // seed는 호출 시점에 주입 (LlmClientFactory.createFor 또는 invoke 옵션)
+    });
+  }
+  // ...
 }
 ```
-
-> **결정 시점**: 단계 3 시작 전에 두 옵션을 작은 샘플로 실증 비교 후 한쪽으로 확정. 결과를 본 SDD §7.2에 patch.
 
 ### 7.3 ADR-009 정합성 점검 (v2 갱신)
 
@@ -768,8 +793,8 @@ docker compose exec ollama ollama run exaone4:32b "안녕하세요. 자기소개
 | 5 | LG AI Research commercial license 절차/비용 (선정이 EXAONE인 경우) | 사용자 | R3 종료 후 |
 | 6 | LLM-as-Judge 편향 추가 보정 — 한국어 judge(Qwen 등) 도입 검토 | Claude (조사) | R3 시작 전 |
 | 7 | 평가 결과 보고서 양식 합의 (markdown 템플릿) | 사용자 + Claude | 단계 6 |
-| **8** (v2) | **Ollama `seed` 옵션 LangChain ChatOllama에서 노출되는지** (N-03) | Claude + 사용자 실측 | 단계 3 |
-| **9** (v2) | **`format: 'json'` vs StructuredOutputParser 실증 비교 결과** (C-02) | Claude + 사용자 | 단계 3 |
+| ~~**8** (v2)~~ | ~~**Ollama `seed` 옵션 LangChain ChatOllama에서 노출되는지** (N-03)~~ → **v2.3 해소 (2026-04-09)**: chat_models.d.ts:382에서 `seed?: number` 직접 확인. 호출 시점 주입은 `bind({seed: 42})` 또는 `invoke(msgs, {seed: 42})`. §7.2에 patch. | ~~Claude + 사용자 실측~~ | ~~단계 3~~ |
+| ~~**9** (v2)~~ | ~~**`format: 'json'` vs StructuredOutputParser 실증 비교 결과** (C-02)~~ → **v2.3 해소 (2026-04-09)**: M4 N=10 실증 결과 두 옵션 모두 100%, parser-only가 −25% latency. 운영 일관성/충돌 회피로 **(b) StructuredOutputParser only** 채택. §7.2에 patch. | ~~Claude + 사용자~~ | ~~단계 3~~ |
 | **10** (v2) | **GB10 thermal throttling 모니터링 임계값** (N-06) | 사용자 | 단계 1 + 단계 9 진행 중 |
 | **11** (v2) | **promptfoo 버전 호환성** — Ollama provider + custom JS assertion 2026 안정 버전 | Claude (npm) | 단계 5 |
 
@@ -802,6 +827,7 @@ docs/
 | 2026-04-09 | **v2** | consensus-002 합의 + Q1~Q4 사용자 결정 반영 (HIGH 12 + MED 6 + LOW 5 + 누락 6) | `docs/review/consensus-002-oss-model-evaluation.md` |
 | 2026-04-09 | **v2.1 patch** | 단계 1 sanity 시 Langfuse v3 `CLICKHOUSE_URL is not configured` 오류 발견. §6.1을 v3 풀 인프라(clickhouse + redis + minio + worker + web 5컨테이너)로 갱신. 사용자가 옵션 B 채택 | 사용자 직접 결정 (단계 1 실측) |
 | 2026-04-09 | **v2.2 patch** | 단계 2 시작 — §14 미해결 #2 해소: WebFetch로 EXAONE 4.0 chat_template 1차 검증, §8.1 TEMPLATE을 검증된 형식으로 patch (역할 토큰 뒤 \n / endofturn 뒤 \n / 빈 \<think\>\</think\> 블록 / .Messages 형식). GGUF 실제 파일명 `EXAONE-4.0-32B-Q8_0.gguf` 정정. Ollama 0.20.4 확인. 단계 1 sanity v2 (M1 SKIP 분기 추가) 4 PASS / 1 SKIP 통과. exaone4.Modelfile + README 커밋. | 검증 출처 HF raw URL + Ollama 컨테이너 실측 |
+| 2026-04-09 | **v2.3 patch** | 단계 3 — §14 미해결 #8/#9 해소. (#8) `@langchain/ollama@0.2.4` 설치 후 chat_models.d.ts:382에서 `seed?: number` 직접 확인. (#9) M4 Qwen2.5-Coder N=10 실증 결과 format-json/parser-only 모두 100% 성공률, parser-only가 9.0s vs 12.1s로 −25% latency. **결정: (b) StructuredOutputParser only** (운영 일관성 + 충돌 회피). §7.2 v2.3 patch. LlmClient에 ollama provider 분기 + opts override 추가 (TDD 12 cases), LlmClientFactory 신설 (TDD 7 cases), AiModule 등록. 11 파일 / 83 cases GREEN. | 실증 + d.ts 직접 확인 |
 
 ---
 

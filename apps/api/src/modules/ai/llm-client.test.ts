@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ChatAnthropic } from '@langchain/anthropic';
+import { ChatOllama } from '@langchain/ollama';
 
 import { LlmClient } from './llm-client';
 
@@ -56,6 +57,95 @@ describe('LlmClient', () => {
       });
 
       expect(client.getModel()).toBeInstanceOf(ChatAnthropic);
+    });
+
+    it("LLM_PROVIDER='ollama'면 ChatOllama 인스턴스를 사용한다 (SDD v2 §7.2)", () => {
+      const client = makeClient({
+        LLM_PROVIDER: 'ollama',
+        LLM_MODEL: 'exaone3.5:32b',
+        OLLAMA_BASE_URL: 'http://ollama:11434',
+        // Ollama는 API key 불필요
+      });
+
+      expect(client.getModel()).toBeInstanceOf(ChatOllama);
+    });
+
+    it("ollama provider는 OLLAMA_BASE_URL을 ChatOllama의 baseUrl로 전달한다", () => {
+      const client = makeClient({
+        LLM_PROVIDER: 'ollama',
+        LLM_MODEL: 'exaone3.5:32b',
+        OLLAMA_BASE_URL: 'http://test-host:11434',
+      });
+
+      const model = client.getModel() as ChatOllama;
+      expect(model.baseUrl).toBe('http://test-host:11434');
+    });
+
+    it('OLLAMA_BASE_URL 미설정 시 ollama provider도 동작한다 (ChatOllama 기본값)', () => {
+      const client = makeClient({
+        LLM_PROVIDER: 'ollama',
+        LLM_MODEL: 'exaone3.5:32b',
+      });
+
+      expect(client.getModel()).toBeInstanceOf(ChatOllama);
+    });
+  });
+
+  describe('opts override (SDD v2 §7.1 — factory 지원)', () => {
+    it('두 번째 인자로 provider override 시 환경변수보다 우선한다', () => {
+      const config = new FakeConfig({
+        LLM_PROVIDER: 'anthropic',
+        LLM_API_KEY: 'sk-test',
+        LLM_MODEL: 'claude-opus-4-6',
+      });
+
+      const client = new LlmClient(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        config as any,
+        { provider: 'ollama', model: 'qwen2.5-coder:32b' },
+      );
+
+      expect(client.getModel()).toBeInstanceOf(ChatOllama);
+    });
+
+    it('opts.baseUrl이 OLLAMA_BASE_URL 환경변수보다 우선한다', () => {
+      const config = new FakeConfig({
+        LLM_PROVIDER: 'ollama',
+        LLM_MODEL: 'exaone3.5:32b',
+        OLLAMA_BASE_URL: 'http://env-default:11434',
+      });
+
+      const client = new LlmClient(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        config as any,
+        {
+          provider: 'ollama',
+          model: 'exaone4:32b',
+          baseUrl: 'http://opts-override:11434',
+        },
+      );
+
+      const model = client.getModel() as ChatOllama;
+      expect(model.baseUrl).toBe('http://opts-override:11434');
+    });
+
+    it('opts override 시에도 Langfuse callback 분기는 환경변수 기반으로 동작한다', () => {
+      const config = new FakeConfig({
+        LLM_PROVIDER: 'anthropic',
+        LLM_API_KEY: 'sk-test',
+        LLM_MODEL: 'claude-opus-4-6',
+        LANGFUSE_PUBLIC_KEY: 'pk-test',
+        LANGFUSE_SECRET_KEY: 'sk-langfuse-test',
+      });
+
+      const client = new LlmClient(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        config as any,
+        { provider: 'ollama', model: 'exaone3.5:32b' },
+      );
+
+      expect(client.isLangfuseEnabled()).toBe(true);
+      expect((client.getCallbacks() as unknown[]).length).toBe(1);
     });
   });
 
