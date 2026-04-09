@@ -26,6 +26,7 @@
 9. **[ai-backend-stack-convention.md](architecture/ai-backend-stack-convention.md)** — AI 백엔드 스택 가이드라인: Python 분리 기준 (3+1 합의 완료)
 10. **[environment-and-docker-design.md](architecture/environment-and-docker-design.md)** — 환경 변수 중앙 관리 + Docker-First (3+1 합의 완료)
 11. **[change-impact-analysis-design.md](architecture/change-impact-analysis-design.md)** — 변경 영향 분석: 의존성/장애 사전 검증 (3+1 합의 완료)
+12. **[oss-model-evaluation-design.md](architecture/oss-model-evaluation-design.md)** — OSS 모델 자체 호스팅 평가 설계 (초안, 사용자 검토 + 3+1 합의 대기)
 
 ### 3. 원칙 문서
 5. **[ARCHITECTURE_PRINCIPLES.md](constitution/ARCHITECTURE_PRINCIPLES.md)** — 아키텍처 10대 원칙
@@ -63,7 +64,8 @@ docs/
 │   ├── ai-backend-stack-convention.md           # AI 백엔드 스택 가이드라인
 │   ├── environment-and-docker-design.md         # 환경 변수 + Docker-First
 │   ├── change-impact-analysis-design.md         # 변경 영향 분석
-│   └── oracle-dba-learning-game-design.md       # Oracle DBA 학습 게임 SDD
+│   ├── oracle-dba-learning-game-design.md       # Oracle DBA 학습 게임 SDD
+│   └── oss-model-evaluation-design.md           # OSS 모델 평가 SDD (초안)
 │
 ├── guides/                               # 개발 가이드
 │   ├── DEVELOPMENT_GUIDE.md              # 개발 프로세스, Git 규칙
@@ -85,8 +87,13 @@ docs/
 ├── sessions/                             # 세션 로그
 │   └── ...
 │
-└── review/                               # 검토 보고서
-    └── ...
+├── review/                               # 3+1 합의 보고서
+│   ├── consensus-001-oracle-dba-game.md       # Oracle DBA 게임 합의
+│   └── consensus-002-oss-model-evaluation.md  # OSS 모델 평가 SDD 합의 (REQUEST_CHANGES)
+│
+└── rationale/                            # 판단 근거 (의사결정 narrative)
+    ├── oss-model-selection-rationale.md  # OSS 모델 자체 호스팅 후보 선정 근거
+    └── exaone-license-extract.md         # EXAONE LICENSE 사본 + 유료 부트캠프 적용 분석
 ```
 
 ---
@@ -140,6 +147,11 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-08 | Oracle DBA 학습 게임 SDD + 기술 스택 결정 (3+1 합의 완료) | `oracle-dba-learning-game-design.md`, `ADR-008`, `consensus-001` |
 | 2026-04-08 | MVP 1단계 스캐폴딩 + 구현 현황 매핑 문서 추가 | `IMPLEMENTATION_STATUS.md`, `SESSION_2026-04-08.md` |
 | 2026-04-08 | AI 작업 시 LangChain + Langfuse 강제 (사용자 직접 결정) | `ADR-009`, SDD §2.3/§4.3, `IMPLEMENTATION_STATUS.md` |
+| 2026-04-09 | OSS 모델 자체 호스팅 후보 선정 판단 근거 작성 (Solar Pro 2 / HyperCLOVA X SEED 제외, EXAONE 4.0 + 3.5 / Qwen3-Coder-Next / Qwen2.5-Coder 32B / Llama 3.3 70B 5개 확정) | `rationale/oss-model-selection-rationale.md` |
+| 2026-04-09 | OSS 모델 자체 호스팅 평가 설계 SDD 초안 작성 (메트릭 7개 + Gold Set A/B + Ollama 인프라 + LlmClient ChatOllama 확장 + 운영 배포 게이트) | `architecture/oss-model-evaluation-design.md` |
+| 2026-04-09 | OSS 모델 평가 SDD에 대한 3+1 합의 (REQUEST_CHANGES, HIGH 12 + MED 6 + LOW 5 + 누락 6, Q1~Q4 사용자 결정 필요) | `review/consensus-002-oss-model-evaluation.md` |
+| 2026-04-09 | EXAONE LICENSE 사본 + 유료 부트캠프 적용 분석 (Section 2.1(a) 평가 안전 + Section 3.1 운영 회색지대) | `rationale/exaone-license-extract.md` |
+| 2026-04-09 | OSS 모델 평가 SDD **v2** 작성 (HIGH 12 + MED 6 + LOW 5 + 누락 6 + Q1~Q4 결정 모두 반영, promptfoo 채택 + Langfuse self-host + Phase 0 신설) | `architecture/oss-model-evaluation-design.md` (v2) |
 
 ---
 
