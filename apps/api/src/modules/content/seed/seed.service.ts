@@ -18,6 +18,8 @@ import {
   WEEK1_SQL_BASICS_SCOPE,
   type WeeklyScopeSeed,
 } from './data/week1-sql-basics.scope';
+import { WEEK2_TRANSACTIONS_QUESTIONS } from './data/week2-transactions.questions';
+import { WEEK2_TRANSACTIONS_SCOPE } from './data/week2-transactions.scope';
 
 /**
  * 사전 생성 문제 풀 시드 서비스
@@ -72,7 +74,9 @@ export class SeedService implements OnApplicationBootstrap {
     }
 
     // 1. weekly_scope 먼저 INSERT (검증 기준이 되므로)
+    //    week1 sql-basics + week2 transactions를 모두 등록
     await this.insertScope(WEEK1_SQL_BASICS_SCOPE);
+    await this.insertScope(WEEK2_TRANSACTIONS_SCOPE);
 
     // 2. questions INSERT — 각 문제마다 ScopeValidator 통과 검증
     let inserted = 0;
@@ -80,11 +84,15 @@ export class SeedService implements OnApplicationBootstrap {
       await this.insertQuestion(seed);
       inserted += 1;
     }
+    for (const seed of WEEK2_TRANSACTIONS_QUESTIONS) {
+      await this.insertQuestion(seed);
+      inserted += 1;
+    }
 
     this.logger.log(
-      `시드 완료: questions=${inserted}, scopes=1 (week1 sql-basics)`,
+      `시드 완료: questions=${inserted}, scopes=2 (week1 sql-basics + week2 transactions)`,
     );
-    return { inserted: { questions: inserted, scopes: 1 } };
+    return { inserted: { questions: inserted, scopes: 2 } };
   }
 
   private async insertScope(seed: WeeklyScopeSeed): Promise<void> {

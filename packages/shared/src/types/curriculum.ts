@@ -7,6 +7,7 @@
 export const CURRICULUM_TOPICS = [
   'sql-basics',
   'sql-functions',
+  'transactions',
   'plsql',
   'administration',
   'backup-recovery',
@@ -22,6 +23,7 @@ export type Topic = (typeof CURRICULUM_TOPICS)[number];
 export const TOPIC_LABELS: Record<Topic, string> = {
   'sql-basics': 'SQL 기초',
   'sql-functions': 'SQL 함수',
+  transactions: '트랜잭션 & 읽기 일관성',
   plsql: 'PL/SQL',
   administration: 'Oracle 관리',
   'backup-recovery': 'Backup & Recovery',
