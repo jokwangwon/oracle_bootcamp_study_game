@@ -1,0 +1,76 @@
+# ============================================================================
+# EXAONE 4.0 32B GGUF Modelfile (SDD v2 §8.1 — 단계 2)
+# ============================================================================
+#
+# 컨테이너 내부 경로: /modelfiles/exaone4.Modelfile (L-02)
+# 호스트 경로:        apps/api/src/modules/ai/eval/modelfiles/exaone4.Modelfile
+# Mount:              docker-compose.yml services.ollama.volumes
+#
+# 검증 출처 (SDD v2 §14 미해결 #2 해소, 검증일 2026-04-09):
+#   1. https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B/raw/main/tokenizer_config.json
+#      → bos_token=[BOS] (id 1), eos_token=[|endofturn|] (id 361)
+#      → role tokens: [|system|](357), [|user|](360), [|assistant|](359), [|tool|](358)
+#      → tokenizer_config.json에는 chat_template 필드 없음 (별도 jinja 파일에 정의)
+#
+#   2. https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B/raw/main/chat_template.jinja
+#      → role_indicators = { 'user': '[|user|]\n', 'assistant': '[|assistant|]\n',
+#                            'system': '[|system|]\n', 'tool': '[|tool|]\n' }
+#      → end_of_turn = '[|endofturn|]\n'   ← 종료 토큰 뒤 \n 강제
+#      → BOS 토큰을 prompt에 직접 삽입하지 않음
+#      → assistant 턴 시작 시 (add_generation_prompt 분기):
+#           - non-thinking: '[|assistant|]\n' + '<think>\n\n</think>\n\n'
+#           - thinking:     '[|assistant|]\n' + '<think>\n'
+#         본 평가는 결정론(temperature=0.2) + non-thinking 모드 사용 →
+#         빈 <think></think> 블록을 강제 삽입한다.
+#
+# SDD v1 (구) → v2 (현) 차이:
+#   - 토큰 형식: <|...|>  →  [|...|]   (이미 v2에서 정정)
+#   - 역할 토큰 뒤 개행:  없음  →  \n 필수   (이번 검증으로 추가)
+#   - [|endofturn|] 뒤 개행: 없음 → \n 필수   (이번 검증으로 추가)
+#   - 빈 <think></think> 블록: 없음 → 강제 삽입   (이번 검증으로 추가)
+#
+# Ollama 컨테이너 버전: 0.20.4 (확인됨, EXAONE 4.0 architecture 코드 지원 ≥ v0.11.5-rc2)
+#
+# 폴백 전략 (SDD v2 §8.3):
+#   GGUF import 실패 → exaone3.5:32b (M2, Ollama 정식 지원) 폴백
+# ============================================================================
+
+FROM /modelfiles/EXAONE-4.0-32B-Q8_0.gguf
+
+# ─── 결정론 파라미터 (SDD v2 §10.2) ─────────────────────────────────────────
+# 5개 모델 동일 — temperature 0.2 / num_ctx 8192 / 추후 평가 시 seed=42 명시
+PARAMETER temperature 0.2
+PARAMETER num_ctx 8192
+
+# ─── 종료 토큰 ───────────────────────────────────────────────────────────────
+# eos_token = [|endofturn|] (token id 361)
+# Ollama는 stop 문자열을 substring 매치하므로, 뒤따르는 \n 없이 명시해도 동작.
+PARAMETER stop "[|endofturn|]"
+
+# ─── SYSTEM ──────────────────────────────────────────────────────────────────
+# 평가 시점에 prompt(Langfuse versioned prompt)에서 system을 명시 주입하므로 비워둠.
+SYSTEM ""
+
+# ─── TEMPLATE ────────────────────────────────────────────────────────────────
+# Ollama Go template (.Messages-aware) — chat_template.jinja와 1:1 매핑.
+#
+# 한 메시지 = "[|<role>|]\n{content}[|endofturn|]\n"
+# 마지막에 assistant 턴을 열며 빈 <think></think> 블록 강제 삽입.
+TEMPLATE """{{- range .Messages }}
+{{- if eq .Role "system" }}[|system|]
+{{ .Content }}[|endofturn|]
+{{ else if eq .Role "user" }}[|user|]
+{{ .Content }}[|endofturn|]
+{{ else if eq .Role "assistant" }}[|assistant|]
+<think>
+
+</think>
+
+{{ .Content }}[|endofturn|]
+{{ end }}
+{{- end }}[|assistant|]
+<think>
+
+</think>
+
+"""

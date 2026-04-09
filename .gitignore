@@ -32,6 +32,12 @@ langfuse-minio-data/
 # OSS 모델 평가 결과 (SDD v2)
 apps/api/eval-results/
 
+# OSS 모델 평가 — GGUF 가중치 (SDD v2 §8, ~34GB)
+# Modelfile과 README는 커밋, 가중치/검증 임시 파일만 제외
+apps/api/src/modules/ai/eval/modelfiles/*.gguf
+apps/api/src/modules/ai/eval/modelfiles/*.gguf.sha256
+apps/api/src/modules/ai/eval/modelfiles/*.gguf.sha256.expected
+
 # 환경 변수 예외 (예시 파일은 커밋)
 !.env.example
 

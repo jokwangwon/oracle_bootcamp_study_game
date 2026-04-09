@@ -532,15 +532,28 @@ apps/api/package.json:
 
 ---
 
-## 8. EXAONE 4.0 GGUF 임포트 절차 (v2 토큰 수정 — C-03)
+## 8. EXAONE 4.0 GGUF 임포트 절차 (v2.2 patch — chat_template 1차 검증 반영)
 
-### 8.1 Modelfile (v2 — 대괄호 토큰 형식)
+### 8.1 Modelfile (v2.2 — 검증된 chat_template 형식)
 
-> **C-03**: v1의 `<|...|>` → v2의 **`[|...|]`** (실제 EXAONE 토큰 형식)
+> **C-03 (v2)**: v1의 `<|...|>` → v2의 **`[|...|]`** (실제 EXAONE 토큰 형식)
+>
+> **§14 미해결 #2 (v2.2 patch, 2026-04-09)**: WebFetch로 다음 두 파일을 검증 완료 →
+> - `tokenizer_config.json`: bos=`[BOS]`, eos=`[|endofturn|]`(id 361), 역할 토큰 `[|system|]`(357) `[|user|]`(360) `[|assistant|]`(359) `[|tool|]`(358), chat_template 필드는 이 파일에 없음
+> - `chat_template.jinja`: 각 역할 토큰 뒤 `\n` 강제, `end_of_turn = '[|endofturn|]\n'`, BOS prompt에 미삽입, assistant 턴 시작 시 (non-thinking 분기) `<think>\n\n</think>\n\n` 빈 블록 삽입
+>
+> v2 (단순) → v2.2 (검증된 형식) 차이:
+> 1. 역할 토큰 뒤 개행 강제
+> 2. `[|endofturn|]` 뒤 개행 강제
+> 3. assistant 턴 시작 시 빈 `<think></think>` 블록 강제 삽입 (EXAONE 4.0은 thinking 모델, non-thinking 평가 모드)
+> 4. 단순 .System/.Prompt/.Response 형식 → `.Messages` 형식 (ChatOllama /api/chat 호환)
 
 ```dockerfile
 # /modelfiles/exaone4.Modelfile (컨테이너 내부 경로, L-02)
-FROM /modelfiles/exaone-4.0-32b-q8.gguf
+# 호스트 경로: apps/api/src/modules/ai/eval/modelfiles/exaone4.Modelfile
+# 실제 파일: apps/api/src/modules/ai/eval/modelfiles/exaone4.Modelfile (커밋됨)
+# README:    apps/api/src/modules/ai/eval/modelfiles/README.md (다운로드/import 절차)
+FROM /modelfiles/EXAONE-4.0-32B-Q8_0.gguf   # HuggingFace 실제 파일명
 
 PARAMETER temperature 0.2
 PARAMETER num_ctx 8192
@@ -548,13 +561,35 @@ PARAMETER stop "[|endofturn|]"
 
 SYSTEM ""
 
-# EXAONE 공식 chat template 형식 (대괄호)
-TEMPLATE """[|system|]{{ .System }}[|endofturn|]
-[|user|]{{ .Prompt }}[|endofturn|]
-[|assistant|]{{ .Response }}[|endofturn|]"""
+# .Messages-aware 형식 — chat_template.jinja와 1:1 매핑
+TEMPLATE """{{- range .Messages }}
+{{- if eq .Role "system" }}[|system|]
+{{ .Content }}[|endofturn|]
+{{ else if eq .Role "user" }}[|user|]
+{{ .Content }}[|endofturn|]
+{{ else if eq .Role "assistant" }}[|assistant|]
+<think>
+
+</think>
+
+{{ .Content }}[|endofturn|]
+{{ end }}
+{{- end }}[|assistant|]
+<think>
+
+</think>
+
+"""
 ```
 
-> **§14 미해결 #2**: 단계 2 시작 시 `LGAI-EXAONE/EXAONE-4.0-32B-GGUF`의 `tokenizer_config.json` / `chat_template.jinja`를 WebFetch로 가져와 위 TEMPLATE을 정확히 검증/patch.
+검증 출처:
+- https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B/raw/main/tokenizer_config.json
+- https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B/raw/main/chat_template.jinja
+
+추가 발견 (v2.2):
+- HuggingFace GGUF 파일명은 `EXAONE-4.0-32B-Q8_0.gguf` (34 GB), v2의 가정 `exaone-4.0-32b-q8.gguf`와 다름. 정정.
+- Ollama 컨테이너 0.20.4 확인 (실측). EXAONE 4.0 architecture 코드는 ≥ v0.11.5-rc2부터 지원되므로 GGUF import 성공 확률 ↑. 단, `ollama.com/library/exaone4`는 404 (라이브러리 미등록) → §8.3 GGUF 수동 import 경로 그대로 유효.
+- 단계 1 sanity v2 (5모델, M1은 import 미완료 시 SKIP) 통과: M2 24s / M3 25s / M4 19s / M5 48s / M1 SKIP. 모두 C7(60s) 이내.
 
 ### 8.2 임포트 + 무결성 검증 (M-04, M-05)
 
@@ -727,7 +762,7 @@ docker compose exec ollama ollama run exaone4:32b "안녕하세요. 자기소개
 | # | 항목 | 책임 | 시점 |
 |---|---|---|---|
 | 1 | Ollama multi-arch 매니페스트가 GB10 aarch64에서 정상 pull되는지 | 사용자 (Docker 실측) | 단계 1 |
-| 2 | EXAONE 4.0 정확한 chat template 토큰 (`tokenizer_config.json` / `chat_template.jinja`) | Claude (HF WebFetch) + 사용자 실측 | 단계 2 |
+| 2 | ~~EXAONE 4.0 정확한 chat template 토큰 (`tokenizer_config.json` / `chat_template.jinja`)~~ → **v2.2 해소 (2026-04-09)**: WebFetch 1차 검증 완료, §8.1 patch 반영. GGUF import 후 실측 동작 검증은 단계 2 잔여 작업 | ~~Claude (HF WebFetch) + 사용자 실측~~ | ~~단계 2~~ |
 | 3 | Qwen3-Coder-Next Q8 ~85GB가 GB10 119GB에서 다른 프로세스와 공존 가능한지 | 사용자 (실측) | 단계 1 sanity check |
 | 4 | Langfuse self-host 운영 안정성 (백업/복구) | 사용자 | 단계 1 |
 | 5 | LG AI Research commercial license 절차/비용 (선정이 EXAONE인 경우) | 사용자 | R3 종료 후 |
@@ -766,6 +801,7 @@ docs/
 | 2026-04-09 | **v1** | 초안 작성 | 사용자 지시 — `oss-model-selection-rationale.md` 기반 SDD화 |
 | 2026-04-09 | **v2** | consensus-002 합의 + Q1~Q4 사용자 결정 반영 (HIGH 12 + MED 6 + LOW 5 + 누락 6) | `docs/review/consensus-002-oss-model-evaluation.md` |
 | 2026-04-09 | **v2.1 patch** | 단계 1 sanity 시 Langfuse v3 `CLICKHOUSE_URL is not configured` 오류 발견. §6.1을 v3 풀 인프라(clickhouse + redis + minio + worker + web 5컨테이너)로 갱신. 사용자가 옵션 B 채택 | 사용자 직접 결정 (단계 1 실측) |
+| 2026-04-09 | **v2.2 patch** | 단계 2 시작 — §14 미해결 #2 해소: WebFetch로 EXAONE 4.0 chat_template 1차 검증, §8.1 TEMPLATE을 검증된 형식으로 patch (역할 토큰 뒤 \n / endofturn 뒤 \n / 빈 \<think\>\</think\> 블록 / .Messages 형식). GGUF 실제 파일명 `EXAONE-4.0-32B-Q8_0.gguf` 정정. Ollama 0.20.4 확인. 단계 1 sanity v2 (M1 SKIP 분기 추가) 4 PASS / 1 SKIP 통과. exaone4.Modelfile + README 커밋. | 검증 출처 HF raw URL + Ollama 컨테이너 실측 |
 
 ---
 

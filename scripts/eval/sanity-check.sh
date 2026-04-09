@@ -20,8 +20,11 @@
 #   4. 결과 로그 확인. 모든 모델이 PASS면 단계 2 진입 가능
 #
 # 주의:
-#   - EXAONE 4.0은 Ollama 정식 미지원 (Issue #11433). 본 sanity는 EXAONE 3.5만 검증.
-#     EXAONE 4.0은 단계 2에서 GGUF 수동 import 후 별도 sanity 수행 (§8)
+#   - M1 (EXAONE 4.0 32B): Ollama 라이브러리에 정식 등록은 없지만 architecture 코드는
+#     ≥ v0.11.5-rc2부터 지원. 본 스크립트는 단계 2에서 GGUF 수동 import한 exaone4:32b를
+#     pull 대신 ollama list에서 존재 확인 후 generate sanity만 수행한다.
+#     import 미완료(또는 fallback 사용 중)면 SKIP하고 계속 진행한다 (단계 1을 차단하지 않음).
+#     수동 import 절차: apps/api/src/modules/ai/eval/modelfiles/README.md 참조.
 #   - 80B MoE 모델(Qwen3-Coder-Next)은 첫 다운로드만 30분 이상 소요 가능
 #   - thermal throttling 의심 시 (§14 미해결 #10) nvidia-smi로 5분 간격 온도 확인
 # ===========================================================================
@@ -52,14 +55,19 @@ log_info()  { echo -e "${C_YELLOW}[INFO]${C_RESET} $*"; }
 log_ok()    { echo -e "${C_GREEN}[ OK ]${C_RESET} $*"; }
 log_fail()  { echo -e "${C_RED}[FAIL]${C_RESET} $*"; }
 
-# SDD v2 §2 후보 5개 (M1 EXAONE 4.0은 단계 2에서 별도 처리)
-# 각 항목: "Ollama 모델 태그|라벨"
+# SDD v2 §2 후보 5개
+# 각 항목: "Ollama 모델 태그|라벨|소스"
+#   - 소스 'pull'    : ollama 라이브러리 정식 (pull로 받아 sanity 가능)
+#   - 소스 'manual'  : 수동 import 필요 (단계 2 GGUF). 미존재 시 SKIP.
 SANITY_MODELS=(
-  "exaone3.5:32b|M2 EXAONE 3.5 32B"
-  "qwen3-coder-next|M3 Qwen3-Coder-Next (80B MoE)"
-  "qwen2.5-coder:32b|M4 Qwen2.5-Coder 32B"
-  "llama3.3:70b|M5 Llama 3.3 70B"
+  "exaone4:32b|M1 EXAONE 4.0 32B|manual"
+  "exaone3.5:32b|M2 EXAONE 3.5 32B|pull"
+  "qwen3-coder-next|M3 Qwen3-Coder-Next (80B MoE)|pull"
+  "qwen2.5-coder:32b|M4 Qwen2.5-Coder 32B|pull"
+  "llama3.3:70b|M5 Llama 3.3 70B|pull"
 )
+
+SKIP_COUNT=0
 
 # 한국어 + SQL 질문 (출력 일관성 확인용)
 SANITY_PROMPT='Oracle SQL의 SELECT 문에 대해 한 문장으로 설명하세요.'
@@ -108,22 +116,35 @@ log_ok "환경 메타 → $RESULT_DIR/env.txt"
 # 1. 모델별 sanity (pull → load → 1문제 생성)
 # ─────────────────────────────────────────────
 for entry in "${SANITY_MODELS[@]}"; do
-  IFS='|' read -r model label <<< "$entry"
+  IFS='|' read -r model label source <<< "$entry"
 
   echo
   echo "=========================================================="
-  log_info "$label  ($model)"
+  log_info "$label  ($model, source=$source)"
   echo "=========================================================="
 
-  log_info "[pull] $model ..."
-  pull_log="$RESULT_DIR/${model//[\/:]/_}.pull.log"
-  if docker compose exec -T "$OLLAMA_SERVICE" ollama pull "$model" 2>&1 | tee "$pull_log"; then
-    log_ok "pull 성공"
+  if [[ "$source" == "manual" ]]; then
+    # GGUF 수동 import 모델: pull 대신 ollama list로 존재 확인.
+    # 미존재 시 단계 2 GGUF import 미완료로 간주, SKIP하고 계속 진행.
+    if docker compose exec -T "$OLLAMA_SERVICE" ollama list 2>/dev/null | awk '{print $1}' | grep -Fxq "$model"; then
+      log_ok "수동 import 확인 — generate sanity로 진행"
+    else
+      log_info "수동 import 미완료 (apps/api/src/modules/ai/eval/modelfiles/README.md 참조). SKIP"
+      RESULTS+=("SKIP  $label  (manual import 미완료)")
+      SKIP_COUNT=$((SKIP_COUNT + 1))
+      continue
+    fi
   else
-    log_fail "pull 실패 — $pull_log 참조"
-    RESULTS+=("FAIL  $label  (pull)")
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-    continue
+    log_info "[pull] $model ..."
+    pull_log="$RESULT_DIR/${model//[\/:]/_}.pull.log"
+    if docker compose exec -T "$OLLAMA_SERVICE" ollama pull "$model" 2>&1 | tee "$pull_log"; then
+      log_ok "pull 성공"
+    else
+      log_fail "pull 실패 — $pull_log 참조"
+      RESULTS+=("FAIL  $label  (pull)")
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      continue
+    fi
   fi
 
   log_info "[generate] 1문제 생성 sanity ..."
@@ -162,15 +183,20 @@ echo "=========================================================="
     echo "$r"
   done
   echo
-  echo "PASS: $PASS_COUNT / FAIL: $FAIL_COUNT"
+  echo "PASS: $PASS_COUNT / FAIL: $FAIL_COUNT / SKIP: $SKIP_COUNT"
 } | tee "$RESULT_DIR/summary.txt"
 
 echo
 if [[ $FAIL_COUNT -eq 0 ]]; then
-  log_ok "모든 모델 sanity 통과. 단계 2 (M1 EXAONE 4.0 GGUF import) 진행 가능"
+  if [[ $SKIP_COUNT -eq 0 ]]; then
+    log_ok "5개 모델 sanity 전수 통과. 단계 3 (LlmClientFactory + ChatOllama) 진행 가능"
+  else
+    log_ok "$PASS_COUNT개 PASS / $SKIP_COUNT개 SKIP. 단계 1 게이트는 통과했지만 SKIP 모델은 단계 2 GGUF import 후 재실행 필요."
+  fi
   echo
   echo "다음:"
-  echo "  - SDD v2 §8 EXAONE 4.0 Modelfile 임포트"
+  echo "  - (SKIP 모델 있는 경우) SDD v2 §8 EXAONE 4.0 Modelfile 임포트"
+  echo "    apps/api/src/modules/ai/eval/modelfiles/README.md 절차 → 다시 ./scripts/eval/sanity-check.sh"
   echo "  - SDD v2 §12 단계 3 (LlmClientFactory + ChatOllama 분기)"
   exit 0
 else
