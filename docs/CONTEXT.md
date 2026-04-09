@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-09 (저녁 — OSS 평가 트랙 단계 2~4 + week2-transactions 추가)
+**최종 업데이트**: 2026-04-09 (밤 — OSS 평가 트랙 단계 5 promptfoo 하네스 완료)
 
 ---
 
@@ -112,7 +112,7 @@ Phase 4: 통합 테스트 + 배포
 - ✅ 게임 모드 2/5 (BlankTyping, TermMatch) + Strategy Pattern
 - ✅ 솔로 게임 start/answer + 프론트 플레이 화면
 - ✅ 인증 (JWT + bcrypt), 학습 범위 검증 (계산적 키워드 매칭)
-- ✅ **테스트 118개 GREEN** (단계 2~4 후)
+- ✅ **테스트 198개 GREEN** (단계 5 후, 24 파일)
 - ✅ 1주차 sql-basics 시드 (빈칸 15 + 용어 15 + 화이트리스트, 멱등 부트 INSERT)
 - ✅ **2주차 transactions 시드 (빈칸 15 + 용어 15 + 화이트리스트 24개)** ← 본 세션 추가
 - ✅ 솔로 게임 종료 흐름 (`/finish` + `user_progress` 가중평균 갱신 + `answer_history` 자동 INSERT)
@@ -121,9 +121,10 @@ Phase 4: 통합 테스트 + 배포
 - ✅ `@anthropic-ai/sdk` 제거 (ADR-009 §마이그레이션)
 - ✅ AI 문제 생성 파이프라인 — PromptManager + AiQuestionGenerator + BullMQ Processor + REST 엔드포인트
 - ✅ **OSS 모델 평가 인프라** — Ollama 컨테이너, Langfuse self-host, sanity-check 5/5 PASS, EXAONE 4.0 GGUF import, Gold Set A/B 30+30
+- ✅ **promptfoo 평가 하네스 (단계 5)** — assertion 7개 (MT1~MT5/MT8 + korean-features) + langfuse-wrapped provider + build-eval-prompt + promptfoo-testcases adapter + promptfoo.config.yaml + README. 운영 AQG schema를 `eval/output-schemas.ts`로 추출하여 단일 진실 소스. 198 cases / typecheck OK
 - 🔴 BullMQ 워커 + AI 문제 생성
 - 🔴 노션 import → 범위 추론
-- 🔴 **promptfoo 평가 하네스** (단계 5) — 다음 세션 시작점
+- 🔴 **결과 JSON schema + report-generator** (단계 6) — 다음 세션 시작점
 
 ### OSS 모델 평가 트랙 (feature/oss-model-eval 브랜치) — 단계 진행도
 
@@ -135,8 +136,8 @@ Phase 4: 통합 테스트 + 배포
 | 3 | LlmClientFactory + ChatOllama + format/parser 실증 | ✅ | `f048951` |
 | 4 | Gold Set A 30 + Gold Set B 30 (합성 → 검수 → 컴파일) | ✅ | `7c8850e` |
 | (추가) | week2-transactions 시드 30 + 화이트리스트 24 | ✅ | `16dfbc9` |
-| **5** | **promptfoo 설정 + assertion 7개 + langfuse-wrapped provider** | 🔴 다음 |
-| 6 | 결과 JSON schema (감사용 N-05) + report-generator | 🔴 |
+| 5 | promptfoo 설정 + assertion 7개 + langfuse-wrapped provider + build-eval-prompt + testCase adapter | ✅ | (본 세션 — 커밋 예정) |
+| **6** | **결과 JSON schema (감사용 N-05) + report-generator** | 🔴 다음 |
 | 7 | eval.controller (관리자 전용 트리거) | 🔴 |
 | 8 | Phase 0 Claude 베이스라인 R0 (300 호출) | 🔴 |
 | 9 | R1~R4 평가 라운드 실행 | 🔴 |
@@ -144,10 +145,10 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-1. **단계 5 진입** — promptfoo 설정 + assertion 7개 (MT1~MT5/MT8 + korean-features) + langfuse-wrapped provider
-2. **단계 6** — 결과 JSON schema + report-generator
-3. **단계 7** — eval.controller
-4. **단계 8** — Phase 0 Claude 베이스라인 (Anthropic API 크레딧 충전 필요)
+1. **단계 6 진입** — 결과 JSON schema (감사용 N-05) + report-generator
+2. **단계 7** — eval.controller (관리자 전용 트리거 `POST /api/eval/run`)
+3. **단계 8 직전** — `npm install --save-dev --workspace=@oracle-game/api promptfoo` 실행 + Anthropic API 크레딧 충전 (양쪽 모두 필요)
+4. **단계 8** — Phase 0 Claude 베이스라인 R0 (60 × 5 = 300 호출)
 
 ### 환경/운영 메모
 
