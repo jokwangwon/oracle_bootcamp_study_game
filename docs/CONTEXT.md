@@ -124,6 +124,14 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 우선순위
 
+**OSS 모델 평가 트랙 (feature/oss-model-eval 브랜치)**:
+1. 단계 2: EXAONE 4.0 GGUF 수동 import (Modelfile 대괄호 토큰)
+2. 단계 3: LlmClientFactory + ChatOllama provider 분기
+3. 단계 4~7: Gold Set + promptfoo assertion + eval controller
+4. 단계 8~9: Phase 0 (Claude 베이스라인) → R1~R4 평가 라운드
+5. 단계 10: ADR-010 + 운영 모델 교체
+
+**MVP 1단계 잔여 (feature/mvp-phase1 브랜치)**:
 1. 노션 import → 범위 추론 파이프라인 (LangChain + 노션 API)
 2. 관리자 문제 review UI/API (`PATCH /api/questions/:id/review`)
 3. 2주차 sql-functions 시드 + 화이트리스트
