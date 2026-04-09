@@ -32,6 +32,184 @@ services:
       timeout: 5s
       retries: 5
 
+  # ───── OSS 모델 평가 인프라 (SDD v2 §6.1) ─────
+  # SDD: docs/architecture/oss-model-evaluation-design.md v2
+  # ADR-005 보안: ports 외부 노출 금지. localhost 바인드(127.0.0.1)만 허용
+  ollama:
+    image: ollama/ollama:latest
+    # TODO(SDD v2 M-05): 단계 1 sanity check 후 digest pin (ollama/ollama@sha256:...)
+    container_name: oracle-game-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      # SDD v2 M-02: 평가 배치 동안 모델 메모리 영구 유지 (swap 손실 방지)
+      OLLAMA_KEEP_ALIVE: "-1"
+      # SDD v2 §6.2: 결정론을 위해 동시성 1
+      OLLAMA_NUM_PARALLEL: "1"
+    # SDD v2 C-05: 외부 노출 금지. 호스트에서 직접 접근 시 localhost만
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ./ollama-data:/root/.ollama
+      # SDD v2 L-02: EXAONE Modelfile (대괄호 토큰)을 컨테이너 내부에 mount
+      - ./apps/api/src/modules/ai/eval/modelfiles:/modelfiles:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ───── Langfuse v3 self-host (SDD v2 §6.1, consensus-002 Q4) ─────
+  # Langfuse v3는 5개 컨테이너 풀 인프라를 요구한다 (postgres + clickhouse + redis + minio + web/worker).
+  # 본 프로젝트는 기존 oracle-game-postgres (오라클 게임 DB)와 oracle-game-redis (BullMQ)와
+  # 충돌하지 않도록 langfuse 전용 인스턴스를 모두 별도 컨테이너로 분리한다.
+  # ADR-005 보안: 모든 컨테이너의 외부 노출은 127.0.0.1 localhost 바인드만 허용한다.
+  langfuse-db:
+    image: postgres:16-alpine
+    container_name: oracle-game-langfuse-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:-changeme}
+      POSTGRES_DB: langfuse
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - ./langfuse-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: oracle-game-langfuse-clickhouse
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-changeme}
+    # ClickHouse는 user 101:101을 강제하므로 호스트 디렉토리 마운트 시 권한 문제 발생.
+    # named volume으로 우회 (docker가 자동으로 권한 처리)
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    # 외부 노출 안 함 (compose 내부만)
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s   # ClickHouse 첫 부팅은 마이그레이션 + 시스템 테이블 생성으로 시간 소요
+
+  langfuse-redis:
+    image: redis:7-alpine
+    container_name: oracle-game-langfuse-redis
+    restart: unless-stopped
+    command: >
+      --requirepass ${LANGFUSE_REDIS_AUTH:-changeme}
+      --maxmemory-policy noeviction
+    volumes:
+      - ./langfuse-redis-data:/data
+    # 외부 노출 안 함 (기존 oracle-game-redis BullMQ와 분리)
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${LANGFUSE_REDIS_AUTH:-changeme} ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-minio:
+    image: minio/minio:latest
+    container_name: oracle-game-langfuse-minio
+    restart: unless-stopped
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: ${LANGFUSE_MINIO_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_PASSWORD:-changeme}
+    volumes:
+      - ./langfuse-minio-data:/data
+    # MinIO console (관리자 UI) — 평가 운영자가 blob 확인 시
+    ports:
+      - "127.0.0.1:${LANGFUSE_MINIO_CONSOLE_PORT:-9091}:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: oracle-game-langfuse-worker
+    restart: unless-stopped
+    depends_on: &langfuse-depends-on
+      langfuse-db:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    environment: &langfuse-env
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-changeme}@langfuse-db:5432/langfuse
+      SALT: ${LANGFUSE_SALT:-changeme}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3010}
+      # ClickHouse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-changeme}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      # Redis
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-changeme}
+      REDIS_TLS_ENABLED: "false"
+      # MinIO (S3-compatible)
+      LANGFUSE_USE_AZURE_BLOB: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_USER:-minio}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:-changeme}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: "events/"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_USER:-minio}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:-changeme}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: "media/"
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+
+  langfuse:
+    image: langfuse/langfuse:3
+    container_name: oracle-game-langfuse
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-changeme}
+    # 호스트에서 UI 접근: http://localhost:${LANGFUSE_PORT}
+    ports:
+      - "127.0.0.1:${LANGFUSE_PORT:-3010}:3000"
+
+  # ───── 본 서비스 ─────
   api:
     build:
       context: .
@@ -43,6 +221,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # SDD v2 L-01: ollama healthcheck 통과 후 api 부팅
+      ollama:
+        condition: service_healthy
+      langfuse:
+        condition: service_started
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       DATABASE_URL: postgresql://${POSTGRES_USER:-oracle_game}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-oracle_game}
@@ -51,9 +234,11 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL:-claude-opus-4-6}
+      # SDD v2 §7.2: ChatOllama 어댑터용 base URL (compose 내부 네트워크)
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
-      LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse:3000}
       PORT: 3001
     ports:
       - "${API_PORT:-3001}:3001"
@@ -72,3 +257,12 @@ services:
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:3001}
     ports:
       - "${WEB_PORT:-3000}:3000"
+
+# ───── Named volumes ─────
+# 대부분 컨테이너는 호스트 디렉토리 바인드 마운트(./postgres-data 등)를 사용하지만,
+# ClickHouse는 user 101:101을 강제하므로 named volume이 권한 처리에 더 안전하다.
+volumes:
+  langfuse_clickhouse_data:
+    driver: local
+  langfuse_clickhouse_logs:
+    driver: local

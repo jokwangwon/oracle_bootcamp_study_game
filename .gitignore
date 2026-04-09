@@ -22,6 +22,15 @@ out/
 # Docker 볼륨
 postgres-data/
 redis-data/
+ollama-data/
+langfuse-db-data/
+langfuse-clickhouse-data/
+langfuse-clickhouse-logs/
+langfuse-redis-data/
+langfuse-minio-data/
+
+# OSS 모델 평가 결과 (SDD v2)
+apps/api/eval-results/
 
 # 환경 변수 예외 (예시 파일은 커밋)
 !.env.example

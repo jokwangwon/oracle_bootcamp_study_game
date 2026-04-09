@@ -290,9 +290,11 @@ defaultTest:
 
 ## 6. 인프라 변경
 
-### 6.1 docker-compose 추가 (v2 강화)
+### 6.1 docker-compose 추가 (v2.1 — Langfuse v3 풀 인프라)
 
 > **C-05 (Ollama 포트 비공개) + Q4 (Langfuse self-host) + L-01 (depends_on healthcheck) + M-05 (이미지 digest pin) 반영**
+>
+> **v2.1 patch (2026-04-09)**: 단계 1 sanity check 시 Langfuse v3가 `CLICKHOUSE_URL is not configured` 오류로 restart loop 발견. v3는 단순 `langfuse + postgres` 2 컨테이너 구성이 더 이상 동작하지 않으며 **postgres + clickhouse + redis + minio + langfuse-worker + langfuse-web 5개 컨테이너 풀 인프라**가 필수. 사용자 결정으로 옵션 B (v3 풀 인프라 도입)를 채택하여 본 절 yml을 갱신.
 
 ```yaml
   ollama:
@@ -322,30 +324,79 @@ defaultTest:
       timeout: 10s
       retries: 3
 
+  # Langfuse v3 풀 인프라 (postgres + clickhouse + redis + minio + worker + web)
   langfuse-db:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: langfuse
       POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD}
       POSTGRES_DB: langfuse
-    volumes:
-      - ./langfuse-db-data:/var/lib/postgresql/data
+    volumes: [./langfuse-db-data:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U langfuse"]
 
-  langfuse:
-    image: langfuse/langfuse@sha256:<pinned-digest>
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    user: "101:101"
     environment:
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+    volumes:
+      - ./langfuse-clickhouse-data:/var/lib/clickhouse
+      - ./langfuse-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+
+  langfuse-redis:
+    image: redis:7-alpine
+    command: --requirepass ${LANGFUSE_REDIS_AUTH} --maxmemory-policy noeviction
+    volumes: [./langfuse-redis-data:/data]
+    # 기존 oracle-game-redis (BullMQ)와 분리 — 네트워크 호스트명도 다름
+
+  langfuse-minio:
+    image: minio/minio:latest
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: ${LANGFUSE_MINIO_USER}
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_PASSWORD}
+    volumes: [./langfuse-minio-data:/data]
+    ports: ["127.0.0.1:${LANGFUSE_MINIO_CONSOLE_PORT}:9001"]   # console UI만 노출
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    depends_on: &lf-deps
+      langfuse-db: { condition: service_healthy }
+      langfuse-clickhouse: { condition: service_healthy }
+      langfuse-redis: { condition: service_healthy }
+      langfuse-minio: { condition: service_healthy }
+    environment: &lf-env
       DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-db:5432/langfuse
-      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
       SALT: ${LANGFUSE_SALT}
-      NEXTAUTH_URL: http://langfuse:3000
-    expose:
-      - "3000"
-    depends_on:
-      langfuse-db:
-        condition: service_healthy
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}   # ★ 정확히 64자 hex (openssl rand -hex 32)
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_AUTH}
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_USER}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      # ... LANGFUSE_S3_MEDIA_UPLOAD_*도 동일하게 minio로 (실제 yml 참조)
+
+  langfuse:
+    image: langfuse/langfuse:3
+    depends_on: *lf-deps
+    environment:
+      <<: *lf-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+    ports: ["127.0.0.1:${LANGFUSE_PORT}:3000"]   # 호스트 UI: http://localhost:3010
 ```
+
+> 위 yml은 SDD에서 핵심 환경변수만 발췌. 전체 정의는 실제 `docker-compose.yml`과 `scripts/eval/README.md` 참조. 단계 1 트러블슈팅 표는 `scripts/eval/README.md`에 있다.
 
 #### `api` 서비스 환경변수 변경
 
@@ -714,6 +765,7 @@ docs/
 |---|---|---|---|
 | 2026-04-09 | **v1** | 초안 작성 | 사용자 지시 — `oss-model-selection-rationale.md` 기반 SDD화 |
 | 2026-04-09 | **v2** | consensus-002 합의 + Q1~Q4 사용자 결정 반영 (HIGH 12 + MED 6 + LOW 5 + 누락 6) | `docs/review/consensus-002-oss-model-evaluation.md` |
+| 2026-04-09 | **v2.1 patch** | 단계 1 sanity 시 Langfuse v3 `CLICKHOUSE_URL is not configured` 오류 발견. §6.1을 v3 풀 인프라(clickhouse + redis + minio + worker + web 5컨테이너)로 갱신. 사용자가 옵션 B 채택 | 사용자 직접 결정 (단계 1 실측) |
 
 ---
 

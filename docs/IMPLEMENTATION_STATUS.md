@@ -51,7 +51,7 @@ SDD를 변경했다면 반드시 이 문서도 함께 갱신한다.
 | 프론트 솔로 화면 | ✅ | 정식 로그인/회원가입 + 인증 가드 + 헤더 |
 | Docker Compose 환경 | ✅ | postgres/redis/api/web 정의 완료 |
 | 테스트 (Vitest) | ✅ | api 10 파일 / 70 + shared 1 파일 / 13 = **11 파일 / 83 케이스 GREEN** |
-| **OSS 모델 평가 트랙** (SDD v2) | 🟡 | `feature/oss-model-eval` 브랜치. 단계 0(extractOracleTokens 공용 유틸 export) 완료. 단계 1(docker-compose ollama+langfuse self-host) 대기 |
+| **OSS 모델 평가 트랙** (SDD v2) | 🟡 | `feature/oss-model-eval` 브랜치. 단계 0~1 완료. sanity 4/4 PASS (M2 41s, M3 37s, M4 14s, M5 52s). Langfuse v3 self-host + Ollama 가동 중. 단계 2(EXAONE 4.0 GGUF import) 대기 |
 
 > **다음 세션 우선순위 제안**: 노션 import → 범위 추론 → 관리자 review UI(/api/questions/:id/review) → 2주차 sql-functions 시드.
 
