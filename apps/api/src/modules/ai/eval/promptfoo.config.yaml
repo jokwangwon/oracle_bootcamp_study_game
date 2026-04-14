@@ -4,9 +4,18 @@
 # Anthropic API 크레딧 미충전으로 실제 실행이 불가하지만, 설정 자체는 단계 9까지
 # 그대로 사용된다.
 #
-# 사용법:
+# 사용법 (호스트 터미널에서 직접 실행):
 #   cd apps/api/src/modules/ai/eval
-#   promptfoo eval --config promptfoo.config.yaml
+#   LANGFUSE_HOST=http://127.0.0.1:3010 OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+#     npx promptfoo eval --config promptfoo.config.yaml --filter-providers 'M1'
+#
+# 모델별 필터 예시:
+#   --filter-providers 'M1'   → EXAONE 4.0 32B
+#   --filter-providers 'M2'   → EXAONE 3.5 32B
+#   --filter-providers 'M3'   → Qwen3-Coder-Next 80B
+#   --filter-providers 'M4'   → Qwen2.5-Coder 32B
+#   --filter-providers 'M5'   → Llama 3.3 70B
+#   --filter-providers 'R0'   → Claude Opus 4.6 (baseline, API 크레딧 필요)
 #
 # 사전 조건:
 #   1. promptfoo CLI 설치 (단계 5 완료 후 별도 npm install — README 참조)
@@ -36,7 +45,7 @@ providers:
     config:
       provider: ollama
       model: exaone4:32b
-      baseUrl: http://ollama:11434
+      baseUrl: http://127.0.0.1:11434
       temperature: 0.2
     file: 'file://providers/langfuse-wrapped.ts'
 
@@ -45,7 +54,7 @@ providers:
     config:
       provider: ollama
       model: exaone3.5:32b
-      baseUrl: http://ollama:11434
+      baseUrl: http://127.0.0.1:11434
       temperature: 0.2
     file: 'file://providers/langfuse-wrapped.ts'
 
@@ -53,8 +62,8 @@ providers:
     label: 'M3 — Qwen3-Coder-Next 80B MoE'
     config:
       provider: ollama
-      model: qwen3-coder:30b
-      baseUrl: http://ollama:11434
+      model: qwen3-coder-next:latest
+      baseUrl: http://127.0.0.1:11434
       temperature: 0.2
     file: 'file://providers/langfuse-wrapped.ts'
 
@@ -63,7 +72,7 @@ providers:
     config:
       provider: ollama
       model: qwen2.5-coder:32b
-      baseUrl: http://ollama:11434
+      baseUrl: http://127.0.0.1:11434
       temperature: 0.2
     file: 'file://providers/langfuse-wrapped.ts'
 
@@ -72,7 +81,7 @@ providers:
     config:
       provider: ollama
       model: llama3.3:70b
-      baseUrl: http://ollama:11434
+      baseUrl: http://127.0.0.1:11434
       temperature: 0.2
     file: 'file://providers/langfuse-wrapped.ts'
 
@@ -92,8 +101,7 @@ providers:
 # multi-message 문자열을 반환. langfuse-wrapped provider의 parsePromptToMessages가
 # 자동 파싱해 운영과 동일한 SystemMessage + HumanMessage 두 개로 invoke한다.
 prompts:
-  - id: 'eval-prompt (운영 동일 + 중심 토큰 강제)'
-    file: 'file://prompts/build-eval-prompt.ts'
+  - 'file://prompts/build-eval-prompt.ts'
 
 # ============================================================================
 # Tests — Gold Set A 30 + Gold Set B 30 = 60 testCase
