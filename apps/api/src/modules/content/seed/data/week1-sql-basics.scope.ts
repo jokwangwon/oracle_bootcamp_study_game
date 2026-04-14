@@ -78,6 +78,32 @@ const KEYWORDS_WEEK1_SQL_BASICS: string[] = [
   'DEPTNO',
   'DNAME',
   'LOC',
+
+  // --- EMP.JOB 실제 값 (Oracle SCOTT 스키마의 고정된 JOB enum) ---
+  // 평가 시 'MANAGER' 같은 리터럴은 oracle-tokens 토크나이저가 제외하지만,
+  // 따옴표 없이 등장(예: alias, COMMENT)할 수 있어 안전망으로 등록.
+  'MANAGER',
+  'CLERK',
+  'SALESMAN',
+  'ANALYST',
+  'PRESIDENT',
+
+  // --- DEPT.DNAME 실제 값 ---
+  'ACCOUNTING',
+  'RESEARCH',
+  'SALES',
+  'OPERATIONS',
+
+  // --- 메타 용어 (term-match description 등에서 자주 등장) ---
+  'SQL',
+
+  // --- 관용 alias / 자주 쓰이는 파생 식별자 ---
+  'CNT',
+  'AVG_SAL',
+  'AVG_SALARY',
+  'TOTAL_SAL',
+  'EMP_COUNT',
+  'DEPT_NAME',
 ];
 
 export const WEEK1_SQL_BASICS_SCOPE: WeeklyScopeSeed = {

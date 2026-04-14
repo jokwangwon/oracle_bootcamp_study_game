@@ -75,6 +75,32 @@ describe('extractOracleTokens', () => {
     // 정책: 첫 글자 대문자 + 그 다음 [A-Z_0-9] 1자 이상
     expect(extractOracleTokens('FROM T1, T2')).toEqual(['FROM', 'T1', 'T2']);
   });
+
+  it('작은따옴표 문자열 리터럴 내부의 토큰은 추출하지 않는다', () => {
+    expect(extractOracleTokens("SELECT ENAME FROM EMP WHERE JOB = 'MANAGER'")).toEqual([
+      'SELECT',
+      'ENAME',
+      'FROM',
+      'EMP',
+      'WHERE',
+      'JOB',
+    ]);
+  });
+
+  it('날짜 리터럴도 문자열이므로 토큰 추출 대상이 아니다', () => {
+    expect(
+      extractOracleTokens("HIREDATE BETWEEN '1980-01-01' AND '2000-12-31'"),
+    ).toEqual(['HIREDATE', 'BETWEEN', 'AND']);
+  });
+
+  it('큰따옴표 식별자(대소문자 보존) 내부는 토큰 추출 대상이 아니다', () => {
+    // "Manager"는 제외, SELECT/FROM은 따옴표 밖이므로 추출됨
+    expect(extractOracleTokens('SELECT "Manager" FROM DUAL')).toEqual([
+      'SELECT',
+      'FROM',
+      'DUAL',
+    ]);
+  });
 });
 
 describe('ORACLE_TOKEN_REGEX', () => {

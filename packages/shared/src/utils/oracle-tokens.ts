@@ -15,13 +15,19 @@
  *  - 첫 글자가 대문자(`A-Z`)이고
  *  - 그 뒤가 대문자/숫자/언더스코어 1자 이상
  *  - 즉 2글자 이상의 대문자 식별자만 후보로 본다
+ *  - **문자열 리터럴(`'...'`, `"..."`) 내부는 토큰 추출 대상에서 제외**
+ *    (Oracle에서 작은따옴표는 문자열, 큰따옴표는 대소문자 보존 식별자. 둘 다
+ *    "학습 범위 검증" 대상이 아닌 데이터/특수 케이스이므로 제외.)
  *
  * 통과 예: SELECT, FROM, ROW_NUMBER, VARCHAR2, T1
- * 미통과 예: select(소문자), I(1글자), SelectStatement(camelCase), 가나다(한글)
+ * 미통과 예: select(소문자), I(1글자), SelectStatement(camelCase), 가나다(한글),
+ *           'MANAGER'(문자열 리터럴 내부), '1980-01-01'(동)
  *
  * SDD: docs/architecture/oss-model-evaluation-design.md (v2 §3.1 MT4 + 단계 0)
  */
 export const ORACLE_TOKEN_REGEX = /\b[A-Z][A-Z_0-9]{1,}\b/g;
+
+const STRING_LITERAL_REGEX = /'[^']*'|"[^"]*"/g;
 
 /**
  * 텍스트에서 Oracle 식별자 후보를 모두 추출한다.
@@ -34,5 +40,6 @@ export const ORACLE_TOKEN_REGEX = /\b[A-Z][A-Z_0-9]{1,}\b/g;
  * // → ['SELECT', 'FROM']
  */
 export function extractOracleTokens(text: string): string[] {
-  return text.match(ORACLE_TOKEN_REGEX) ?? [];
+  const withoutLiterals = text.replace(STRING_LITERAL_REGEX, '');
+  return withoutLiterals.match(ORACLE_TOKEN_REGEX) ?? [];
 }

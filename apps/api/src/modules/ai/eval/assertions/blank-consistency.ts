@@ -8,9 +8,14 @@ import type { AssertionContext, AssertionResult } from './types';
  *
  * 검증 항목 (blank-typing 모드 한정):
  *  1. sql의 `___` 토큰 개수 == blanks 배열 길이 (정확 일치)
- *  2. blanks[i].answer가 모두 vars.allowedKeywords 안에 있음
- *  3. top-level answer 배열 길이 == blanks 길이 (시드 컨벤션)
- *  4. blanks 길이 ≥ 1 (빈칸 0개는 빈칸 문제가 아님)
+ *  2. top-level answer 배열 길이 == blanks 길이 (시드 컨벤션)
+ *  3. blanks 길이 ≥ 1 (빈칸 0개는 빈칸 문제가 아님)
+ *  4. 각 blanks[i].answer가 문자열 타입
+ *
+ * **화이트리스트 검증은 MT3(scope-whitelist)의 단일 책임으로 이관**
+ * (rationale/oss-eval-failure-analysis-2026-04-14.md — 옵션 2, 3+1 합의).
+ * 빈칸 정답은 "=", ">", "10", "SAL DESC" 같은 리터럴/연산자가 자연스러우며,
+ * MT3가 sql 본문 + top-level answer를 이미 검사하므로 중복 검증만 발생했음.
  *
  * term-match 모드는 본 메트릭의 적용 대상이 아니므로 자동 pass.
  */
@@ -72,23 +77,11 @@ export default async function blankConsistencyAssertion(
     };
   }
 
-  // 2. blanks[i].answer가 모두 화이트리스트 안
-  const allowed = new Set(context.vars.allowedKeywords.map((k) => k.toUpperCase()));
-  const outOfScope: string[] = [];
+  // 2. blanks[i].answer가 문자열인지만 검증 (화이트리스트 검증은 MT3가 단일 책임)
   for (const b of blanks as BlankShape[]) {
     if (typeof b.answer !== 'string') {
       return { pass: false, score: 0, reason: 'MT4 fail — blanks[].answer가 문자열이 아님' };
     }
-    if (!allowed.has(b.answer.toUpperCase())) {
-      outOfScope.push(b.answer);
-    }
-  }
-  if (outOfScope.length > 0) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `MT4 fail — blanks의 정답이 화이트리스트 밖: ${outOfScope.join(', ')}`,
-    };
   }
 
   // 3. top-level answer 길이 == blanks 길이

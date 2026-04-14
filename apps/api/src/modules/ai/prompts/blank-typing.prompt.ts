@@ -32,7 +32,9 @@ export const BLANK_TYPING_GENERATION_PROMPT: PromptTemplate = {
 5. 난이도에 따라 빈칸 수를 조정합니다 (EASY: 1개, MEDIUM: 2~3개, HARD: 4~5개).
 6. 정답은 단일 토큰(SELECT, FROM 등) 또는 짧은 키워드 조합입니다.
 7. 한 문제에 가능한 한 자연스러운 실무 SQL 패턴을 담습니다.
-8. 모든 정답은 화이트리스트에 있어야 합니다.`,
+8. 모든 정답은 화이트리스트에 있어야 합니다.
+9. **sql 문자열의 \`___\` 개수와 blanks 배열 길이는 반드시 정확히 일치해야 합니다**
+   (예: \`___\` 2개 → blanks 2개, answer 2개). 개수 불일치는 즉시 실패 처리됩니다.`,
 
   userTemplate: `다음 조건의 빈칸 타이핑 SQL 문제를 1개 생성해주세요.
 
