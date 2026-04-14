@@ -105,6 +105,46 @@ export class SeedService implements OnApplicationBootstrap {
     await this.scopeRepo.save(entity);
   }
 
+  /**
+   * 모든 주차의 weekly_scope.keywords를 seed `*.scope.ts` 기준으로 동기화한다.
+   *
+   * ADR-010: seed 파일이 평가/운영의 단일 source of truth. scope.ts 수정 후
+   * 기존 DB row의 keywords가 구(舊) 목록으로 남으면 평가↔운영 divergence 발생.
+   * 멱등 — 이미 일치하면 UPDATE 건너뛴다.
+   *
+   * @returns 주차별 변경 여부
+   */
+  async syncScopes(): Promise<Array<{ week: number; topic: string; changed: boolean }>> {
+    const seeds: WeeklyScopeSeed[] = [WEEK1_SQL_BASICS_SCOPE, WEEK2_TRANSACTIONS_SCOPE];
+    const report: Array<{ week: number; topic: string; changed: boolean }> = [];
+    for (const seed of seeds) {
+      const existing = await this.scopeRepo.findOne({
+        where: { week: seed.week, topic: seed.topic },
+      });
+      if (!existing) {
+        await this.insertScope(seed);
+        report.push({ week: seed.week, topic: seed.topic, changed: true });
+        this.logger.log(`scope 신규 insert: week=${seed.week} topic=${seed.topic}`);
+        continue;
+      }
+      const same =
+        existing.keywords.length === seed.keywords.length &&
+        existing.keywords.every((k, i) => k === seed.keywords[i]);
+      if (same) {
+        report.push({ week: seed.week, topic: seed.topic, changed: false });
+        continue;
+      }
+      existing.keywords = [...seed.keywords];
+      existing.sourceUrl = seed.sourceUrl;
+      await this.scopeRepo.save(existing);
+      report.push({ week: seed.week, topic: seed.topic, changed: true });
+      this.logger.log(
+        `scope 동기화: week=${seed.week} topic=${seed.topic} keywords=${seed.keywords.length}`,
+      );
+    }
+    return report;
+  }
+
   private async insertQuestion(seed: QuestionSeed): Promise<void> {
     const textsToValidate = this.collectTextsForValidation(seed);
     for (const text of textsToValidate) {
