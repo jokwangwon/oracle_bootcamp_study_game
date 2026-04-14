@@ -779,7 +779,7 @@ grop by로 사용할수도 있고 의도가 명확하지 않아 난해함
 - [x] **채택** — 채택하려면 `[ ]`를 `[x]`로 변경
 - **mode**: term-match
 - **difficulty**: MEDIUM
-- **description**: EMP 테이블에서 직원의 입사일을 기록하는 컬럼 이름은?
+- **description**: EMPLOYEES 테이블에서 직원의 입사일을 기록하는 컬럼 이름은?
 - **category**: 예시 컬럼
 - **answer**: `HIREDATE`
 - **explanation**: HIREDATE는 EMP 테이블의 입사일 컬럼이며 DATE 타입입니다.

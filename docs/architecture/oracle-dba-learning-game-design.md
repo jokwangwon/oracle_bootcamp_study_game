@@ -2,8 +2,8 @@
 
 > **Oracle DBA 부트캠프 용어/함수 암기를 위한 멀티플레이어 웹 게임 시스템 설계**
 
-**최종 수정**: 2026-04-08
-**상태**: 설계 확정 (3+1 합의 검증 완료)
+**최종 수정**: 2026-04-10
+**상태**: 설계 확정 (3+1 합의 검증 완료, §4 파이프라인 v2 반영)
 **상위 문서**: `PROJECT_CONSTITUTION.md` 제3조, 제4조
 **관련 ADR**: ADR-008 (기술 스택 결정)
 
@@ -304,54 +304,294 @@ interface Round {
 
 ### 4.1 전체 흐름
 
+> **v2 변경 (2026-04-10)**: 3+1 합의(consensus-003) + 사용자 Q1~Q4 결정 반영.
+> v1 다이어그램의 중앙 허브 구조(키워드 화이트리스트)를 유지하면서,
+> 상단에 노션 추출 + LLM 정리 단계를 추가하고 검증 단계를 강화.
+> **하이브리드 오케스트레이션**: Stage 간 전환은 BullMQ (영속성/재시도/스케줄),
+> 각 Stage 내부는 LangChain Runnable로 감싸서 Langfuse trace 전 구간 적용.
+
 ```
+┌──────────────┐
+│  트리거       │  cron (BullMQ RepeatableJob) / 관리자 수동 호출
+│  (Trigger)   │  POST /api/notion/sync
+└──────┬───────┘
+       │                          ┌─────────────────────────────┐
+       │                          │  하이브리드 오케스트레이션    │
+       │                          │                             │
+       │                          │  Stage 간: BullMQ           │
+       │                          │   → 영속성 (Redis)          │
+       │                          │   → 재시도/실패 복구        │
+       │                          │   → 스케줄/큐잉             │
+       │                          │   → 진행률 모니터링          │
+       │                          │                             │
+       │                          │  Stage 내부: LangChain      │
+       │                          │   → Runnable 래핑           │
+       │                          │   → Langfuse trace 전 구간  │
+       │                          │   → 입출력 타입 안전         │
+       │                          └─────────────────────────────┘
+       ▼
 ┌──────────────┐     ┌────────────────┐     ┌──────────────────┐
-│  노션 수업    │     │  범위 추론      │     │  문제 생성        │
-│  자료 입력    │────▶│  (AI Analysis)  │────▶│  (AI Generation)  │
+│  노션 추출    │     │  LLM 문서      │     │  범위 추론        │
+│  + 캐시      │────▶│  정리/구조화   │────▶│  (Scope Inference)│
+│  (Stage 1)   │     │  (Stage 2)     │     │  (Stage 3)       │
 │              │     │                │     │                  │
-│  - 코드 예제  │     │  - 주차 판별    │     │  - 모드별 문제    │
-│  - 필기 노트  │     │  - 키워드 추출  │     │  - 난이도별 생성  │
-│  - 강사 자료  │     │  - 범위 태깅    │     │  - 정답 + 해설    │
-└──────────────┘     └────────┬───────┘     └────────┬─────────┘
-                              │                      │
-                              ▼                      ▼
-                     ┌────────────────┐     ┌──────────────────┐
-                     │  키워드         │     │  검증             │
-                     │  화이트리스트   │     │  (Validation)     │
-                     │                │     │                  │
-                     │  주차별 허용    │────▶│  - 키워드 매칭    │
-                     │  용어/함수 목록 │     │  - 스키마 검증    │
-                     └────────────────┘     │  - 범위 이탈 차단 │
-                                            └────────┬─────────┘
-                                                     │
-                                                     ▼
-                                            ┌──────────────────┐
-                                            │  문제 풀 저장     │
-                                            │  (Question Pool)  │
-                                            │                  │
-                                            │  주차별 50문제+   │
-                                            │  모드별 태깅      │
-                                            └──────────────────┘
+│  - 증분 동기화│     │  - sanitization│     │  - 주차 판별      │
+│  - 마크다운   │     │  - 구조화 정리 │     │  - 키워드 추출    │
+│    변환/보존  │     │  - 원본 병행   │     │  - 범위 태깅      │
+│  - 상태 추적  │     │    저장        │     │  - MVP: 수동 입력 │
+│              │     │                │     │                  │
+│ Runnable     │     │ Runnable       │     │ Runnable         │
+│ Lambda       │     │ Sequence       │     │ Lambda/Sequence  │
+└──────────────┘     └────────────────┘     └────────┬─────────┘
+                                                      │
+  ◀──── BullMQ 큐: notion-sync ────▶                  │
+  (Stage 1→2→3 하나의 Job, stage별 progress 갱신)      │
+                                                      │
+                      ┌───────────────────────────────┘
+                      │
+                      ▼
+             ┌────────────────┐
+             │  키워드         │  ◀── 중앙 허브 (v1 구조 유지)
+             │  화이트리스트   │
+             │  (weekly_scope) │
+             │                │
+             │  주차별 허용    │
+             │  용어/함수 목록 │
+             └───┬────────┬───┘
+                 │        │
+        ┌────────┘        └────────┐
+        ▼                          ▼
+┌──────────────────┐     ┌──────────────────┐
+│  문제 생성        │     │  검증             │
+│  (Stage 4)       │     │  (Stage 5)       │
+│  (AI Generation)  │     │  (Validation)     │
+│                  │     │                  │
+│  - 모드별 문제    │────▶│  ① 스키마 (Zod)   │
+│  - 난이도별 생성  │     │  ② 키워드 매칭    │
+│  - 정답 + 해설    │     │  ③ 중복 검사      │
+│  - Langfuse trace│     │  ④ sanitization   │
+│                  │     │  ⑤ 범위 이탈 차단 │
+│ Runnable         │     │                  │
+│ Sequence         │     │ RunnableLambda   │
+│ (AiQuestion      │     │ (ScopeValidator) │
+│  Generator 재사용)│     │                  │
+└──────────────────┘     └────────┬─────────┘
+                                  │
+  ◀──── BullMQ 큐: ai-question-generation ────▶
+  (Stage 4→5 하나의 Job)                       │
+                                               │
+                                  ┌────────────┘
+                                  ▼
+                         ┌──────────────────┐
+                         │  문제 풀 저장     │
+                         │  (Question Pool)  │
+                         │                  │
+                         │  status:          │
+                         │  'pending_review' │
+                         │  주차별·모드별    │
+                         └──────────────────┘
 ```
 
-### 4.2 범위 추론 (Scope Inference)
+**v1 대비 변경 사항:**
 
-노션 자료를 분석하여 학습 범위를 자동 추론한다.
+| 영역 | v1 | v2 (현재) |
+|------|-----|----------|
+| 상단 | 노션 입력 1박스 | 트리거 + 노션 추출(증분) + LLM 정리 + 범위 추론 (4박스) |
+| 중앙 | 키워드 화이트리스트 (중앙 허브) | **그대로 유지** — weekly_scope 테이블 |
+| 검증 | 키워드 매칭, 스키마, 범위 차단 (3항목) | + 중복 검사, sanitization (5항목) |
+| 저장 | status 미명시 | status='pending_review' 명시 |
+| 오케스트레이션 | 미명시 | **하이브리드** — BullMQ(Stage 간) + LangChain Runnable(Stage 내부) |
+
+**하이브리드 오케스트레이션 원칙:**
+
+1. **Stage 간 전환 = BullMQ**
+   - 영속성: Redis에 Job 상태 저장 → crash 시 마지막 성공 Stage부터 재개
+   - 재시도: `attempts`, `backoff` 내장
+   - 스케줄: `RepeatableJob`으로 cron 지원
+   - 모니터링: `job.updateProgress({ stage: N })` + Bull Board
+   - 동시 실행 방지: Job ID에 `database_id` 포함
+
+2. **Stage 내부 = LangChain Runnable**
+   - 모든 Stage를 `RunnableLambda` 또는 `RunnableSequence`로 래핑
+   - LLM 호출 Stage(2, 3, 4)는 `ChatModel.pipe(StructuredOutputParser)`
+   - 비-LLM Stage(1, 5)도 `RunnableLambda`로 래핑하여 Langfuse trace 통합
+   - Langfuse `CallbackHandler`가 전 구간에 걸쳐 자동 trace
+
+3. **BullMQ 큐 구성:**
+   - `notion-sync`: Stage 1→2→3 (하나의 Job, stage별 progress 갱신)
+   - `ai-question-generation`: Stage 4→5 (기존 큐 재사용)
+   - `notion-sync` Job 완료 시 `ai-question-generation` Job을 자동 enqueue (BullMQ FlowProducer)
+
+```typescript
+// Stage 내부 LangChain Runnable 구성 예시 (의사 코드)
+
+// Stage 1: 노션 추출 (계산적이지만 Runnable로 래핑 → Langfuse trace)
+const stage1 = new RunnableLambda({ func: notionDeltaExtract });
+
+// Stage 2: LLM 문서 정리
+const stage2 = RunnableSequence.from([
+  new RunnableLambda({ func: inputSanitize }),
+  chatModel.pipe(structuredOutputParser),
+  new RunnableLambda({ func: saveStructuredContent }),
+]);
+
+// Stage 3: 범위 분석 (MVP: 수동, Phase 2: LLM)
+const stage3 = new RunnableLambda({ func: scopeAnalysisOrManual });
+
+// Stage 4: 문제 생성 (기존 AiQuestionGenerator — 이미 LangChain)
+const stage4 = RunnableSequence.from([
+  promptTemplate,
+  chatModel.pipe(structuredOutputParser),
+]);
+
+// Stage 5: 검증 + 저장 (계산적이지만 Runnable로 래핑)
+const stage5 = new RunnableLambda({ func: validateAndSave });
+```
+
+### 4.2 노션 추출 + 범위 추론 (Notion Sync & Scope Inference)
+
+> **v2 변경 (2026-04-10)**: 3+1 합의(consensus-003) 반영.
+> Stage 1~3의 상세 설계. 증분 동기화, LLM 문서 정리, 상태 관리 추가.
+
+#### 4.2.1 Stage 1 — 노션 증분 추출 + 마크다운 캐시
+
+**Notion API 클라이언트**: `@notionhq/client` SDK 직접 사용.
+LangChain NotionAPILoader는 증분 추출(delta sync)을 지원하지 않으므로 채택하지 않는다.
+Notion은 LLM 공급자가 아니므로 ADR-009 적용 범위 밖이다.
+
+**LangChain 래핑**: Notion API 호출 자체는 `@notionhq/client`이지만,
+Stage 1 전체를 `RunnableLambda`로 감싸서 Langfuse trace에 포함시킨다.
+이는 파이프라인 전 구간의 관측 가능성(observability)을 보장한다.
+
+**증분 추출 전략:**
 
 ```
-입력: 노션 문서 (마크다운/텍스트)
+1. notion_sync_state 테이블에서 last_synced_at 조회
+2. Notion DB query: filter = { last_edited_time: { after: last_synced_at } }
+3. has_more + next_cursor 페이지네이션으로 전체 변경분 수집
+4. 각 페이지의 블록을 마크다운으로 변환 (계산적)
+5. 마크다운 원본을 notion_documents 테이블에 저장 (캐시)
+6. notion_sync_state.last_synced_at 갱신
+```
 
-Step 1: 키워드 추출
-  → SQL 키워드, 함수명, Oracle 고유 용어 식별
-  → 예: SELECT, NVL, TO_CHAR, GRANT, TABLESPACE...
+**동기화 상태 테이블:**
 
-Step 2: 주차/주제 매핑
-  → 추출된 키워드를 커리큘럼 매핑 테이블과 대조
-  → 커리큘럼: SQL → PL/SQL → Admin → Backup → Perf → SQL Tuning → RAC
+```sql
+CREATE TABLE notion_sync_state (
+  id            SERIAL PRIMARY KEY,
+  database_id   VARCHAR(36) NOT NULL UNIQUE,  -- Notion DB ID
+  last_synced_at TIMESTAMPTZ,                 -- 마지막 성공 동기화 시각
+  last_cursor   TEXT,                         -- 페이지네이션 커서 (실패 복구용)
+  status        VARCHAR(20) DEFAULT 'idle',   -- idle | syncing | error
+  error_message TEXT,
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
+);
+```
 
-Step 3: 범위 태깅
-  → 각 키워드에 (주차, 주제, 난이도) 태그 부여
-  → 새로운 키워드 발견 시 → 해당 주차 화이트리스트에 추가
+**마크다운 캐시 테이블:**
+
+```sql
+CREATE TABLE notion_documents (
+  id              SERIAL PRIMARY KEY,
+  notion_page_id  VARCHAR(36) NOT NULL UNIQUE,  -- Notion 페이지 ID
+  title           TEXT NOT NULL,
+  raw_markdown    TEXT NOT NULL,                 -- 원본 마크다운 (불변 보존)
+  structured_content TEXT,                       -- Stage 2 LLM 정리 결과
+  week            INT,                           -- Stage 3에서 매핑
+  topic           VARCHAR(50),                   -- Stage 3에서 매핑
+  last_edited_at  TIMESTAMPTZ,                   -- Notion 측 수정 시각
+  synced_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**엣지 케이스 처리:**
+
+| 시나리오 | 대응 |
+|---------|------|
+| 노션 페이지 삭제/이동 | 404 → soft-delete (notion_documents.status='deleted'), 기존 scope 유지 |
+| 리치 텍스트/임베드/DB 뷰 | 지원 블록 타입 화이트리스트, 미지원 타입은 skip + 로깅 |
+| API rate limit (3 req/s) | BullMQ rate limiter 또는 p-limit으로 동시성 제어 |
+| 동기화 중 실패 | last_cursor로 이어서 재개, status='error' + error_message 기록 |
+
+**트리거:**
+
+| 방식 | 구현 | 용도 |
+|------|------|------|
+| cron 스케줄 | BullMQ `RepeatableJob` | 주기적 자동 동기화 (주기는 관리자 설정) |
+| 수동 호출 | `POST /api/notion/sync` (관리자 전용) | 즉시 동기화 필요 시 |
+
+두 방식 모두 동일한 BullMQ `notion-sync` 큐를 사용한다.
+동시 트리거 방지: BullMQ Job ID에 `database_id` 포함하여 중복 job 거부.
+
+**환경변수 (ADR-006 정합):**
+
+```env
+NOTION_API_TOKEN=secret_...            # Notion integration token (read-only scope)
+NOTION_DATABASE_ID=abc123...           # 대상 노션 DB ID
+NOTION_SYNC_CRON=0 0 * * 1            # cron 표현식 (기본: 매주 월요일 자정)
+```
+
+#### 4.2.2 Stage 2 — LLM 문서 정리/구조화
+
+> **사용자 결정 Q4**: LLM 문서 정리는 자동화 로직에 필수.
+> 3+1 합의에서 제거가 권고되었으나, 사용자가 유지를 결정함.
+> Agent B의 위험 완화 방안을 적용한다.
+
+**목적**: 노션 원문(코드 예제, 필기, 강사 자료 혼합)을 LLM이 문제 생성에 활용하기 좋은 구조로 정리한다.
+
+**프로세스:**
+
+```
+입력: notion_documents.raw_markdown (원본)
+
+Step 1: 입력 sanitization (계산적, LLM 호출 전)
+  → 코드 블록과 일반 텍스트 분리
+  → 지시형 텍스트 패턴 필터링 (프롬프트 인젝션 방지)
+  → 길이 제한 (모델 컨텍스트 윈도우 고려)
+
+Step 2: LLM 구조화 (추론적)
+  → LangChain ChatModel + StructuredOutputParser
+  → Langfuse trace 자동 기록
+  → 프롬프트: Langfuse Prompt Management 등록
+  → 출력: 주제별 정리된 학습 내용 (코드 예제 포함)
+
+Step 3: 결과 저장
+  → notion_documents.structured_content에 저장
+  → raw_markdown은 불변 보존 (감사 추적)
+  → 원본과 정리 결과 양쪽 모두 접근 가능
+```
+
+**안전 장치:**
+- 원본(`raw_markdown`)은 절대 덮어쓰지 않는다
+- 정리 결과의 키워드 누락 체크: `extractOracleTokens(원본)` ⊆ `extractOracleTokens(정리결과)` 계산적 후검증
+- 후검증 실패 시: 경고 로깅 + 원본 기반 fallback
+
+#### 4.2.3 Stage 3 — 범위 분석
+
+```
+MVP (현재):
+  → 관리자가 수동으로 weekly_scope 키워드 입력
+  → 시드 데이터 패턴 유지 (week1-sql-basics.scope.ts 등)
+
+Phase 2 (자동화):
+  입력: notion_documents.structured_content (Stage 2 결과)
+
+  Step 1: 키워드 추출
+    → SQL 키워드, 함수명, Oracle 고유 용어 식별
+    → extractOracleTokens() 계산적 추출 우선
+    → LLM 보조: 문맥 기반 키워드 보완 (계산적 추출이 놓치는 암묵적 용어)
+
+  Step 2: 주차/주제 매핑
+    → 추출된 키워드를 커리큘럼 매핑 테이블과 대조
+    → 커리큘럼: SQL → PL/SQL → Admin → Backup → Perf → SQL Tuning → RAC
+
+  Step 3: 범위 태깅
+    → 각 키워드에 (주차, 주제, 난이도) 태그 부여
+    → 새로운 키워드 발견 시 → 해당 주차 화이트리스트에 추가
+
+  Step 4: weekly_scope upsert
+    → 기존 키워드와 병합 (추가만, 삭제는 관리자 수동)
 ```
 
 ### 4.3 문제 생성 (Question Generation)
@@ -628,8 +868,12 @@ GET    /api/rankings/me            # 내 순위
 
 # 주차 범위
 GET    /api/scope                  # 주차별 학습 범위 목록
-POST   /api/scope/import           # 노션 자료 import → 범위 추론 (비동기)
+POST   /api/scope/import           # 노션 자료 import → 범위 추론 (비동기, BullMQ notion-sync 큐)
 PATCH  /api/scope/:weekId          # 주차 범위 수동 편집 (admin)
+
+# 노션 동기화 (v2 추가)
+POST   /api/notion/sync            # 수동 노션 동기화 트리거 (admin, §4.1 Stage 1~3)
+GET    /api/notion/sync/status     # 동기화 상태 조회
 ```
 
 ### 7.2 WebSocket Events (Socket.IO)
@@ -736,6 +980,17 @@ NODE_ENV=production
 | DB | PostgreSQL + Redis | A, B 일치, C도 PG 대안 인정 |
 | AI 콘텐츠 | 반자동 (AI 생성 → 검증 → 승인) | C 제안, B 검증 방식 결합 |
 | MVP 전략 | 3단계 점진 출시 | C 제안 채택 |
+
+---
+
+---
+
+## 11. 변경 이력
+
+| 버전 | 날짜 | 변경 내용 |
+|------|------|----------|
+| v1 | 2026-04-08 | 초기 설계 확정 (3+1 합의 검증 완료) |
+| v2 | 2026-04-10 | §4 AI 콘텐츠 파이프라인 v2 — 3+1 합의(consensus-003) + 사용자 Q1~Q4 결정 반영. §4.1 다이어그램을 v1 중앙 허브 구조 유지 + 5단계 확장. §4.2 노션 증분 추출 + LLM 문서 정리 + 범위 분석 상세 설계 추가. §7.1 노션 동기화 API 추가. **하이브리드 오케스트레이션**: Stage 간 BullMQ(영속성/재시도/스케줄) + Stage 내부 LangChain Runnable(Langfuse trace 전 구간). |
 
 ---
 
