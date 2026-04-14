@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-10 (OSS 평가 트랙 단계 7 완료 + SDD §4 AI 콘텐츠 파이프라인 v2 설계 반영)
+**최종 업데이트**: 2026-04-14 (OSS 평가 단계 8-run 결과 전원 FAIL → 3+1 합의로 P0 하네스 수정 + ADR-010 확정, R2 재평가 대기)
 
 ---
 
@@ -112,7 +112,7 @@ Phase 4: 통합 테스트 + 배포
 - ✅ 게임 모드 2/5 (BlankTyping, TermMatch) + Strategy Pattern
 - ✅ 솔로 게임 start/answer + 프론트 플레이 화면
 - ✅ 인증 (JWT + bcrypt), 학습 범위 검증 (계산적 키워드 매칭)
-- ✅ **테스트 287개 GREEN** (단계 7 후, 31 파일)
+- ✅ **테스트 291개 GREEN** (하네스 P0 수정 후, 32 파일)
 - ✅ 1주차 sql-basics 시드 (빈칸 15 + 용어 15 + 화이트리스트, 멱등 부트 INSERT)
 - ✅ **2주차 transactions 시드 (빈칸 15 + 용어 15 + 화이트리스트 24개)** ← 본 세션 추가
 - ✅ 솔로 게임 종료 흐름 (`/finish` + `user_progress` 가중평균 갱신 + `answer_history` 자동 INSERT)
@@ -125,7 +125,9 @@ Phase 4: 통합 테스트 + 배포
 - ✅ **결과 schema + report-generator (단계 6)** — `reports/schema.v1.ts` (감사용 고정 Zod schema, EVAL_RESULT_SCHEMA_VERSION=1) + `reports/aggregate.ts` (mulberry32 seeded PRNG + bootstrap CI + macro stratified + Cohen's d + Bonferroni, 외부 stat 라이브러리 의존 없음) + `reports/report-generator.ts` (단일 라운드 + 다중 라운드 비교 markdown) + `reports/promptfoo-adapter.ts` (promptfoo-agnostic RawCallRecord[] → EvalRoundResultV1 + parsePromptfooRawJson). 263 cases / typecheck OK
 - ✅ **eval.controller + runner + admin guard (단계 7)** — `eval-runner.service.ts` (PromptfooExecutor/EvalFileSystem 격리 + roundId R-{ISO} + ENOENT→503 변환 + result.json/report.md 저장) + `eval-admin.guard.ts` (ENV `EVAL_ADMIN_USERNAMES` whitelist fail-closed) + `eval.controller.ts` (POST /api/eval/run, JwtAuthGuard + EvalAdminGuard 체인) + `eval.module.ts` (AiModule과 분리, 기본 promptfoo executor + 기본 fs). AppModule 등록 + .env.example/env.validation에 EVAL_* 추가. 287 cases / typecheck OK (신규 24)
 - ✅ **standalone 평가 스크립트 (단계 8)** — promptfoo CLI 호환 문제로 standalone runner 작성 (`scripts/run-eval-standalone.ts`). LlmClient → Ollama 직접 호출, 기존 assertion 7개 + schema.v1 + report-generator 재사용. `run-all-models.sh` 배치 스크립트로 `nohup` 백그라운드 실행.
-- 🔄 **OSS 5개 모델 평가 실행 중** — M4(Qwen2.5-Coder) 완료, M2/M1/M3/M5 `nohup` 백그라운드 실행 중 (PID 376254, 로그: `eval-run.log`). 결과: `apps/eval-results/R-{timestamp}/`
+- ✅ **OSS 5개 모델 R1 평가 완료** (2026-04-13 KST) — 전원 MT3/MT4 합격선 미달. M5는 runner crash. 결과: `apps/eval-results/R-{timestamp}/`
+- ✅ **전체 FAIL 원인 분석 + P0 하네스 수정 (2026-04-14)** — 3+1 합의(ADR-010). 토크나이저 근본 버그 수정(리터럴 제외), MT4 answer 화이트리스트 검증 제거, scope.ts JOB/DNAME/alias 확장, prompt constraint 추가. `SeedService.syncScopes()` 추가.
+- 🔴 **R2 재평가 대기** — 수정된 하네스로 5개 모델 재측정 필요. 재실행 전 `syncScopes()` 또는 DB 재시드 필수.
 - ✅ **SDD §4 AI 콘텐츠 파이프라인 v2 설계** — 3+1 합의(consensus-003) + 사용자 결정 반영. v1 중앙 허브(키워드 화이트리스트) 구조 유지 + 5단계 확장 (노션 증분 추출 → LLM 문서 정리 → 범위 분석 → 문제 생성 → 검증/저장). **하이브리드 오케스트레이션**: Stage 간 BullMQ(영속성/재시도/스케줄) + Stage 내부 LangChain Runnable(Langfuse trace 전 구간). notion_sync_state/notion_documents 테이블 설계. 입력 sanitization + 원본 보존 안전 장치.
 - 🔴 BullMQ 워커 + AI 문제 생성
 - 🔴 노션 import → 범위 추론 (SDD §4.2 v2 설계 완료, 구현 대기)
@@ -143,18 +145,20 @@ Phase 4: 통합 테스트 + 배포
 | 5 | promptfoo 설정 + assertion 7개 + langfuse-wrapped provider + build-eval-prompt + testCase adapter | ✅ | `3688250` |
 | 6 | 결과 JSON schema(N-05) + aggregate stats + report-generator + promptfoo-adapter | ✅ | `f8e19a9` |
 | 7 | eval.controller + runner + admin guard + module + AppModule | ✅ | (커밋 예정) |
-| 8 | standalone runner 작성 + M4 전체 평가 완료 | ✅ | (커밋 예정) |
-| **8-run** | **OSS 5개 모델 전체 평가 실행** — `nohup` 백그라운드 (PID 376254) | 🔄 실행 중 |
-| 9 | 비교 보고서 생성 + 합격선 판정 | 🔴 |
+| 8 | standalone runner 작성 + M4 전체 평가 완료 | ✅ | `45dfca1` |
+| 8-run | OSS 5개 모델 R1 평가 실행 | ✅ | `d6dee82` |
+| 8.5 | **전원 FAIL → 3+1 합의 + P0 하네스 수정 + ADR-010** | ✅ | `b1a1c84`, `3197f8d` |
+| **9** | **R2 재평가 (수정된 하네스)** + 비교 보고서 + 합격선 판정 | 🔴 다음 세션 |
 | 9.5 | Phase 0 Claude 베이스라인 (Anthropic 크레딧 충전 후) | 🔴 후순위 |
-| 10 | ADR-010 + 운영 모델 교체 | 🔴 |
+| 10 | 운영 모델 교체 (R2 결과 기반) | 🔴 |
 
 ### 다음 세션 우선순위
 
-1. **`eval-run.log` 확인** + `apps/eval-results/` 디렉토리에서 완료된 라운드 확인
-2. **5개 모델 결과 수집** → `generateComparisonReport()` 호출하여 비교 보고서 생성
-3. **합격선(SDD §1.3) 판정** + ADR-010 초안 작성
-4. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인 실행 → 상대 기준치 보정
+1. **`SeedService.syncScopes()` 호출 또는 DB 재시드** — scope.ts 변경분을 weekly_scope에 반영
+2. **R2 재평가 실행** — `run-all-models.sh` 재실행 (M1~M4 ~3h) + M5 별도 (`num_ctx=4096`, digest pin 갱신, ~1.5h)
+3. **합격선 판정** — 여전히 FAIL이면 ADR-010-A 후속 (schema-constrained decoding 파일럿 또는 SDD v3 재설계)
+4. **P2 실험 트랙** — M4 단일로 Ollama `format: <json-schema>` 파일럿
+5. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인
 
 ### 환경/운영 메모
 
