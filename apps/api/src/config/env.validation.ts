@@ -29,6 +29,11 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  // OSS 모델 평가 (단계 7) — 운영자 화이트리스트 + 결과 디렉토리 + config 경로.
+  // EVAL_ADMIN_USERNAMES는 fail-closed (미설정 시 모든 eval 트리거 거부).
+  EVAL_ADMIN_USERNAMES: z.string().optional(),
+  EVAL_RESULTS_DIR: z.string().optional(),
+  EVAL_PROMPTFOO_CONFIG: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
