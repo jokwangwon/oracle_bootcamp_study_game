@@ -92,8 +92,10 @@ docs/
 │   └── consensus-002-oss-model-evaluation.md  # OSS 모델 평가 SDD 합의 (REQUEST_CHANGES)
 │
 └── rationale/                            # 판단 근거 (의사결정 narrative)
-    ├── oss-model-selection-rationale.md  # OSS 모델 자체 호스팅 후보 선정 근거
-    └── exaone-license-extract.md         # EXAONE LICENSE 사본 + 유료 부트캠프 적용 분석
+    ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
+    ├── exaone-license-extract.md                  # EXAONE LICENSE 사본 + 유료 부트캠프 적용 분석
+    ├── oss-eval-failure-analysis-2026-04-14.md    # R1 전원 FAIL 원인 분석 + 3+1 합의 원문
+    └── oss-primary-model-selection-2026-04-15.md  # R2 결과 + M3 primary 확정 3+1 합의 원문
 ```
 
 ---
@@ -154,6 +156,8 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-09 | OSS 모델 평가 SDD **v2** 작성 (HIGH 12 + MED 6 + LOW 5 + 누락 6 + Q1~Q4 결정 모두 반영, promptfoo 채택 + Langfuse self-host + Phase 0 신설) | `architecture/oss-model-evaluation-design.md` (v2) |
 | 2026-04-09 | OSS 평가 단계 0~1 구현 — extractOracleTokens 공용 utils export(TDD 13 케이스) + docker-compose 평가 인프라(Langfuse v3 풀 인프라 6컨테이너 + Ollama) + sanity 4/4 PASS | `feature/oss-model-eval` 브랜치, `SESSION_2026-04-09.md` |
 | 2026-04-09 | SDD v2.1 patch — Langfuse v2 → v3 풀 인프라 전환 (CLICKHOUSE_URL 오류로 사용자 결정 옵션 B) | `architecture/oss-model-evaluation-design.md` §6.1 + §16 |
+| 2026-04-14 | OSS 5개 모델 R1 평가 전원 FAIL 원인 분석 + 하네스 P0 수정 4건 + 3+1 합의로 ADR-010 확정 | `rationale/oss-eval-failure-analysis-2026-04-14.md`, `ADR-010`, `SESSION_2026-04-14.md` |
+| 2026-04-15 | **R2 재평가 완료 + M3 Qwen3-Coder-Next primary 확정** (3+1 합의, 6개 대안 기각, 로드맵 P1~P4 + 운영 게이트 3건) | `rationale/oss-primary-model-selection-2026-04-15.md`, `ADR-011`, `SESSION_2026-04-15.md` |
 
 ---
 
