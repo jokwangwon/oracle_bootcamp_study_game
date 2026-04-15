@@ -18,11 +18,14 @@ nvm use 20 > /dev/null 2>&1
 SCRIPT="apps/api/src/modules/ai/eval/scripts/run-eval-standalone.ts"
 
 # ── 실행할 모델 목록 ──────────────────────────────────────────────
-# M4, M2는 이미 완료. 나머지 M1/M3/M5만 재개(2026-04-13).
+# R2 재평가 (2026-04-14): ADR-010 하네스 수정 후 M1~M4 전원 재측정.
+# M5 Llama 3.3는 R1에서 runner crash — num_ctx 조정 필요하여 별도 트랙으로 분리
+# (CONTEXT.md "다음 세션 우선순위" 참조).
 MODELS=(
   "exaone4:32b|M1 — EXAONE 4.0 32B"
+  "exaone3.5:32b|M2 — EXAONE 3.5 32B"
   "qwen3-coder-next:latest|M3 — Qwen3-Coder-Next 80B MoE"
-  "llama3.3:70b|M5 — Llama 3.3 70B"
+  "qwen2.5-coder:32b|M4 — Qwen2.5-Coder 32B"
 )
 
 echo "════════════════════════════════════════════════════════"
