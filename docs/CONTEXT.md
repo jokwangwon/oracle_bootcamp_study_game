@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-16 (**ADR-011 채택 조건 3건 모두 완료** — digest pin 자동화 + 메타 편향 주의문 SDD v2.8 + operational-monitoring SDD v1.0 + Phase A 구현. 다음 마일스톤: ChatAnthropic→ChatOllama 운영 교체)
+**최종 업데이트**: 2026-04-16 (운영 모델 교체 + Phase B + Notion Stage 1 + 관리자 review + 결과 정답/해설 노출 — **단계 10 + ADR-011 P1 운영 개시 준비 완료**. 360 tests / typecheck clean)
 
 ---
 
@@ -132,7 +132,12 @@ Phase 4: 통합 테스트 + 배포
 - ✅ **SDD §1.4/1.5/1.6 신설 (2026-04-16, v2.8 patch)** — primary 선정 결과 표 + digest pin 대상(manifest `5d55cac5…` / blob `30e51a7c…`) + **메타 편향 주의문 4항** + 운영 100건 모니터링 게이트(조건 3 앵커). ADR-011 채택 조건 4 이행 완료.
 - ✅ **Ollama digest pin 자동화 (2026-04-16, ADR-011 조건 #2)** — `apps/api/src/modules/ai/eval/pins/` (verify + types + JSON 시드) + `pin-model.ts` CLI + `run-eval-standalone.ts` fail-closed gate + `run-all-models.sh` `EXTRA_ARGS` 호환. M3 digest `ca06e9e4087c…` 시드. **TDD 10 cases**.
 - ✅ **operational-monitoring SDD v1.0 (2026-04-16, ADR-011 조건 #3 설계)** — 사용자 Q1/Q2/Q4 권장안 채택. fixed window(`questions.id` 1~100) / 신고 사유 드롭다운 3종 / 1시간 cron / Phase B 알림 결정 보류 / digest는 pin 파이프라인 재사용.
-- ✅ **OpsModule Phase A 구현 (2026-04-16)** — `ops_question_measurements` + `ops_event_log` entity + `OpsMeasurementService.measureSync` (MT3 ScopeValidator 재사용, MT4 pure helper, fail-safe ops_event_log) + `POST /api/questions/:id/report` (JwtAuth + 중복 차단) + `AiQuestionGenerator` `@Optional()` 통합. 36 files / **317 tests passed** (신규 16). modelDigest는 `'pending-migration'` (ChatOllama 교체 시 실 digest로 전환).
+- ✅ **OpsModule Phase A 구현 (2026-04-16)** — `ops_question_measurements` + `ops_event_log` entity + `OpsMeasurementService.measureSync` (MT3 ScopeValidator 재사용, MT4 pure helper, fail-safe ops_event_log) + `POST /api/questions/:id/report` (JwtAuth + 중복 차단) + `AiQuestionGenerator` `@Optional()` 통합. modelDigest는 `'pending-migration'`.
+- ✅ **단계 10 운영 모델 교체 (2026-04-16)** — `ModelDigestProvider` boot 시 fail-closed 검증 (anthropic/ollama 분기) + `LlmClient` anthropic 키 누락 fail-closed + `env.validation` LLM_PROVIDER에 'ollama' 추가 + `OLLAMA_BASE_URL`/`OLLAMA_PORT`/`DIGEST_PIN_SKIP` 정식 등록 + `.env.example` 권장값을 ollama로 전환. AiQuestionGenerator `modelDigest`가 verifyApprovedModel 결과로 자동 채워짐. ADR-011 P1 운영 개시 코드 준비 완료. 사용자 작업: `.env` `LLM_PROVIDER=ollama`로 변경 후 재기동.
+- ✅ **operational-monitoring Phase B (2026-04-16)** — `OpsAggregationService` 1시간 cron + `evaluateGates` pure helper + `gate_breach` 이벤트 + 100건 window 종료 시 `docs/operations/monitoring-window-1.md` 자동 리포트 (멱등). `@nestjs/schedule` + ScheduleModule 등록. 11 cases TDD.
+- ✅ **OpsModule synchronize 실 DB 검증 (2026-04-16)** — `apps/api/src/scripts/verify-ops-schema.ts` 격리 schema 시뮬레이션. 4개 테이블 (ops_* 2 + notion_* 2) 자동 생성 + 부분 unique index `WHERE kind='student_report_incorrect'` 정확 적용 + UUID PK + jsonb default + INSERT/SELECT 모두 정상.
+- ✅ **Notion Stage 1 (2026-04-16, SDD §4.2.1)** — `NotionModule` 신설. entity 2개 (notion_sync_state, notion_documents) + `NotionApi` 추상화 + `RealNotionApi`(@notionhq/client v5 dataSources/blocks) + `notion-markdown.ts` 변환 utils (paragraph/heading/list/code/quote/divider 화이트리스트 + 미지원 블록 보존) + `NotionSyncService` 증분 동기화(last_synced_at + cursor 페이지네이션 + soft-delete + status 'syncing/idle/error') + BullMQ `notion-sync` 큐 + Processor + RepeatableJob (NOTION_SYNC_CRON, 미설정 시 disabled) + `POST /api/notion/sync` (JwtAuthGuard + EvalAdminGuard 재사용). 신규 20 cases. Stage 2(LLM 정리) / Stage 3(자동 범위 추론) 후순위.
+- ✅ **관리자 review API + 결과 페이지 정답/해설 노출 (2026-04-16)** — `EvaluationCore`/`EvaluationResult` 분리 (mode는 채점만, session이 정답/해설 채움) + `game-session.submitAnswer`가 `correctAnswer`/`explanation` 응답에 포함 + `AdminReviewService` (pending_review만 review, reject 시 ops_event_log(admin_reject)) + `PATCH /api/questions/:id/review` 컨트롤러 (관리자 가드). 신규 6 cases. **42 files / 360 tests passed**.
 - ✅ **SDD §4 AI 콘텐츠 파이프라인 v2 설계** — 3+1 합의(consensus-003) + 사용자 결정 반영. v1 중앙 허브(키워드 화이트리스트) 구조 유지 + 5단계 확장 (노션 증분 추출 → LLM 문서 정리 → 범위 분석 → 문제 생성 → 검증/저장). **하이브리드 오케스트레이션**: Stage 간 BullMQ(영속성/재시도/스케줄) + Stage 내부 LangChain Runnable(Langfuse trace 전 구간). notion_sync_state/notion_documents 테이블 설계. 입력 sanitization + 원본 보존 안전 장치.
 - 🔴 BullMQ 워커 + AI 문제 생성
 - 🔴 노션 import → 범위 추론 (SDD §4.2 v2 설계 완료, 구현 대기)
@@ -160,11 +165,15 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-1. **운영 모델 교체 (단계 10, ADR-011 P1)** — `LlmClient` 기본 provider를 `ChatAnthropic` → `ChatOllama(qwen3-coder-next:latest)`로. 동시에 AiQuestionGenerator의 `modelDigest='pending-migration'`을 `verifyApprovedModel().currentDigest`로 전환. BullMQ 워커 boot 시 pin 검증 hook 연결.
-2. **operational-monitoring Phase B** — 운영 개시 후 100건 축적 시점에 1시간 cron + `gate_breach` 이벤트 생성 + Phase A 데이터로 첫 window 리포트 작성 (`docs/operations/monitoring-window-1.md`).
-3. **BullMQ 워커 + 노션 import (MVP 1단계 잔여)** — feature/oss-model-eval 브랜치 main merge 후 feature/mvp-phase1으로 복귀.
-4. **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿
-5. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인
+1. **사용자 작업: `.env` 운영 교체 + 재기동** — `LLM_PROVIDER=ollama` / `LLM_MODEL=qwen3-coder-next:latest`로 변경 후 docker compose 재기동. 부팅 시 ModelDigestProvider가 pin 검증 (fail-closed). 첫 부팅 후 ops_* / notion_* 테이블 자동 생성 확인.
+2. **`NOTION_DATABASE_ID` 사용자 입력 + 노션 sync 실증** — Notion DB URL의 32자 hex(하이픈 제거)를 `.env`에 입력 + `POST /api/notion/sync` 수동 호출로 Stage 1 e2e 검증.
+3. **Notion Stage 2 (LLM 정리)** — input sanitization → ChatOllama → StructuredOutputParser → `notion_documents.structured_content`. raw_markdown 불변 보존.
+4. **Notion Stage 3 (자동 범위 추론)** — extractOracleTokens + LLM 보조 → 주차/주제 매핑 → weekly_scope upsert.
+5. **operational-monitoring Phase C** — 대시보드 UI + Slack/email 알림 채널 (Phase B 2주 안정 후).
+6. **프론트 결과 페이지 UI** — submitAnswer 응답의 correctAnswer/explanation을 표시 (오답 시 정답 + 해설, 정답 시 해설만).
+7. **2주차+ 시드 확장** — IMPLEMENTATION_STATUS §4.3 line 163~164 미작성 주차 채우기.
+8. **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿
+9. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인
 
 ### 환경/운영 메모
 
