@@ -5,6 +5,12 @@ import { ContentModule } from '../content/content.module';
 import { QuestionEntity } from '../content/entities/question.entity';
 import { OpsEventLogEntity } from './entities/ops-event-log.entity';
 import { OpsQuestionMeasurementEntity } from './entities/ops-question-measurement.entity';
+import { ConfigService } from '@nestjs/config';
+
+import { EvalAdminGuard } from '../ai/eval/eval-admin.guard';
+import { AdminReviewController } from './admin-review.controller';
+import { AdminReviewService } from './admin-review.service';
+import { OpsAggregationService } from './ops-aggregation.service';
 import { OpsMeasurementService } from './ops-measurement.service';
 import { QuestionReportController } from './question-report.controller';
 import { QuestionReportService } from './question-report.service';
@@ -29,8 +35,19 @@ import { QuestionReportService } from './question-report.service';
     ]),
     ContentModule,
   ],
-  controllers: [QuestionReportController],
-  providers: [OpsMeasurementService, QuestionReportService],
-  exports: [OpsMeasurementService],
+  controllers: [QuestionReportController, AdminReviewController],
+  providers: [
+    OpsMeasurementService,
+    QuestionReportService,
+    OpsAggregationService,
+    AdminReviewService,
+    EvalAdminGuard,
+    {
+      provide: 'EVAL_ADMIN_USERNAMES',
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => config.get<string>('EVAL_ADMIN_USERNAMES'),
+    },
+  ],
+  exports: [OpsMeasurementService, OpsAggregationService],
 })
 export class OpsModule {}
