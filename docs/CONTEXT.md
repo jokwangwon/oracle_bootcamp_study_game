@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-15 (R2 재평가 완료 — M3 Qwen3-Coder-Next 80B MoE 유일 전 게이트 PASS → 3+1 합의로 primary OSS 확정 + ADR-011 작성)
+**최종 업데이트**: 2026-04-16 (**ADR-011 채택 조건 3건 모두 완료** — digest pin 자동화 + 메타 편향 주의문 SDD v2.8 + operational-monitoring SDD v1.0 + Phase A 구현. 다음 마일스톤: ChatAnthropic→ChatOllama 운영 교체)
 
 ---
 
@@ -129,6 +129,10 @@ Phase 4: 통합 테스트 + 배포
 - ✅ **전체 FAIL 원인 분석 + P0 하네스 수정 (2026-04-14)** — 3+1 합의(ADR-010). 토크나이저 근본 버그 수정(리터럴 제외), MT4 answer 화이트리스트 검증 제거, scope.ts JOB/DNAME/alias 확장, prompt constraint 추가. `SeedService.syncScopes()` 추가.
 - ✅ **R2 재평가 완료 (2026-04-14~15)** — M1~M4 전원 크래시 없이 완료. **M3 Qwen3-Coder-Next 80B MoE만 전 게이트 PASS** (C3 98.3% / C4 96.7% / p95 44.9s / MT5 98.3%). M1/M2 EXAONE은 C4+C7 이중 FAIL, M4는 C7 지연만 FAIL. artifact: `R-2026-04-14T10-08-59Z` ~ `R-2026-04-14T12-10-27Z`.
 - ✅ **ADR-011 — M3 primary OSS 확정 (2026-04-15)** — 3+1 합의 프로토콜 가동. 기각 대안 6건 기록. 운영 배포 전 게이트 3건(digest pin / 모니터링 / 메타 편향 주의문) 대기. 로드맵 P1~P4 예약(P2: 3개월 후 M4 이중 라우팅 재검토). EXAONE commercial license 문의 불필요로 전환 (Apache 2.0).
+- ✅ **SDD §1.4/1.5/1.6 신설 (2026-04-16, v2.8 patch)** — primary 선정 결과 표 + digest pin 대상(manifest `5d55cac5…` / blob `30e51a7c…`) + **메타 편향 주의문 4항** + 운영 100건 모니터링 게이트(조건 3 앵커). ADR-011 채택 조건 4 이행 완료.
+- ✅ **Ollama digest pin 자동화 (2026-04-16, ADR-011 조건 #2)** — `apps/api/src/modules/ai/eval/pins/` (verify + types + JSON 시드) + `pin-model.ts` CLI + `run-eval-standalone.ts` fail-closed gate + `run-all-models.sh` `EXTRA_ARGS` 호환. M3 digest `ca06e9e4087c…` 시드. **TDD 10 cases**.
+- ✅ **operational-monitoring SDD v1.0 (2026-04-16, ADR-011 조건 #3 설계)** — 사용자 Q1/Q2/Q4 권장안 채택. fixed window(`questions.id` 1~100) / 신고 사유 드롭다운 3종 / 1시간 cron / Phase B 알림 결정 보류 / digest는 pin 파이프라인 재사용.
+- ✅ **OpsModule Phase A 구현 (2026-04-16)** — `ops_question_measurements` + `ops_event_log` entity + `OpsMeasurementService.measureSync` (MT3 ScopeValidator 재사용, MT4 pure helper, fail-safe ops_event_log) + `POST /api/questions/:id/report` (JwtAuth + 중복 차단) + `AiQuestionGenerator` `@Optional()` 통합. 36 files / **317 tests passed** (신규 16). modelDigest는 `'pending-migration'` (ChatOllama 교체 시 실 digest로 전환).
 - ✅ **SDD §4 AI 콘텐츠 파이프라인 v2 설계** — 3+1 합의(consensus-003) + 사용자 결정 반영. v1 중앙 허브(키워드 화이트리스트) 구조 유지 + 5단계 확장 (노션 증분 추출 → LLM 문서 정리 → 범위 분석 → 문제 생성 → 검증/저장). **하이브리드 오케스트레이션**: Stage 간 BullMQ(영속성/재시도/스케줄) + Stage 내부 LangChain Runnable(Langfuse trace 전 구간). notion_sync_state/notion_documents 테이블 설계. 입력 sanitization + 원본 보존 안전 장치.
 - 🔴 BullMQ 워커 + AI 문제 생성
 - 🔴 노션 import → 범위 추론 (SDD §4.2 v2 설계 완료, 구현 대기)
@@ -156,12 +160,11 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-1. **ADR-011 채택 조건 3건 이행** — (a) Ollama `qwen3-coder-next` sha256 digest pin 자동화, (b) 운영 초기 100건 실사용 모니터링 파이프라인, (c) 메타 편향 주의문 SDD/운영 문서 명시
-2. **SDD `oss-model-evaluation-design.md`에 §1.3 primary 선정 결과 절 추가** — ADR-011 반영
-3. **운영 모델 교체** — 기존 `ChatAnthropic` 의존 코드를 `ChatOllama`(M3)로 교체 (채택 조건 완료 후)
-4. **미커밋 변경사항 커밋** — `sync-scopes.ts` + `run-all-models.sh` + `tsconfig.json` + 신규 rationale/ADR 2건 + 세션 로그
-5. **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿
-6. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인
+1. **운영 모델 교체 (단계 10, ADR-011 P1)** — `LlmClient` 기본 provider를 `ChatAnthropic` → `ChatOllama(qwen3-coder-next:latest)`로. 동시에 AiQuestionGenerator의 `modelDigest='pending-migration'`을 `verifyApprovedModel().currentDigest`로 전환. BullMQ 워커 boot 시 pin 검증 hook 연결.
+2. **operational-monitoring Phase B** — 운영 개시 후 100건 축적 시점에 1시간 cron + `gate_breach` 이벤트 생성 + Phase A 데이터로 첫 window 리포트 작성 (`docs/operations/monitoring-window-1.md`).
+3. **BullMQ 워커 + 노션 import (MVP 1단계 잔여)** — feature/oss-model-eval 브랜치 main merge 후 feature/mvp-phase1으로 복귀.
+4. **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿
+5. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인
 
 ### 환경/운영 메모
 
