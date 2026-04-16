@@ -239,6 +239,16 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse:3000}
+      # Notion Stage 1 (SDD §4.2.1)
+      NOTION_API_TOKEN: ${NOTION_API_TOKEN}
+      NOTION_DATABASE_ID: ${NOTION_DATABASE_ID}
+      NOTION_SYNC_CRON: ${NOTION_SYNC_CRON}
+      # Digest pin gate (ADR-011 #2)
+      DIGEST_PIN_SKIP: ${DIGEST_PIN_SKIP}
+      # Eval admin whitelist (단계 7)
+      EVAL_ADMIN_USERNAMES: ${EVAL_ADMIN_USERNAMES}
+      # Seed on boot (개발/CI 전용)
+      SEED_ON_BOOT: ${SEED_ON_BOOT:-false}
       PORT: 3001
     ports:
       - "${API_PORT:-3001}:3001"

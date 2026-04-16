@@ -39,7 +39,11 @@ const envSchema = z.object({
   EVAL_RESULTS_DIR: z.string().optional(),
   EVAL_PROMPTFOO_CONFIG: z.string().optional(),
   // ADR-011 #2 운영 부팅 시 digest 검증 우회 (R&D/dev 한정).
-  DIGEST_PIN_SKIP: z.enum(['true', 'false']).optional(),
+  // docker compose가 미설정 env를 빈 문자열로 전달해도 optional로 해석.
+  DIGEST_PIN_SKIP: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.enum(['true', 'false']).optional(),
+  ),
   // SDD §4.2 v2 Stage 1 — 노션 증분 동기화. 토큰/DB ID 미설정 시 NotionSyncService는
   // 부팅하지만 sync는 disabled. RepeatableJob은 두 값이 모두 있어야 등록.
   NOTION_API_TOKEN: z.string().optional(),
