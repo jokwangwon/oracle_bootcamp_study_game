@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-16 (운영 모델 교체 + Phase B + Notion Stage 1 + 관리자 review + 결과 정답/해설 노출 — **단계 10 + ADR-011 P1 운영 개시 준비 완료**. 360 tests / typecheck clean)
+**최종 업데이트**: 2026-04-16 (**문제 형태 재설계 v2.9 합의 완료 — consensus-004 + ADR-012~017 6건 + SDD v2.9 + operational-monitoring v1.1**. 운영 모델 교체 + Phase B + Notion Stage 1 + 관리자 review + 결과 정답/해설 노출 — **단계 10 + ADR-011 P1 운영 개시 준비 완료**. 360 tests / typecheck clean. **MVP-A 착수 대기**)
 
 ---
 
@@ -139,6 +139,19 @@ Phase 4: 통합 테스트 + 배포
 - ✅ **Notion Stage 1 (2026-04-16, SDD §4.2.1)** — `NotionModule` 신설. entity 2개 (notion_sync_state, notion_documents) + `NotionApi` 추상화 + `RealNotionApi`(@notionhq/client v5 dataSources/blocks) + `notion-markdown.ts` 변환 utils (paragraph/heading/list/code/quote/divider 화이트리스트 + 미지원 블록 보존) + `NotionSyncService` 증분 동기화(last_synced_at + cursor 페이지네이션 + soft-delete + status 'syncing/idle/error') + BullMQ `notion-sync` 큐 + Processor + RepeatableJob (NOTION_SYNC_CRON, 미설정 시 disabled) + `POST /api/notion/sync` (JwtAuthGuard + EvalAdminGuard 재사용). 신규 20 cases. Stage 2(LLM 정리) / Stage 3(자동 범위 추론) 후순위.
 - ✅ **관리자 review API + 결과 페이지 정답/해설 노출 (2026-04-16)** — `EvaluationCore`/`EvaluationResult` 분리 (mode는 채점만, session이 정답/해설 채움) + `game-session.submitAnswer`가 `correctAnswer`/`explanation` 응답에 포함 + `AdminReviewService` (pending_review만 review, reject 시 ops_event_log(admin_reject)) + `PATCH /api/questions/:id/review` 컨트롤러 (관리자 가드). 신규 6 cases. **42 files / 360 tests passed**.
 - ✅ **SDD §4 AI 콘텐츠 파이프라인 v2 설계** — 3+1 합의(consensus-003) + 사용자 결정 반영. v1 중앙 허브(키워드 화이트리스트) 구조 유지 + 5단계 확장 (노션 증분 추출 → LLM 문서 정리 → 범위 분석 → 문제 생성 → 검증/저장). **하이브리드 오케스트레이션**: Stage 간 BullMQ(영속성/재시도/스케줄) + Stage 내부 LangChain Runnable(Langfuse trace 전 구간). notion_sync_state/notion_documents 테이블 설계. 입력 sanitization + 원본 보존 안전 장치.
+- ✅ **문제 형태 재설계 v2.9 합의 완료 (2026-04-16, consensus-004)** — 3+1 합의 + 사용자 4개 결정 반영:
+  - 결정1: `answerFormat` 직교 축 추가 (5모드 유지, 트랙 분리 없음) — 사용자 결정
+  - 결정2: 주차별 독립 미니 캡스톤 + 최종 캡스톤 2트랙 (SQL / PL-SQL) — 사용자 결정
+  - 결정3: 실시간 대전 유지 + 실시간 AI 생성 금지 + 사전 생성 풀 랜덤 매칭 — 사용자 결정
+  - 결정4: ADR → SDD → MVP-A 순서 승인 — 사용자 결정
+  - **ADR-012~017 6건 작성 완료**: answerFormat 축 / 역피라미드 3단 채점(AST→키워드→LLM-judge) / 캡스톤 구조 / 실시간 사전 풀 / LLM-judge 안전(인젝션+PII+WORM) / MT6-7-8 지표
+  - **SDD v2.9 개정 완료**: §1.3 문제형태 추가 + §1.5/§1.6 신설(primary 모델 + 메타편향 6항) + §2.2 3개 모듈 신설 + §3.1 EvaluationResult 확장 + §3.2 Mode 6 신설 + §3.3 매핑 확장 + §4.3 신규 프롬프트 5종 + **§4.4.2 3단 채점 신설** + §5.1 ERD 확장 + §6.2 실시간 재정의 + §7.1 API 확장 + §9 MVP-A~D 재구성 + §11 v2.9 이력
+  - **operational-monitoring v1.1 개정 완료**: MT6(free-form-canonical-match) / MT7(capstone-step-consistency) / MT8(llm-judge-invocation-ratio) 신설 + ops 컬럼 확장 + 6종 event kind 추가 + ADR-019 승격 트리거
+- 🔴 **MVP-A 착수 대기** (2주) — 객관식 모드(Mode 6) + `answer_format` 컬럼 + 실시간 사전 풀 매칭(MC 전용) + MT6 스켈레톤. ADR-012/015/017
+- 🔴 MVP-B (4주) — free-form 4형태 + 역피라미드 3단 채점 + LLM-judge 안전 + answer_history WORM + dry-run + SM-2. ADR-012/013/016/017/018
+- 🔴 MVP-C (3주) — 주차별 미니 캡스톤 + 3-entity + 주제 팩 4종 + MT7. ADR-014
+- 🔴 MVP-C' (2주) — 최종 캡스톤 2트랙(SQL/PL-SQL). ADR-014
+- 🔴 MVP-D (2주) — 주간 릴리스 cron + grading_appeals UI + mc-distractor assertion. ADR-015/016/017
 - 🔴 BullMQ 워커 + AI 문제 생성
 - 🔴 노션 import → 범위 추론 (SDD §4.2 v2 설계 완료, 구현 대기)
 
@@ -163,17 +176,34 @@ Phase 4: 통합 테스트 + 배포
 | 9.6 | Phase 0 Claude 베이스라인 (Anthropic 크레딧 충전 후) | 🔴 후순위 |
 | **10** | **운영 모델 교체 — `ChatAnthropic` → `ChatOllama` (M3)** | 🔴 다음 세션 (ADR-011 채택 조건 3건 선행) |
 
-### 다음 세션 우선순위
+### 다음 세션 우선순위 (v2.9 재편)
 
-1. **사용자 작업: `.env` 운영 교체 + 재기동** — `LLM_PROVIDER=ollama` / `LLM_MODEL=qwen3-coder-next:latest`로 변경 후 docker compose 재기동. 부팅 시 ModelDigestProvider가 pin 검증 (fail-closed). 첫 부팅 후 ops_* / notion_* 테이블 자동 생성 확인.
-2. **`NOTION_DATABASE_ID` 사용자 입력 + 노션 sync 실증** — Notion DB URL의 32자 hex(하이픈 제거)를 `.env`에 입력 + `POST /api/notion/sync` 수동 호출로 Stage 1 e2e 검증.
-3. **Notion Stage 2 (LLM 정리)** — input sanitization → ChatOllama → StructuredOutputParser → `notion_documents.structured_content`. raw_markdown 불변 보존.
-4. **Notion Stage 3 (자동 범위 추론)** — extractOracleTokens + LLM 보조 → 주차/주제 매핑 → weekly_scope upsert.
-5. **operational-monitoring Phase C** — 대시보드 UI + Slack/email 알림 채널 (Phase B 2주 안정 후).
-6. **프론트 결과 페이지 UI** — submitAnswer 응답의 correctAnswer/explanation을 표시 (오답 시 정답 + 해설, 정답 시 해설만).
-7. **2주차+ 시드 확장** — IMPLEMENTATION_STATUS §4.3 line 163~164 미작성 주차 채우기.
-8. **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿
-9. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인
+**최우선 — MVP-A 착수 (ADR-012/015/017)**
+1. **[MVP-A] 객관식 모드(Mode 6) + `answer_format` 컬럼** — `packages/shared/src/types/question.ts` `MultipleChoiceContent` 추가 + `MultipleChoiceMode` Strategy 구현 + `questions.answer_format` 마이그레이션 + TDD. ADR-012.
+2. **[MVP-A] 실시간 사전 풀 매칭 스켈레톤** — `MatchModule` 신설 + `status='approved'` 강제 + 주차 동기화 매칭 + Socket.IO 라운드 E2E. ADR-015.
+3. **[MVP-A] MT6 스켈레톤** — `ops_question_measurements` 컬럼 확장(`mode`/`answer_format`/`grading_method`/`grader_digest`) + `OpsAggregationService` MT6/MT7/MT8 집계 추가. ADR-017.
+4. **[MVP-A] MC 전용 promptfoo assertion** — `mc-option-consistency` 추가 + 객관식 gold set 30건.
+
+**병렬 운영 (기존 유지)**
+5. **사용자 작업: `.env` 운영 교체 + 재기동** — `LLM_PROVIDER=ollama` / `LLM_MODEL=qwen3-coder-next:latest`로 변경 후 docker compose 재기동. 부팅 시 ModelDigestProvider pin 검증 (fail-closed).
+6. **`NOTION_DATABASE_ID` 사용자 입력 + 노션 sync 실증** — Notion DB URL의 32자 hex(하이픈 제거)를 `.env`에 입력 + `POST /api/notion/sync` 수동 호출로 Stage 1 e2e 검증.
+7. **프론트 결과 페이지 UI** — submitAnswer 응답의 correctAnswer/explanation을 표시 (MVP-A 확장 전 처리 권장).
+
+**MVP-A 이후 순차**
+8. **[MVP-B] 작성형 4형태 + 역피라미드 3단 채점** — `GradingModule` 신설 + Layer 1 AST(`node-sql-parser` + Oracle 방언) + Layer 2 키워드 + Layer 3 LLM-judge(ADR-016 안전 프로토콜) + dry-run 시뮬레이터 + SM-2. ADR-012/013/016/017/018.
+9. **[MVP-B] `answer_history` WORM + `grading_appeals`** — UPDATE 권한 회수 + appeal 엔드포인트. ADR-016.
+10. **[MVP-C] 주차별 미니 캡스톤** — `CapstoneModule` 신설 + 3-entity 마이그레이션 + 주제 팩 4종 + `userId×주차` 시드. ADR-014.
+11. **[MVP-C'] 최종 캡스톤 2트랙 (SQL/PL-SQL)** — 각 트랙 10~15 step + 관리자 승인. ADR-014.
+12. **[MVP-D] 주간 릴리스 cron + mc-distractor-plausibility assertion**. ADR-015/017.
+
+**후순위 (MVP 스프린트 병렬/이후)**
+13. **Notion Stage 2 (LLM 정리)** — input sanitization → ChatOllama → StructuredOutputParser → `notion_documents.structured_content`. raw_markdown 불변 보존.
+14. **Notion Stage 3 (자동 범위 추론)** — extractOracleTokens + LLM 보조 → 주차/주제 매핑 → weekly_scope upsert.
+15. **operational-monitoring Phase C** — 대시보드 UI + Slack/email 알림 채널 (Phase B 2주 안정 후).
+16. **2주차+ 시드 확장** — IMPLEMENTATION_STATUS §4.3 line 163~164 미작성 주차 채우기.
+17. **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿.
+18. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인.
+19. **(조건부)** ADR-019 채점 모델 분리 — MT8 breach 3회/월 또는 `grading_appeals` ≥ 10건/주 시 트리거.
 
 ### 환경/운영 메모
 

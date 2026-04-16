@@ -4,12 +4,12 @@
 
 | 항목 | 값 |
 |---|---|
-| **문서 유형** | SDD (Specification-Driven Design) — 초안 |
-| **버전** | v1.0 (2026-04-16) |
-| **상태** | **승인 — Phase A TDD 착수** (사용자 Q1/Q2/Q4 모두 권장안 채택, 2026-04-16) |
-| **선행 문서** | `docs/decisions/ADR-011-oss-primary-model-m3.md`, `docs/architecture/oss-model-evaluation-design.md` §1.6, `docs/rationale/oss-primary-model-selection-2026-04-15.md` |
-| **관련 ADR** | ADR-009 (LangChain + Langfuse), ADR-011 (M3 primary) |
-| **후속 산출물** | operational-monitoring-phaseA 구현 PR, dashboard UI, 알림 채널 결정 ADR |
+| **문서 유형** | SDD (Specification-Driven Design) |
+| **버전** | **v1.1 (2026-04-16 — MT6/MT7/MT8 확장)** |
+| **상태** | **승인 — Phase A/B 구현 완료. v1.1은 MVP-A/B/C 병행 확장 범위** |
+| **선행 문서** | `docs/decisions/ADR-011-oss-primary-model-m3.md`, `docs/architecture/oss-model-evaluation-design.md` §1.6, `docs/rationale/oss-primary-model-selection-2026-04-15.md`, `docs/review/consensus-004-problem-format-redesign.md` |
+| **관련 ADR** | ADR-009 (LangChain + Langfuse), ADR-011 (M3 primary), **ADR-013 (3단 채점), ADR-014 (캡스톤), ADR-016 (LLM-judge 안전), ADR-017 (MT6/MT7/MT8 신설)** |
+| **후속 산출물** | MVP-A~C 확장 구현, dashboard UI, 알림 채널 결정 ADR, ADR-019 트리거 조건 |
 
 ---
 
@@ -41,15 +41,18 @@
 
 ## 2. 관측 대상과 기준 (SDD `oss-model-evaluation-design.md` §1.6 재진술)
 
-| 지표 | 기준 | Breach 조치 |
-|---|---|---|
-| MT3 재측정 pass | ≥ 95% | scope 확장 또는 prompt 재점검 |
-| MT4 재측정 pass | ≥ 93% | prompt constraint 재점검 |
-| 수강생 "정답 오류" 신고율 | ≤ 5% | 관리자 리뷰 큐 확대 + Phase 3 트리거 |
-| `p95` 지연 (AI 워커 실측) | ≤ 60s | BullMQ concurrency / num_ctx 검토 |
-| 이상 케이스 샘플링 | 10% 무작위 + 관리자 플래그 전수 | Langfuse trace + `ops_event_log` 저장 |
+| 지표 | 기준 | Breach 조치 | 범위 |
+|---|---|---|---|
+| MT3 재측정 pass | ≥ 95% | scope 확장 또는 prompt 재점검 | 전체 모드 |
+| MT4 재측정 pass | ≥ 93% | prompt constraint 재점검 | `answer_format='single-token'` (빈칸) 전용 |
+| **MT6 — free-form-canonical-match rate** (v1.1 신설) | ≥ 80% | Layer 1 AST 커버리지 개선 or Layer 2 튜닝 | `answer_format='free-form'` 전용 |
+| **MT7 — capstone-step-consistency** (v1.1 신설) | 0 (하루 합산, 무결성 지표) | capstone_templates seed CI 강화 | 캡스톤 세션 전체 |
+| **MT8 — llm-judge-invocation-ratio** (v1.1 신설) | ≤ 10% | Layer 1/2 커버리지 개선 → ADR-019 승격 검토 | 전체 채점 |
+| 수강생 "정답 오류" 신고율 | ≤ 5% | 관리자 리뷰 큐 확대 + Phase 3 트리거 | 전체 |
+| `p95` 지연 (AI 워커 실측) | ≤ 60s | BullMQ concurrency / num_ctx 검토 | 전체 |
+| 이상 케이스 샘플링 | 10% 무작위 + 관리자 플래그 전수 | Langfuse trace + `ops_event_log` 저장 | 전체 |
 
-> §1.6 표와 동일 — 본 문서는 **판정/저장/알림**의 실제 구현을 정의한다.
+> MT3/MT4는 SDD `oss-model-evaluation-design.md` §1.6 기준. MT6/MT7/MT8은 ADR-017에서 신설 — 각각 ADR-013/014/013의 운영 게이트 역할.
 
 ---
 
@@ -66,19 +69,40 @@ CREATE TABLE ops_question_measurements (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   question_id      UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
   measured_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  -- v1.1: 차원 분리 (ADR-017)
+  mode             VARCHAR(32) NOT NULL,  -- 'blank-typing' | 'term-match' | 'result-predict' | 'category-sort' | 'scenario-sim' | 'multiple-choice'
+  answer_format    VARCHAR(32) NOT NULL,  -- 'single-token' | 'free-form' | 'multiple-choice' | 'reorder' | 'drag-compose' | 'output-select'
+  grading_method   VARCHAR(32),           -- 'ast' | 'keyword' | 'llm-v1' | 'held' | 'admin-override' (v1.1, ADR-013)
+
+  -- 기존 지표
   mt3_pass         BOOLEAN NOT NULL,
   mt3_out_of_scope JSONB NOT NULL DEFAULT '[]'::jsonb,  -- string[]
   mt4_pass         BOOLEAN,       -- blank 모드 외에는 NULL
   mt4_failures     JSONB,         -- blank/answer 불일치 상세 (nullable)
+
+  -- v1.1 신규 지표 (ADR-017)
+  mt6_canonical_match  BOOLEAN,   -- Layer 1 AST 해결 여부. free-form 외에는 NULL.
+  mt7_step_dag_violation BOOLEAN DEFAULT FALSE,  -- 캡스톤 step DAG 위반 여부 (측정 시점)
+  mt8_layer3_invoked   BOOLEAN NOT NULL DEFAULT FALSE,  -- LLM-judge 호출 여부
+
   latency_ms       INTEGER NOT NULL,
   model_digest     TEXT NOT NULL, -- verifyApprovedModel currentDigest
+  grader_digest    TEXT,          -- v1.1: 채점 harness 버전 or LLM digest (ADR-013/016)
   window_index     INTEGER,       -- 1..100 (첫 100건), 이후 NULL
   UNIQUE (question_id)
 );
 CREATE INDEX idx_ops_measurements_window
   ON ops_question_measurements(window_index)
   WHERE window_index IS NOT NULL;
+CREATE INDEX idx_ops_measurements_format
+  ON ops_question_measurements(answer_format, measured_at DESC);
+CREATE INDEX idx_ops_measurements_layer3
+  ON ops_question_measurements(mt8_layer3_invoked, measured_at DESC)
+  WHERE mt8_layer3_invoked = TRUE;
 ```
+
+> **MT6/MT7/MT8 nullable 규칙**: MT6은 `answer_format='free-form'`에만 값, 그 외 NULL. MT7은 캡스톤 step 측정 시에만 의미, 그 외 FALSE. MT8은 항상 값 (채점은 전 모드).
 
 `window_index`는 **측정 시점에 "이미 측정된 `source='ai-realtime'` row 수 + 1"** 로 계산 (§4.1). UUID PK 순서를 가정하지 않는다.
 
@@ -103,7 +127,11 @@ CREATE UNIQUE INDEX uq_ops_event_student_report
   WHERE kind = 'student_report_incorrect';
 ```
 
-`kind` 허용값: `'student_report_incorrect' | 'admin_reject' | 'gate_breach' | 'measurement_fail'` — entity enum으로 강제.
+`kind` 허용값 (v1.1 확장 — ADR-017):
+- 기존: `'student_report_incorrect' | 'admin_reject' | 'gate_breach' | 'measurement_fail'`
+- v1.1 신규: `'mt6_breach' | 'mt7_breach' | 'mt8_breach' | 'capstone_similarity_alert' | 'grading_appeal' | 'admin_override'`
+
+각 kind는 entity enum으로 강제. `payload` 스키마는 kind별 `Zod` schema로 검증 (`apps/api/src/modules/ops/event-payloads.ts`).
 
 ### 3.3 기존 테이블 변경 — 없음
 
@@ -144,17 +172,34 @@ AiQuestionGenerator.generate(input)
 
 **주기**: 1시간 (cron) — 초기 100건 단계에서는 DB 스캔 비용이 무시 가능.
 
-**로직**:
-```
+**로직 (v1.1 확장 — ADR-017)**:
+```sql
 select
-  count(*) filter (where mt3_pass) / count(*) as mt3_rate,
-  count(*) filter (where mt4_pass) / count(*) filter (where mt4_pass is not null) as mt4_rate,
+  count(*) filter (where mt3_pass)::float / count(*) as mt3_rate,
+  count(*) filter (where mt4_pass)::float / count(*) filter (where mt4_pass is not null) as mt4_rate,
+  -- v1.1 MT6: Layer 1 해결률 (free-form 전용)
+  count(*) filter (where mt6_canonical_match) ::float /
+    nullif(count(*) filter (where answer_format='free-form'), 0) as mt6_rate,
+  -- v1.1 MT7: DAG 위반 건수 (하루 누적)
+  count(*) filter (where mt7_step_dag_violation) as mt7_violations,
+  -- v1.1 MT8: LLM-judge 호출 비율
+  count(*) filter (where mt8_layer3_invoked)::float / count(*) as mt8_ratio,
   percentile_cont(0.95) within group (order by latency_ms) as p95_latency
 from ops_question_measurements
 where window_index is not null and window_index between 1 and 100;
 ```
-- MT3 rate < 0.95 또는 MT4 rate < 0.93 또는 p95 > 60000 → `ops_event_log(kind='gate_breach')` INSERT
-- 수강생 신고율 = `ops_event_log where kind='student_report_incorrect' and created_at >= last 7 days` / 해당 기간 생성 문제 수. > 5% 시 동일 gate_breach 이벤트.
+
+**Breach 규칙 (v1.1 확장)**:
+- 기존: MT3 < 0.95 / MT4 < 0.93 / p95 > 60000 → `gate_breach`
+- **MT6 < 0.60 2시간 지속** → `mt6_breach` (ADR-013 Layer 1 커버리지 개선 트리거)
+- **MT7 ≥ 1건 (24시간 내)** → `mt7_breach` **즉시 알람** (캡스톤 DAG 무결성, 사용자 블로킹 리스크)
+- **MT8 > 0.15 4시간 지속** → `mt8_breach` (LLM-judge 과호출 → ADR-019 승격 검토)
+- **`capstone_similarity_alert`**: `answer_history` edit distance < 10% 감지 시 즉시 (ADR-014 답안 공유 탐지)
+- 수강생 신고율 > 5% / 7일 → `gate_breach` (기존 유지)
+
+**ADR-019 승격 트리거**:
+- MT8 breach 3회 / 월 **또는** `grading_appeals` ≥ 10건 / 주
+- 트리거 시 별도 이벤트 `kind='adr019_trigger_review'` 생성 + 분기 대조 샘플링 자동 enqueue
 
 ### 4.4 100건 window 종료
 
@@ -212,6 +257,7 @@ where window_index is not null and window_index between 1 and 100;
 |---|---|---|---|
 | 2026-04-16 | **v0.1 (초안)** | 초안 작성 — ADR-011 채택 조건 #3 이행 + SDD `oss-model-evaluation-design.md` §1.6을 구현 단위로 확장 | 사용자 지시 + ADR-011 |
 | 2026-04-16 | **v1.0** | 사용자 Q1/Q2/Q4 권장안 채택 → §6을 결정 사항 표로 교체. Phase A TDD 착수. | 사용자 직접 승인 |
+| 2026-04-16 | **v1.1** | **MT6/MT7/MT8 신설 (ADR-017) + `ops_question_measurements` 차원 컬럼(mode/answer_format/grading_method) + `ops_event_log` kind 6종 확장 + ADR-019 승격 트리거 명시.** 문제 형태 재설계(consensus-004) 동반 확장. | ADR-012/013/014/016/017 |
 
 ---
 

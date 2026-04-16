@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-06
+**최종 업데이트**: 2026-04-16 (문제 형태 재설계 v2.9 — consensus-004 + ADR-012~017)
 
 ---
 
@@ -82,14 +82,22 @@ docs/
 │   ├── ADR-007-change-impact-analysis.md         # 변경 영향 분석
 │   ├── ADR-008-oracle-dba-game-tech-stack.md    # Oracle DBA 게임 기술 스택
 │   ├── ADR-009-langchain-langfuse-stack.md      # LangChain + Langfuse 강제
-│   └── ...
+│   ├── ADR-010-oss-eval-harness-fix.md          # OSS 평가 하네스 P0 수정
+│   ├── ADR-011-oss-primary-model-m3.md          # M3 Qwen3-Coder-Next primary 확정
+│   ├── ADR-012-answer-format-axis.md            # answerFormat 축 직교 확장 (v2.9)
+│   ├── ADR-013-grading-pyramid.md               # 역피라미드 3단 채점 (v2.9)
+│   ├── ADR-014-capstone-structure.md            # 주차별 미니 + 최종 2트랙 캡스톤 (v2.9)
+│   ├── ADR-015-realtime-prebuilt-pool.md        # 실시간 사전 풀 매칭 (v2.9)
+│   ├── ADR-016-llm-judge-safety.md              # LLM-judge 안전 프로토콜 (v2.9)
+│   └── ADR-017-mt6-mt7-mt8-metrics.md           # 운영 지표 MT6/MT7/MT8 (v2.9)
 │
 ├── sessions/                             # 세션 로그
 │   └── ...
 │
 ├── review/                               # 3+1 합의 보고서
-│   ├── consensus-001-oracle-dba-game.md       # Oracle DBA 게임 합의
-│   └── consensus-002-oss-model-evaluation.md  # OSS 모델 평가 SDD 합의 (REQUEST_CHANGES)
+│   ├── consensus-001-oracle-dba-game.md            # Oracle DBA 게임 합의
+│   ├── consensus-002-oss-model-evaluation.md       # OSS 모델 평가 SDD 합의 (REQUEST_CHANGES)
+│   └── consensus-004-problem-format-redesign.md    # 문제 형태 재설계 합의 (v2.9, 2026-04-16)
 │
 └── rationale/                            # 판단 근거 (의사결정 narrative)
     ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
@@ -158,6 +166,10 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-09 | SDD v2.1 patch — Langfuse v2 → v3 풀 인프라 전환 (CLICKHOUSE_URL 오류로 사용자 결정 옵션 B) | `architecture/oss-model-evaluation-design.md` §6.1 + §16 |
 | 2026-04-14 | OSS 5개 모델 R1 평가 전원 FAIL 원인 분석 + 하네스 P0 수정 4건 + 3+1 합의로 ADR-010 확정 | `rationale/oss-eval-failure-analysis-2026-04-14.md`, `ADR-010`, `SESSION_2026-04-14.md` |
 | 2026-04-15 | **R2 재평가 완료 + M3 Qwen3-Coder-Next primary 확정** (3+1 합의, 6개 대안 기각, 로드맵 P1~P4 + 운영 게이트 3건) | `rationale/oss-primary-model-selection-2026-04-15.md`, `ADR-011`, `SESSION_2026-04-15.md` |
+| 2026-04-16 | **문제 형태 재설계 v2.9 합의** (3+1 합의 + 사용자 4개 최종 결정: answerFormat 직교 축 / 주차별+최종 2트랙 캡스톤 / 실시간 사전 풀 매칭 / ADR→SDD→MVP 순서) | `review/consensus-004-problem-format-redesign.md` |
+| 2026-04-16 | **ADR-012~017 6건 작성** (answerFormat 축 / 3단 채점 / 캡스톤 / 실시간 사전 풀 / LLM-judge 안전 / MT6-7-8 지표) | `decisions/ADR-012` ~ `ADR-017` |
+| 2026-04-16 | **SDD v2.9 개정** (§1.3/§1.5/§1.6/§2.2/§3.1/§3.2/§3.3/§4.3/§4.4.2/§5.1/§6.2/§7.1/§9/§11 — 문제 형태 재설계 전면 반영) | `architecture/oracle-dba-learning-game-design.md` |
+| 2026-04-16 | **operational-monitoring v1.1** — MT6/MT7/MT8 신설, ops 스키마 확장, ADR-019 승격 트리거 | `architecture/operational-monitoring-design.md` |
 
 ---
 
