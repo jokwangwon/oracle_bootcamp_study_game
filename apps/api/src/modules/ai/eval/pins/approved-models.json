@@ -1,0 +1,11 @@
+[
+  {
+    "model": "qwen3-coder-next:latest",
+    "digest": "ca06e9e4087c714d44355bf954099187890e63084b4a632b8e9956c4b9492074",
+    "manifestConfigDigest": "sha256:5d55cac51f303b790c7fafb707fbec596ad64c7af9282619aa7dc88a37646d4c",
+    "blobDigest": "sha256:30e51a7cb1cf1333b9e298b90b4c7790fe2572d8736b002482a0ac96328a2ffb",
+    "addedAt": "2026-04-16T00:00:00Z",
+    "evalRound": "R-2026-04-14T11-32-26Z",
+    "notes": "ADR-011 primary OSS. R2 전 게이트 PASS (C3 98.3% / C4 96.7% / p95 44.9s / MT5 98.3%)."
+  }
+]

@@ -17,6 +17,11 @@ nvm use 20 > /dev/null 2>&1
 
 SCRIPT="apps/api/src/modules/ai/eval/scripts/run-eval-standalone.ts"
 
+# ADR-011 조건 #2로 run-eval-standalone.ts에 digest pin gate가 추가되었다.
+# 후보 모델 벤치마크(R1/R2)는 primary로 pin되기 전 단계이므로 gate를 bypass한다.
+# 운영 배포 전 최종 회귀에서는 이 플래그를 제거하여 pin drift를 차단해야 한다.
+EXTRA_ARGS="${EXTRA_ARGS:---skip-pin-check}"
+
 # ── 실행할 모델 목록 ──────────────────────────────────────────────
 # R2 재평가 (2026-04-14): ADR-010 하네스 수정 후 M1~M4 전원 재측정.
 # M5 Llama 3.3는 R1에서 runner crash — num_ctx 조정 필요하여 별도 트랙으로 분리
@@ -45,7 +50,7 @@ for entry in "${MODELS[@]}"; do
   echo "  시작: $(date)"
   echo "────────────────────────────────────────────────────────"
 
-  if npx tsx "$SCRIPT" --model "$model" --label "$label"; then
+  if npx tsx "$SCRIPT" --model "$model" --label "$label" $EXTRA_ARGS; then
     COMPLETED=$((COMPLETED + 1))
     echo "  ✓ $label 완료: $(date)"
   else

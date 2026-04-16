@@ -50,6 +50,7 @@ import { EVAL_RESULT_SCHEMA_VERSION } from '../reports/schema.v1';
 import type { RawCallRecord } from '../reports/promptfoo-adapter';
 import { buildRoundFromRecords } from '../reports/promptfoo-adapter';
 import { generateRoundReport } from '../reports/report-generator';
+import { defaultTagsFetcher, loadPins, verifyApprovedModel } from '../pins/verify';
 
 // Assertion imports
 import jsonParseAssertion from '../assertions/json-parse';
@@ -69,12 +70,14 @@ function parseArgs(): {
   label: string;
   firstN: number | null;
   outDir: string;
+  skipPinCheck: boolean;
 } {
   const args = process.argv.slice(2);
   let model = '';
   let label = '';
   let firstN: number | null = null;
   let outDir = '';
+  let skipPinCheck = false;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -90,12 +93,15 @@ function parseArgs(): {
       case '--out-dir':
         outDir = args[++i] ?? '';
         break;
+      case '--skip-pin-check':
+        skipPinCheck = true;
+        break;
     }
   }
 
   if (!model) {
     console.error('ERROR: --model is required');
-    console.error('Usage: npx tsx apps/api/src/modules/ai/eval/scripts/run-eval-standalone.ts --model exaone4:32b [--label "M1"] [--first-n 5]');
+    console.error('Usage: npx tsx apps/api/src/modules/ai/eval/scripts/run-eval-standalone.ts --model exaone4:32b [--label "M1"] [--first-n 5] [--skip-pin-check]');
     process.exit(1);
   }
 
@@ -104,6 +110,7 @@ function parseArgs(): {
     label: label || model,
     firstN,
     outDir: outDir || path.join(projectRoot, 'eval-results'),
+    skipPinCheck,
   };
 }
 
@@ -218,10 +225,35 @@ async function executeTestCase(
 }
 
 // ============================================================================
+// Pin gate (ADR-011 #2)
+// ============================================================================
+
+async function runPinGate(model: string, skip: boolean): Promise<void> {
+  if (skip) {
+    console.warn('⚠️  --skip-pin-check: digest drift verification bypassed. Use only for unpinned R&D runs.\n');
+    return;
+  }
+  const pinsFile = path.resolve(__dirname, '..', 'pins', 'approved-models.json');
+  const pins = loadPins(pinsFile);
+  const result = await verifyApprovedModel(model, pins, defaultTagsFetcher());
+  if (result.ok) {
+    console.log(`✅ Pin verified: ${model} digest=${result.currentDigest.slice(0, 16)}... (round=${result.pin.evalRound ?? 'n/a'})\n`);
+    return;
+  }
+  console.error(`❌ Pin verification failed: ${result.reason}`);
+  console.error(`   ${result.message}`);
+  if (result.reason === 'not-pinned') {
+    console.error('   → Run: npx tsx apps/api/src/modules/ai/eval/scripts/pin-model.ts --model ' + model);
+  }
+  console.error('   Use --skip-pin-check to bypass (R&D only).\n');
+  process.exit(4);
+}
+
+// ============================================================================
 // Environment metadata
 // ============================================================================
 
-async function getEnvironment(): Promise<{
+async function getEnvironment(modelName: string): Promise<{
   cudaVersion: string;
   nvidiaDriverVersion: string;
   ollamaVersion: string;
@@ -248,7 +280,6 @@ async function getEnvironment(): Promise<{
   }
 
   let ollamaVersion = 'unknown';
-  let ollamaImageDigest = 'unknown';
   try {
     const resp = await fetch(`${process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434'}/api/version`);
     const data = (await resp.json()) as { version?: string };
@@ -257,13 +288,14 @@ async function getEnvironment(): Promise<{
     // ollama not reachable
   }
 
+  // ADR-011 조건 #2: ollamaImageDigest 필드에 "평가 대상 모델의 digest"를 기록한다.
+  // 이전 구현은 Docker 컨테이너 이미지 digest(sudo 필요)였으나, 재현성 관점에서
+  // 실제로 중요한 것은 서빙 모델의 digest이므로 `/api/tags`로 전환한다.
+  let ollamaImageDigest = 'unknown';
   try {
-    const { execSync } = await import('node:child_process');
-    const digest = execSync(
-      'sudo docker inspect oracle-game-ollama --format "{{.Image}}" 2>/dev/null || echo unknown',
-      { encoding: 'utf-8' },
-    ).trim();
-    ollamaImageDigest = digest;
+    const tags = await defaultTagsFetcher()();
+    const m = tags.models.find((x) => x.name === modelName);
+    if (m) ollamaImageDigest = `${modelName}@${m.digest}`;
   } catch {
     ollamaImageDigest = 'unknown';
   }
@@ -292,13 +324,16 @@ function makeRoundId(): string {
 // ============================================================================
 
 async function main() {
-  const { model, label, firstN, outDir } = parseArgs();
+  const { model, label, firstN, outDir, skipPinCheck } = parseArgs();
 
   console.log('═══════════════════════════════════════════════════════');
   console.log(`  OSS Model Evaluation — standalone runner`);
   console.log(`  Model: ${model}`);
   console.log(`  Label: ${label}`);
   console.log('═══════════════════════════════════════════════════════\n');
+
+  // 0. Verify digest pin (ADR-011 채택 조건 #2, fail-closed)
+  await runPinGate(model, skipPinCheck);
 
   // 1. Load test cases
   let testCases = buildPromptfooTestCases();
@@ -332,7 +367,7 @@ async function main() {
 
   // 4. Build round result
   const roundId = makeRoundId();
-  const env = await getEnvironment();
+  const env = await getEnvironment(model);
 
   const meta: EvalRoundMeta = {
     schemaVersion: EVAL_RESULT_SCHEMA_VERSION,
