@@ -99,7 +99,14 @@ export class GameSessionService {
       throw new BadRequestException(`Round ${answer.roundId} not found or expired`);
     }
     const mode = this.registry.get(round.question.gameMode);
-    const result = mode.evaluateAnswer(round, answer);
+    const baseResult = mode.evaluateAnswer(round, answer);
+
+    // SDD §6.1 — 라운드 결과에 정답/해설 노출 (학습 효과 강화)
+    const result = {
+      ...baseResult,
+      correctAnswer: round.question.answer,
+      explanation: round.question.explanation ?? null,
+    };
 
     // SDD §5.1 + §6.1: 모든 답변은 answer_history에 기록 (Spaced Repetition 전제).
     await this.historyRepo.save(

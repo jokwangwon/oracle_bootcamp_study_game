@@ -56,9 +56,9 @@ export interface PlayerAnswer {
 }
 
 /**
- * 채점 결과
+ * 채점 결과 (mode 내부 반환 — 채점 정보만)
  */
-export interface EvaluationResult {
+export interface EvaluationCore {
   roundId: string;
   playerId: string;
   isCorrect: boolean;
@@ -66,6 +66,21 @@ export interface EvaluationResult {
   score: number;
   timeTakenMs: number;
   hintsUsed: number;
+}
+
+/**
+ * 채점 결과 (외부 응답 — 정답/해설 포함)
+ *
+ * SDD §6.1 + IMPLEMENTATION_STATUS §6 — 오답/정답 모두 응답에서 정답/해설을
+ * 즉시 노출한다 (학습 효과 강화). 클라이언트는 isCorrect=false면 정답 + 해설을
+ * 표시, true면 해설만 표시하는 식으로 활용. 정답/해설은 game-session 레이어가
+ * round.question에서 채워서 mode의 채점 결과와 합친다.
+ */
+export interface EvaluationResult extends EvaluationCore {
+  /** 정답 (모든 허용 정답). blank 모드는 빈칸별 정답 배열. */
+  correctAnswer: string[];
+  /** AI/관리자가 작성한 해설. 없으면 null */
+  explanation: string | null;
 }
 
 /**
@@ -86,7 +101,8 @@ export interface GameMode {
   generateRound(question: Question, config: RoundConfig): Round;
 
   /**
-   * 답변 채점: 정답 여부 + 점수 계산
+   * 답변 채점: 정답 여부 + 점수 계산.
+   * 정답/해설(EvaluationResult 확장 필드)은 session 레이어가 채운다.
    */
-  evaluateAnswer(round: Round, answer: PlayerAnswer): EvaluationResult;
+  evaluateAnswer(round: Round, answer: PlayerAnswer): EvaluationCore;
 }

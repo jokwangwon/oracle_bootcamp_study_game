@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import {
   CURRICULUM_TOPICS,
   GAME_MODE_LABELS,
-  type EvaluationResult,
+  type EvaluationCore,
   type GameMode,
   type GameModeId,
   type PlayerAnswer,
@@ -56,7 +56,7 @@ export class TermMatchMode implements GameMode {
     };
   }
 
-  evaluateAnswer(round: Round, answer: PlayerAnswer): EvaluationResult {
+  evaluateAnswer(round: Round, answer: PlayerAnswer): EvaluationCore {
     const normalized = this.normalize(answer.answer);
     const matched = round.correctAnswers.find(
       (correct) => this.normalize(correct) === normalized,
