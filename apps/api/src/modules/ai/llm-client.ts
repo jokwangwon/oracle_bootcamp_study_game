@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatOllama } from '@langchain/ollama';
@@ -65,7 +65,7 @@ export class LlmClient {
 
   constructor(
     private readonly config: ConfigService,
-    opts?: LlmClientOptions,
+    @Optional() opts?: LlmClientOptions,
   ) {
     const resolved = this.resolveOptions(opts);
     this.model = this.createModel(resolved);

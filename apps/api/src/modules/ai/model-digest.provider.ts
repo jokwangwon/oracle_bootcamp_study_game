@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as path from 'node:path';
 
@@ -27,8 +27,8 @@ export class ModelDigestProvider implements OnModuleInit {
 
   constructor(
     private readonly config: ConfigService,
-    private readonly tagsFetcher: TagsFetcher = defaultTagsFetcher(),
-    private readonly pins: readonly ModelPin[] = loadPinsSafe(PINS_PATH),
+    @Optional() private readonly tagsFetcher: TagsFetcher = defaultTagsFetcher(),
+    @Optional() private readonly pins: readonly ModelPin[] = loadPinsSafe(PINS_PATH),
   ) {}
 
   async onModuleInit(): Promise<void> {

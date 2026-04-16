@@ -49,7 +49,7 @@ export class NotionController {
       );
     }
     const queuedAt = new Date().toISOString();
-    const jobId = `manual:${databaseId}:${queuedAt}`;
+    const jobId = `manual-${databaseId}-${queuedAt.replace(/[:.]/g, '-')}`;
     await this.queue.add(
       SYNC_DATABASE_JOB,
       { databaseId },
