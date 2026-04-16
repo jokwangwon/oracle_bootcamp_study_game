@@ -12,6 +12,7 @@ import type {
 import { questionContentSchema } from '@oracle-game/shared';
 
 import { LlmClient } from './llm-client';
+import { ModelDigestProvider } from './model-digest.provider';
 import { PromptManager } from './prompt-manager';
 import {
   blankTypingOutputSchema,
@@ -78,6 +79,8 @@ export class AiQuestionGenerator {
     private readonly scopeRepo: Repository<WeeklyScopeEntity>,
     // ADR-011 조건 #3 — Phase A inline 측정. DI 미가용 시 no-op.
     @Optional() private readonly opsMeasurement?: OpsMeasurementService,
+    // ADR-011 조건 #2 — 운영 부팅 시 검증된 digest 캐시. DI 미가용 시 fallback.
+    @Optional() private readonly digestProvider?: ModelDigestProvider,
   ) {}
 
   async generate(input: AiGenerationInput): Promise<AiGenerationResult> {
@@ -225,8 +228,9 @@ export class AiQuestionGenerator {
     // 측정 실패는 service 내부에서 ops_event_log로 기록 + swallow되지만,
     // service 자체가 throw할 가능성에 대비해 한 번 더 가드한다.
     if (this.opsMeasurement) {
+      const digest = this.digestProvider?.getDigest() ?? 'pending-migration';
       await this.opsMeasurement
-        .measureSync(saved, llmLatencyMs, 'pending-migration')
+        .measureSync(saved, llmLatencyMs, digest)
         .catch((err) => this.logger.warn(`ops measureSync threw: ${err instanceof Error ? err.message : err}`));
     }
 

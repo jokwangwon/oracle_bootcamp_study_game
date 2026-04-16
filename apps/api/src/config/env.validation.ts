@@ -17,9 +17,13 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET은 최소 32자 이상이어야 합니다'),
   JWT_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
-  LLM_PROVIDER: z.enum(['anthropic', 'openai']).default('anthropic'),
-  LLM_API_KEY: z.string().min(1),
+  // ADR-011 P1 운영 교체 후 ollama가 primary. anthropic은 평가/베이스라인 용도.
+  LLM_PROVIDER: z.enum(['anthropic', 'ollama']).default('anthropic'),
+  // anthropic provider일 때만 필수. ollama는 키 없음 — LlmClient에서 fail-closed 처리.
+  LLM_API_KEY: z.string().optional(),
   LLM_MODEL: z.string().default('claude-opus-4-6'),
+  OLLAMA_BASE_URL: z.string().url().default('http://ollama:11434'),
+  OLLAMA_PORT: z.string().default('11434'),
   // ADR-009: AI 워커가 도입되었으므로 Langfuse 키는 필수.
   // 운영 정책상 모든 LLM 호출은 Langfuse trace로 기록되어야 한다.
   LANGFUSE_PUBLIC_KEY: z.string().min(1, 'LANGFUSE_PUBLIC_KEY는 필수 (ADR-009)'),
@@ -34,6 +38,13 @@ const envSchema = z.object({
   EVAL_ADMIN_USERNAMES: z.string().optional(),
   EVAL_RESULTS_DIR: z.string().optional(),
   EVAL_PROMPTFOO_CONFIG: z.string().optional(),
+  // ADR-011 #2 운영 부팅 시 digest 검증 우회 (R&D/dev 한정).
+  DIGEST_PIN_SKIP: z.enum(['true', 'false']).optional(),
+  // SDD §4.2 v2 Stage 1 — 노션 증분 동기화. 토큰/DB ID 미설정 시 NotionSyncService는
+  // 부팅하지만 sync는 disabled. RepeatableJob은 두 값이 모두 있어야 등록.
+  NOTION_API_TOKEN: z.string().optional(),
+  NOTION_DATABASE_ID: z.string().optional(),
+  NOTION_SYNC_CRON: z.string().default('0 0 * * 1'), // 매주 월요일 00:00
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

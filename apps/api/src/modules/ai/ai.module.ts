@@ -6,6 +6,7 @@ import IORedis from 'ioredis';
 import { ContentModule } from '../content/content.module';
 import { LlmClient } from './llm-client';
 import { LlmClientFactory } from './llm-client.factory';
+import { ModelDigestProvider } from './model-digest.provider';
 import { PromptManager } from './prompt-manager';
 import { AiQuestionGenerator } from './ai-question-generator';
 import { AiQuestionController } from './ai-question.controller';
@@ -56,11 +57,12 @@ import { AI_QUESTION_GENERATION_QUEUE } from './queue/queue.constants';
   providers: [
     LlmClient,
     LlmClientFactory,
+    ModelDigestProvider,
     PromptManager,
     AiQuestionGenerator,
     AiQuestionGenerationProcessor,
   ],
   controllers: [AiQuestionController],
-  exports: [LlmClient, LlmClientFactory, PromptManager, AiQuestionGenerator],
+  exports: [LlmClient, LlmClientFactory, ModelDigestProvider, PromptManager, AiQuestionGenerator],
 })
 export class AiModule {}

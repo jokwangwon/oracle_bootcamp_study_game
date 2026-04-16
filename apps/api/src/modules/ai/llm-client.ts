@@ -134,6 +134,12 @@ export class LlmClient {
 
   private createModel(opts: ResolvedOptions): BaseChatModel {
     if (opts.provider === 'anthropic') {
+      if (!opts.apiKey) {
+        throw new Error(
+          "LLM_PROVIDER='anthropic' 설정에서 LLM_API_KEY가 비어있습니다. " +
+            'ADR-011 P1 운영 교체 후에는 LLM_PROVIDER=ollama로 전환 권장.',
+        );
+      }
       return new ChatAnthropic({
         model: opts.model,
         apiKey: opts.apiKey,
