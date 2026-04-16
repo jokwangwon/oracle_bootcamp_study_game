@@ -5,8 +5,8 @@
 | 항목 | 값 |
 |---|---|
 | **문서 유형** | SDD (Specification-Driven Design) |
-| **버전** | **v2** (2026-04-09 — consensus-002 반영 + Q1~Q4 결정 반영) |
-| **상태** | 사용자 검토 대기 |
+| **버전** | **v2.8** (2026-04-15 — §1.4/1.5/1.6 신설: M3 primary 확정 + 메타 편향 주의문 + 운영 모니터링 게이트. 이전: v2.7 ADR-010 하네스 P0 수정) |
+| **상태** | Primary 확정 (ADR-011) — 채택 조건 2/3 이행 대기 |
 | **선행 문서** | `docs/rationale/oss-model-selection-rationale.md`, `docs/rationale/exaone-license-extract.md`, `docs/review/consensus-002-oss-model-evaluation.md` |
 | **관련 ADR** | ADR-005 (AI 백엔드 스택, 보안 3항목 정합), ADR-008 (Oracle DBA 게임 스택), ADR-009 (LangChain + Langfuse) |
 | **후속 산출물** | ADR-010 (모델 선정 결정), 평가 결과 보고서, 운영 배포 ADR |
@@ -65,6 +65,50 @@
 > **이중 게이트 의미**: 절대치를 통과하지 못해도 Claude 베이스라인 자체가 미달성한 메트릭은 상대치(Claude 대비 -5%p 이내)로 대체 인정. Phase 0(§Phase 0)에서 Claude 베이스라인을 먼저 측정한 뒤 합격선을 데이터 기반으로 ±5%p 범위에서 재보정한다.
 
 > **여러 모델이 합격선을 통과한 경우의 우선순위**: ① 합격 메트릭 수 → ② 한국어 자연스러움(C5) → ③ 라이센스 안전성(§9) → ④ 지연(C7) → ⑤ 메모리 사용량.
+
+---
+
+### 1.4 Primary 선정 결과 (R2, 2026-04-15 확정)
+
+> **본 절은 ADR-011(`docs/decisions/ADR-011-oss-primary-model-m3.md`)의 요약이며, 결정 과정 전문은 `docs/rationale/oss-primary-model-selection-2026-04-15.md`를 참조한다.**
+
+ADR-010(2026-04-14) 하네스 P0 수정 이후 M1~M4 4개 후보에 대한 R2 재평가(Gold Set A+B 60문제, seed=42, temperature=0.2) 결과, **M3 Qwen3-Coder-Next 80B MoE(Apache 2.0)만이 §1.3의 전 게이트를 동시 PASS**하여 primary OSS로 확정되었다.
+
+| 모델 | C1 | C2 | C3 | C4 | C7 p95 | C8 | MT5 | 종합 |
+|---|---|---|---|---|---|---|---|---|
+| M1 EXAONE 4.0 32B | 100% | 98.3% | 98.3% | ❌90.0% | ❌109.9s | 100% | 58.3% | FAIL |
+| M2 EXAONE 3.5 32B | 100% | 98.3% | 96.7% | ❌86.7% | ❌135.4s | 100% | 68.3% | FAIL |
+| **M3 Qwen3-Coder-Next 80B MoE** | **100%** | **100%** | **98.3%** | **96.7%** | **44.9s** | **100%** | **98.3%** | **🏆 PASS** |
+| M4 Qwen2.5-Coder 32B | 100% | 100% | 96.7% | 98.3% | ❌103.2s | 100% | 85.0% | FAIL (지연만) |
+
+- 평가 artifact: `apps/eval-results/R-2026-04-14T10-08-59Z` ~ `R-2026-04-14T12-10-27Z`
+- M5 Llama 3.3 70B는 runner crash로 별도 트랙(P4)에 분리
+- Primary digest(운영 pin 대상): `sha256:5d55cac51f303b790c7fafb707fbec596ad64c7af9282619aa7dc88a37646d4c` (manifest config) / `sha256:30e51a7cb1cf1333b9e298b90b4c7790fe2572d8736b002482a0ac96328a2ffb` (model blob)
+
+### 1.5 Primary 선정의 한계와 메타 편향 주의문 (Meta-Bias Disclaimer)
+
+> **이 주의문은 본 SDD, ADR-011, 운영 모니터링 대시보드, 관리자 리뷰 UI에 동일하게 노출되어야 한다.**
+
+현 평가 결과는 다음 한계를 전제로 해석해야 한다:
+
+1. **Gold Set은 Claude가 생성했다.** R2의 60문제(Gold Set A+B)는 모두 Claude API로 합성 후 사용자가 검수한 것이다. 이는 평가가 실질적으로 **"후보 OSS 모델이 Claude의 어휘/구조를 얼마나 재현하는가"** 를 측정했을 가능성을 배제하지 못한다 (메타 편향).
+2. **Oracle SQL 도메인 실성능은 운영에서만 검증된다.** R2 C5/C6(한국어 자연스러움·SQL 사실 정확성) LLM-as-Judge는 Claude 판정이므로 Claude 평가관과 Claude 생성 gold가 공통의 bias vector를 공유할 수 있다. 실 부트캠프 수강생 답안/오답 패턴 기반의 도메인 fitness는 **§1.6 운영 모니터링(조건 3)** 으로 보강해야 한다.
+3. **R2는 "후보 간 분별력"을 확인한 것이지 "절대 성능 보증"이 아니다.** M3의 MT5 98.3%는 상대적 우위이며, 실제 수강생 피드백에서 MT3/MT4 이상 케이스가 쌓이면 Phase 2(3개월 후 라우팅 재검토)에서 재평가된다.
+4. **결정적 완화책 (Phase 3, 병렬 트랙)**: Gold Set 200문제로 확대 + DBA 강사 peer review로 메타 편향 정량 측정 예정. 트리거 조건은 "운영 모니터링에서 이상 패턴 감지" 또는 "부트캠프 피드백 ≥100건".
+
+### 1.6 운영 모니터링 게이트 (조건 3 앵커)
+
+운영 배포 후 초기 100건의 실사용 문제 생성에 대해 다음을 재측정한다 (ADR-011 채택 조건 #3):
+
+| 측정 항목 | 기준 | 조치 |
+|---|---|---|
+| MT3(화이트리스트) 통과율 | ≥ 95% (R2 C3 98.3% 대비 -3%p 허용) | 미달 시 scope 확장 또는 재평가 트리거 |
+| MT4(빈칸 일관성) 통과율 | ≥ 93% (R2 C4 96.7% 대비 -3%p 허용) | 미달 시 prompt constraint 재점검 |
+| 수강생 신고율 (정답 오류 / SQL 사실 오류) | ≤ 5% | 초과 시 관리자 리뷰 큐 확대 + Phase 3 트리거 |
+| p95 지연 | ≤ 60s | 초과 지속 시 BullMQ concurrency / num_ctx 검토 |
+| 이상 케이스 로그 | 샘플링 10% + 관리자 플래그 전수 | Langfuse trace + DB `ai_question_reviews` 테이블 |
+
+> 상세 설계(데이터 모델, 집계 주기, 대시보드 레이아웃)는 **별도 SDD `operational-monitoring-design.md`** 로 확장된다 (조건 3 구현 시 작성).
 
 ---
 
@@ -831,6 +875,7 @@ docs/
 | 2026-04-09 | **v2.5 patch** | 단계 6 — 결과 JSON schema(N-05) + report-generator 완성. (1) `reports/schema.v1.ts` — 감사용 고정 Zod schema (M-04 환경 메타 + provider + testCase + 7개 metric assertion + aggregate stats), `EVAL_RESULT_SCHEMA_VERSION=1` 상수 + immutable 정책 (한번 commit된 v1은 절대 수정 안 함). (2) `reports/aggregate.ts` — pure stat helpers: `mean`/`percentile`(nearest-rank), `mulberry32` seeded PRNG, `bootstrapPassRateCi`(1000 samples 결정론 seed=42), `macroStratifiedMean`(NaN bucket 무시), `cohensD`(분산=0 폴백), `bonferroniAdjustedAlpha`. 외부 stat 라이브러리 의존 없음. (3) `reports/report-generator.ts` — `generateRoundReport`(헤더 + M-04 환경 + provider + 합격선 평가 C1~C8 + aggregate + stratified + top failures) + `generateComparisonReport`(다중 라운드 ADR-010용). (4) `reports/promptfoo-adapter.ts` — promptfoo-agnostic `RawCallRecord[]`로 정규화 + `aggregateCallRecords`(stratified bucket + bootstrap CI) + `buildRoundFromRecords`(schema 검증) + `parsePromptfooRawJson`(promptfoo 0.x 표준 shape, 단계 8 R0 첫 실행 시 실측 검증 필요). 28 파일 / 263 cases GREEN (신규 65), api+shared typecheck OK. | TDD + schema dispatch |
 | 2026-04-09 | **v2.4 patch** | 단계 5 — promptfoo 평가 하네스 코드 완성. (1) 운영 AQG의 inline schema를 `eval/output-schemas.ts`로 추출 → AQG와 평가가 동일 schema 공유 (운영 일관성). (2) 7개 assertion TDD 작성 — `extract-json` / `json-parse`(MT1) / `zod-schema`(MT2) / `scope-whitelist`(MT3) / `blank-consistency`(MT4) / `latency`(MT5) / `sanitization`(MT8) / `korean-features`(MT6 계산적 보조). (3) `langfuse-wrapped` provider — `runLlmInvoke` pure function + multi-message JSON 자동 파싱(`parsePromptToMessages`) + LlmClient 인스턴스 캐시. (4) `prompts/build-eval-prompt.ts` — 운영 PromptManager 동일 system/user 메시지 + 평가 전용 중심 토큰 강제 한 줄. (5) `datasets/promptfoo-testcases.ts` — Gold A 30 + Gold B 30 → PromptfooTestCase[]. (6) `promptfoo.config.yaml` — 6 providers (M1~M5 + R0) + assertion 7개 + tests/prompts file 참조. (7) `eval/README.md` 사용법 + 단계 8 install 안내. **§14 #11 부분 진행** — promptfoo CLI는 단계 8 R0 직전에 npm install 예정 (Anthropic 크레딧과 동시). 모든 코드는 promptfoo 패키지 직접 의존 없이 vitest 단위 검증 가능. 24 파일 / 198 cases GREEN, api+shared typecheck OK. 본 세션 신규 80 cases. | TDD + 운영 코드 직접 import |
 | 2026-04-14 | **v2.7 patch** | 단계 8 이후 — OSS 5개 모델 R1 평가 결과 전원 MT3/MT4 합격선 미달. 3+1 합의 프로토콜로 근본 원인 분석 (`docs/rationale/oss-eval-failure-analysis-2026-04-14.md`): (1) **§3.1 MT4 정의 수정** — `blanks[i].answer` 화이트리스트 검증 조항 삭제 (MT3 단일 책임으로 이관). 빈칸 정답은 "=", ">", "10", "SAL DESC" 같은 리터럴/연산자가 자연스러우나 과도 검증으로 전건 실패 유발. (2) **§3.1 MT3 정의 보강** — `extractOracleTokens`가 문자열 리터럴(`'...'`/`"..."`) 내부는 토큰 추출 대상에서 제외 (근본 버그 수정). `'MANAGER'`, `'1980-01-01'` 같은 데이터 리터럴이 학습 범위 검증에서 오탐되던 문제 해소. (3) seed `week1-sql-basics.scope.ts` 확장: JOB 실제 값 5개(MANAGER/CLERK/SALESMAN/ANALYST/PRESIDENT) + DNAME 4개 + "SQL" 메타용어 + 관용 alias 6개. (4) blank-typing 프롬프트에 "`___` 개수와 blanks 길이 정확 일치" constraint 추가. **ADR-010** 공식 기록. 기존 252 테스트 전원 pass + 신규 4건. | rationale 3+1 합의 + Agent B "토크나이저 근본 버그" 지적 |
+| 2026-04-15 | **v2.8 patch** | R2 재평가 완료 + **M3 Qwen3-Coder-Next 80B MoE primary 확정** (ADR-011). §1에 §1.4(primary 선정 결과 표 + digest pin 대상) / §1.5(메타 편향 주의문 4항) / §1.6(운영 초기 100건 모니터링 게이트 — 조건 3 앵커) 3개 절 신설. M5 Llama 3.3은 P4로 분리. 본 SDD는 이제 R2까지의 결과 + primary 확정 상태를 반영하는 freeze 대상이며, 조건 2(digest pin 자동화)와 조건 3(운영 모니터링 상세 설계)는 각각 평가 하네스 코드와 별도 `operational-monitoring-design.md`에서 구현된다. | ADR-011 + `docs/rationale/oss-primary-model-selection-2026-04-15.md` |
 | 2026-04-10 | **v2.6 patch** | 단계 7 — `eval.controller.ts` (POST /api/eval/run) + `eval-runner.service.ts` + `eval-admin.guard.ts` + `eval.module.ts` 추가. (1) **EvalRunnerService**: `PromptfooExecutor`/`EvalFileSystem` 인터페이스로 child_process/fs 격리 → 단위 테스트에서 in-memory FakeFs + vi.fn mock으로 검증. roundId는 `R-{ISO sans ms, ':'→'-'}` 형식 자동 생성. promptfoo 출력 → `parsePromptfooRawJson` → `buildRoundFromRecords` → `generateRoundReport` → 두 파일 (`result.json`+`report.md`) 저장 → 요약 반환. ENOENT(promptfoo 미설치)는 `ServiceUnavailableException`으로 변환, 빈 결과는 `BadRequestException`, 동일 roundId 디렉토리 존재는 `ConflictException`. (2) **EvalAdminGuard**: ENV `EVAL_ADMIN_USERNAMES` (comma-separated whitelist) 기반 fail-closed 가드. JWT payload에 role이 없는 현행 구조에서 DB lookup 회피. 미설정/빈값은 모든 요청 거절. (3) **EvalController**: `JwtAuthGuard` + `EvalAdminGuard` 두 가드 체인. DTO(`RunEvalDto`)에 class-validator로 환경/provider 메타 검증. (4) **EvalModule**: `AiModule`과 분리 — 운영 vs 평가 책임 분리. `createDefaultPromptfooExecutor`는 단계 8 첫 실행 전까지는 호출 안 됨 (CLI 미설치). (5) `.env.example` + env validation에 `EVAL_ADMIN_USERNAMES` / `EVAL_RESULTS_DIR` / `EVAL_PROMPTFOO_CONFIG` 추가 (모두 optional). 31 파일 / 287 cases GREEN (신규 24: runner 11 + guard 10 + controller 3), api+shared typecheck OK. **§14 #11 promptfoo install + 단계 8 Anthropic 크레딧만이 잔여 차단 항목**. | TDD + ADR-005 보안 3항목(키 관리 fail-closed) |
 
 ---
