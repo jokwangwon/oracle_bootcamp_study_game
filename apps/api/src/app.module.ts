@@ -8,6 +8,7 @@ import { GameModule } from './modules/game/game.module';
 import { ContentModule } from './modules/content/content.module';
 import { AiModule } from './modules/ai/ai.module';
 import { EvalModule } from './modules/ai/eval/eval.module';
+import { OpsModule } from './modules/ops/ops.module';
 import { typeOrmConfig } from './config/typeorm.config';
 import { configValidationSchema } from './config/env.validation';
 
@@ -25,6 +26,7 @@ import { configValidationSchema } from './config/env.validation';
     GameModule,
     ContentModule,
     AiModule,
+    OpsModule,
     EvalModule,
   ],
 })

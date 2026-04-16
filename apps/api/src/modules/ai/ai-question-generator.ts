@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { StructuredOutputParser } from '@langchain/core/output_parsers';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import type { z } from 'zod';
@@ -24,6 +24,7 @@ import {
 } from '../content/services/question-pool.service';
 import { ScopeValidatorService } from '../content/services/scope-validator.service';
 import { WeeklyScopeEntity } from '../content/entities/weekly-scope.entity';
+import { OpsMeasurementService } from '../ops/ops-measurement.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThanOrEqual, Repository } from 'typeorm';
 
@@ -75,6 +76,8 @@ export class AiQuestionGenerator {
     private readonly scopeValidator: ScopeValidatorService,
     @InjectRepository(WeeklyScopeEntity)
     private readonly scopeRepo: Repository<WeeklyScopeEntity>,
+    // ADR-011 조건 #3 — Phase A inline 측정. DI 미가용 시 no-op.
+    @Optional() private readonly opsMeasurement?: OpsMeasurementService,
   ) {}
 
   async generate(input: AiGenerationInput): Promise<AiGenerationResult> {
@@ -131,6 +134,7 @@ export class AiQuestionGenerator {
       format_instructions: formatInstructions,
     });
 
+    const llmStartedAt = Date.now();
     const response = await this.llm.invoke(
       messages.map((m) =>
         m.getType() === 'system'
@@ -138,6 +142,7 @@ export class AiQuestionGenerator {
           : new HumanMessage(String(m.content)),
       ),
     );
+    const llmLatencyMs = Date.now() - llmStartedAt;
 
     const rawText =
       typeof response.content === 'string'
@@ -214,7 +219,18 @@ export class AiQuestionGenerator {
       status: 'pending_review',
       source: 'ai-realtime',
     };
-    return this.pool.save(saveInput);
+    const saved = await this.pool.save(saveInput);
+
+    // ADR-011 조건 #3 / SDD operational-monitoring §4.1 A 경로.
+    // 측정 실패는 service 내부에서 ops_event_log로 기록 + swallow되지만,
+    // service 자체가 throw할 가능성에 대비해 한 번 더 가드한다.
+    if (this.opsMeasurement) {
+      await this.opsMeasurement
+        .measureSync(saved, llmLatencyMs, 'pending-migration')
+        .catch((err) => this.logger.warn(`ops measureSync threw: ${err instanceof Error ? err.message : err}`));
+    }
+
+    return saved;
   }
 
   /**
