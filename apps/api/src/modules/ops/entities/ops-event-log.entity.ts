@@ -10,7 +10,10 @@ export type OpsEventKind =
   | 'student_report_incorrect'
   | 'admin_reject'
   | 'gate_breach'
-  | 'measurement_fail';
+  | 'measurement_fail'
+  | 'mt6_breach'
+  | 'mt7_breach'
+  | 'mt8_breach';
 
 export type StudentReportReason = 'incorrect_answer' | 'sql_error' | 'other';
 
@@ -18,8 +21,17 @@ export interface StudentReportPayload {
   reason: StudentReportReason;
 }
 
+export type GateBreachMetric =
+  | 'mt3_rate'
+  | 'mt4_rate'
+  | 'p95_latency'
+  | 'student_report_rate'
+  | 'mt6_canonical_match_rate'
+  | 'mt7_capstone_violations'
+  | 'mt8_llm_judge_ratio';
+
 export interface GateBreachPayload {
-  metric: 'mt3_rate' | 'mt4_rate' | 'p95_latency' | 'student_report_rate';
+  metric: GateBreachMetric;
   observed: number;
   threshold: number;
   windowSize: number;

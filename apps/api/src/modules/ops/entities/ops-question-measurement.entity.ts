@@ -51,6 +51,28 @@ export class OpsQuestionMeasurementEntity {
   /** 1..100이면 초기 window, NULL이면 이후 생성분 */
   @Column({ type: 'int', name: 'window_index', nullable: true })
   windowIndex!: number | null;
+
+  /**
+   * ADR-017 차원 컬럼 — 신규 측정은 반드시 채움. 기존 행은 NULL (backfill은
+   * MT6/MT8 집계 시 COALESCE로 처리).
+   */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  mode!: string | null;
+
+  @Column({ type: 'varchar', length: 32, name: 'answer_format', nullable: true })
+  answerFormat!: string | null;
+
+  /** ast | keyword | llm | held | override (ADR-013) */
+  @Column({ type: 'varchar', length: 32, name: 'grading_method', nullable: true })
+  gradingMethod!: string | null;
+
+  /**
+   * MT6 — free-form 답안이 Layer 1(AST) 에서 PASS/FAIL 확정되었는지.
+   * true = Layer 1 에서 해소, false = Layer 2/3 으로 escalate, null = 해당 없음
+   * (객관식/빈칸 등 free-form 아님).
+   */
+  @Column({ type: 'boolean', name: 'layer_1_resolved', nullable: true })
+  layer1Resolved!: boolean | null;
 }
 
 export interface Mt4FailureDetail {
