@@ -3,12 +3,14 @@
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "command": "echo '[Harness Layer 1] PostToolUse: 코드 편집 감지 — lint 실행 예정'"
-      }
-    ],
-    "PreCommit": [
-      {
-        "command": "echo '[Harness Layer 2] PreCommit: 커밋 전 테스트 실행 예정'"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_response.filePath // .tool_input.file_path // empty'); case \"$f\" in *.ts|*.tsx) ;; *) exit 0 ;; esac; case \"$f\" in */apps/api/*) WS=apps/api ;; */apps/web/*) WS=apps/web ;; */packages/shared/*) WS=packages/shared ;; *) exit 0 ;; esac; cd \"/home/delangi/문서/project/category/bootcamp_game/$WS\" || exit 0; out=$(npx --no-install tsc --noEmit 2>&1); rc=$?; [ $rc -ne 0 ] && printf '%s\\n' \"$out\" | sed 's/^/[Layer1 tsc] /' | head -40; exit 0",
+            "timeout": 30,
+            "statusMessage": "[Layer1] tsc --noEmit"
+          }
+        ]
       }
     ]
   },
@@ -17,7 +19,26 @@
       "Read",
       "Glob",
       "Grep",
-      "Agent"
+      "Agent",
+
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-get-comments",
+      "mcp__claude_ai_Notion__notion-get-teams",
+      "mcp__claude_ai_Notion__notion-get-users"
+    ],
+    "ask": [
+      "mcp__claude_ai_Notion__notion-create-comment",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "mcp__claude_ai_Notion__notion-duplicate-page",
+      "mcp__claude_ai_Notion__notion-update-page",
+      "mcp__claude_ai_Notion__notion-move-pages",
+      "mcp__claude_ai_Notion__notion-create-view",
+      "mcp__claude_ai_Notion__notion-update-view"
+    ],
+    "deny": [
+      "mcp__claude_ai_Notion__notion-create-database",
+      "mcp__claude_ai_Notion__notion-update-data-source"
     ]
   }
 }
