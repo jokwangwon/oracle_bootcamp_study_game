@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-17 (**MVP-A 완주 (객관식 모드 Mode 6 + MT6/7/8 스켈레톤 + AI 생성 MC 분기 + promptfoo MC 하네스) + MVP-B 2/10 세션 (GradingModule + AnswerSanitizer + Layer 2 Keyword + Orchestrator 스켈레톤)**. 464 tests / typecheck clean. `feature/oss-model-eval` 브랜치 main 대비 19 커밋 앞섬. **MVP-B Session 3: Layer 1 AST + node-sql-parser 착수 대기**)
+**최종 업데이트**: 2026-04-17 저녁 (**MVP-A 완주 + MVP-B 2/10 세션 + 하네스 점검 5건**: Layer 1 PostToolUse 실제 tsc / Layer 2/3 pre-commit typecheck+test / settings.local 212→48줄 트리밍 / `.claude/agents/` 3+1 서브에이전트 4종 / Notion MCP 3단 권한 정책 / ESLint 뼈대 복구. 464 tests / typecheck clean. `feature/oss-model-eval` 브랜치 main 대비 **24 커밋** 앞섬. **MVP-B Session 3: Layer 1 AST + `node-sql-parser` 착수 대기** — `.claude/settings.json` · `.claude/agents/` 변경은 다음 세션부터 완전 활성)
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-16 (문제 형태 재설계 v2.9 — consensus-004 + ADR-012~017)
+**최종 업데이트**: 2026-04-17 저녁 (MVP-A 완주 + MVP-B 2/10 + 하네스 점검 5 커밋)
 
 ---
 
@@ -172,6 +172,7 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-16 | **operational-monitoring v1.1** — MT6/MT7/MT8 신설, ops 스키마 확장, ADR-019 승격 트리거 | `architecture/operational-monitoring-design.md` |
 | 2026-04-16 | **운영 부팅 회귀 6건 수정 + env 노출** (병렬 2에이전트, 9초 간격 커밋) — shared tsconfig ESM→CJS / DI `@Optional()` 3곳 / AiModule TypeOrmModule / nest-cli assets / BullMQ jobId / docker-compose env 6건 / `DIGEST_PIN_SKIP` preprocess. 22건 Notion 동기화 실증 | `SESSION_2026-04-16.md`, 커밋 `327578a`, `afde74b` |
 | 2026-04-17 | **MVP-A 완주 + MVP-B 2/10 착수** — 7 커밋, 84 신규 TDD (380 → 464). MVP-A: Mode 6 객관식 + answerFormat + MT6-8 스켈레톤 + AI MC 분기 + MC promptfoo 하네스. MVP-B: GradingModule 스켈레톤 + AnswerSanitizer + answer_history 메타 컬럼 + Layer 2 Keyword + Orchestrator(Layer 1/3 DI stub). 실시간 대전 후순위 결정. | `SESSION_2026-04-17.md`, 커밋 `452e9aa`/`6c282f2`/`1c29b3b`/`a9895c4`/`c38cc35`/`bc2ccaa` |
+| 2026-04-17 저녁 | **하네스 점검 5 커밋** — (1) Layer 1 PostToolUse 실제 `tsc --noEmit` 훅 + 미지원 PreCommit 제거 (직전 세션 `.claude/settings.json`) (2) Layer 2/3 pre-commit 센서 활성화 (`typecheck`+`test`, 문서 전용 스킵, `core.hooksPath .githooks` 설정) (3) `settings.local.json` 212→48줄 트리밍 (위험 wildcard + 평문 비밀번호 + 일회성 명령 제거) (4) `.claude/agents/` 3+1 서브에이전트 4종 (+256 LoC) — 프롬프트 규약을 하네스 승격 (5) Notion MCP 권한 3단 정책 (allow/ask/deny) + 판단 근거 narrative. 별도: ESLint 뼈대 복구 (devDep + `.eslintrc.cjs` × 2, pre-commit 미연결). | `SESSION_2026-04-17.md` §8, 커밋 `dda09f0`/`235ceef`/`e62560e`/`964fcdc`/`f64c887`, `rationale/notion-mcp-permission-policy.md`, `.claude/agents/` |
 
 ---
 
