@@ -1,20 +1,74 @@
 #!/bin/bash
-# Harness Layer 3: git pre-commit hook
-# 커밋 전 자동 검증
+# Harness Layer 2/3: git pre-commit hook
+# 커밋 전 자동 검증 — 민감정보/디버그 스캔 + 타입체크 + 테스트
+#
+# 비상시 스킵: SKIP_PRECOMMIT_HEAVY=1 git commit ...
+#   (타입체크/테스트만 스킵, 민감정보 스캔은 항상 실행)
 
-echo "[Harness Layer 3] pre-commit hook 실행 중..."
+set -u
 
-# 1. 민감 정보 스캔 (API 키, 비밀번호 등)
+echo "[Harness Layer 2/3] pre-commit hook 실행 중..."
+
+# ---------------------------------------------------------------------------
+# Layer 3-a: 민감 정보 스캔 (API 키, 비밀번호 등) — 항상 실행
+# ---------------------------------------------------------------------------
 if git diff --cached --diff-filter=ACM | grep -iE '(api_key|secret|password|token)\s*=\s*["\x27][^"\x27]+["\x27]' > /dev/null 2>&1; then
     echo "[ERROR] 민감 정보가 포함된 파일이 감지되었습니다!"
     echo "  → .env 파일을 .gitignore에 추가하고, 환경 변수를 사용하세요."
     exit 1
 fi
 
-# 2. 디버그 코드 체크
+# ---------------------------------------------------------------------------
+# Layer 3-b: 디버그 코드 체크 (경고만)
+# ---------------------------------------------------------------------------
 if git diff --cached --diff-filter=ACM | grep -E '(console\.log|print\(|debugger|TODO:.*FIXME)' > /dev/null 2>&1; then
     echo "[WARNING] 디버그 코드가 감지되었습니다. 확인 후 커밋하세요."
 fi
 
-echo "[Harness Layer 3] pre-commit 검증 통과"
+# ---------------------------------------------------------------------------
+# Layer 2: 타입체크 + 테스트 (강제 차단) — 계산적 센서
+# ---------------------------------------------------------------------------
+if [ "${SKIP_PRECOMMIT_HEAVY:-0}" = "1" ]; then
+    echo "[WARNING] SKIP_PRECOMMIT_HEAVY=1 — 타입체크/테스트를 스킵합니다."
+    echo "[Harness Layer 2/3] pre-commit 검증 통과 (heavy skip)"
+    exit 0
+fi
+
+# 스테이징된 변경이 순수 문서(.md/.txt/.rst/.adoc or docs/)만인 경우에만 스킵
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -z "$STAGED" ]; then
+    echo "[INFO] 스테이징된 파일 없음 — 타입체크/테스트 스킵"
+    echo "[Harness Layer 2/3] pre-commit 검증 통과"
+    exit 0
+fi
+if ! echo "$STAGED" | grep -qvE '(^docs/|\.(md|txt|rst|adoc)$)'; then
+    echo "[INFO] 문서 변경만 감지 — 타입체크/테스트 스킵"
+    echo "[Harness Layer 2/3] pre-commit 검증 통과"
+    exit 0
+fi
+
+# 1) Typecheck
+echo ""
+echo "[Layer 2-a] npm run typecheck"
+if ! npm run typecheck --silent; then
+    echo ""
+    echo "[ERROR] 타입체크 실패 — 커밋이 차단되었습니다."
+    echo "  → 타입 오류를 수정한 후 다시 커밋하세요."
+    echo "  → 비상시: SKIP_PRECOMMIT_HEAVY=1 git commit ..."
+    exit 1
+fi
+
+# 2) Tests
+echo ""
+echo "[Layer 2-b] npm test"
+if ! npm test --silent; then
+    echo ""
+    echo "[ERROR] 테스트 실패 — 커밋이 차단되었습니다."
+    echo "  → 실패한 테스트를 수정한 후 다시 커밋하세요."
+    echo "  → 비상시: SKIP_PRECOMMIT_HEAVY=1 git commit ..."
+    exit 1
+fi
+
+echo ""
+echo "[Harness Layer 2/3] pre-commit 검증 통과 (민감정보 + 타입체크 + 테스트)"
 exit 0
