@@ -28,6 +28,20 @@ export type GradingMethod =
 export type GradingLayerPath = number[];
 
 /**
+ * Layer 1 AST 파싱이 UNKNOWN을 반환한 구조적 사유.
+ * Session 3: 기록만(행동 분기 없음). Session 4+ Rewriter/에러 분기 때 행동 분기에 사용.
+ *   - dialect_unsupported: 파서가 Oracle 전용 구문(CONNECT BY/(+)/LISTAGG/MERGE 등)으로 throw
+ *   - truly_invalid_syntax: Oracle 방언 의심 키워드 없이 파싱 실패 (진짜 문법 오류 의심)
+ *   - empty_answer: 공백·주석 제거 후 의미 있는 SQL 토큰이 없음
+ *   - non_sql_block: PL/SQL 블록(BEGIN...END;) 등 채점 범위 외
+ */
+export type AstFailureReason =
+  | 'dialect_unsupported'
+  | 'truly_invalid_syntax'
+  | 'empty_answer'
+  | 'non_sql_block';
+
+/**
  * 단일 Layer의 판정 결과 (Orchestrator가 합성 전).
  */
 export interface LayerVerdict {
@@ -38,6 +52,8 @@ export interface LayerVerdict {
   rationale: string;
   /** 이 Layer가 적용된 harness 버전 또는 모델 digest */
   graderDigest: string;
+  /** Layer 1 AST grader가 UNKNOWN 반환 시 분류. 다른 Layer는 undefined. */
+  astFailureReason?: AstFailureReason;
 }
 
 /**
@@ -54,4 +70,9 @@ export interface GradingResult {
   rationale: string;
   /** Sanitizer 플래그 (의심 입력/truncated 등). 감사용 */
   sanitizationFlags?: string[];
+  /**
+   * Layer 1 AST grader가 UNKNOWN을 반환해 Layer 2/3로 강등됐을 때의 사유.
+   * MT8 집계 필터 및 감사 로그에서 "파서 한계" 샘플을 분리하는 용도.
+   */
+  astFailureReason?: AstFailureReason;
 }

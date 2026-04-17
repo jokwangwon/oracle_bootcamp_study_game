@@ -37,6 +37,7 @@
     "langchain": "^0.3.5",
     "langfuse": "^3.27.0",
     "langfuse-langchain": "^3.27.0",
+    "node-sql-parser": "^5.4.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.11.0",

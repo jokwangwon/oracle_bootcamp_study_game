@@ -106,7 +106,7 @@ export class GradingOrchestrator {
       allowlist: input.allowlist,
     });
     if (l2.verdict !== 'UNKNOWN') {
-      return terminal(l2, 'keyword', [1, 2], flags, l1.rationale);
+      return terminal(l2, 'keyword', [1, 2], flags, l1.rationale, l1.astFailureReason);
     }
 
     // Layer 3 (LLM) — Layer 1/2가 UNKNOWN일 때만
@@ -116,7 +116,14 @@ export class GradingOrchestrator {
       sanitizationFlags: flags,
     });
     if (l3.verdict !== 'UNKNOWN') {
-      return terminal(l3, 'llm', [1, 2, 3], flags, `${l1.rationale} | ${l2.rationale}`);
+      return terminal(
+        l3,
+        'llm',
+        [1, 2, 3],
+        flags,
+        `${l1.rationale} | ${l2.rationale}`,
+        l1.astFailureReason,
+      );
     }
 
     // 모두 UNKNOWN → held (관리자 큐 이관)
@@ -128,6 +135,7 @@ export class GradingOrchestrator {
       gradingLayersUsed: [1, 2, 3],
       rationale: `${l1.rationale} | ${l2.rationale} | ${l3.rationale} | held for admin review`,
       sanitizationFlags: flags.length > 0 ? flags : undefined,
+      astFailureReason: l1.astFailureReason,
     };
   }
 }
@@ -138,6 +146,7 @@ function terminal(
   layers: GradingLayerPath,
   flags: string[],
   prevRationale?: string,
+  astFailureReason?: LayerVerdict['astFailureReason'],
 ): GradingResult {
   const isCorrect = isPass(verdict.verdict);
   const partial = resolvePartialScore(verdict.verdict, verdict.confidence);
@@ -152,6 +161,7 @@ function terminal(
     gradingLayersUsed: layers,
     rationale,
     sanitizationFlags: flags.length > 0 ? flags : undefined,
+    astFailureReason,
   };
 }
 
