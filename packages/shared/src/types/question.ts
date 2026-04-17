@@ -1,5 +1,5 @@
 import type { Difficulty, Topic } from './curriculum';
-import type { GameModeId } from './game';
+import type { AnswerFormat, GameModeId } from './game';
 
 /**
  * 문제 컨텐츠 (게임 모드별로 다른 구조)
@@ -11,7 +11,8 @@ export type QuestionContent =
   | TermMatchContent
   | ResultPredictContent
   | CategorySortContent
-  | ScenarioContent;
+  | ScenarioContent
+  | MultipleChoiceContent;
 
 export interface BlankTypingContent {
   type: 'blank-typing';
@@ -57,6 +58,24 @@ export interface ScenarioContent {
 }
 
 /**
+ * 객관식 콘텐츠 (ADR-012)
+ *
+ * options[i].id 가 정답 참조 키. Question.answer 는 정답 option id 배열.
+ * 단일 정답: answer.length === 1. 복수 정답(All-that-apply): answer.length >= 2.
+ * stem: 문제 지문 (선택 전 사용자가 읽는 본문). SQL 블록이면 prompt 레벨에서 코드블록 처리.
+ */
+export interface MultipleChoiceContent {
+  type: 'multiple-choice';
+  stem: string;
+  options: Array<{
+    id: string; // 'A' | 'B' | 'C' | 'D' | ... (안정 식별자)
+    text: string;
+  }>;
+  /** 복수 정답 허용 여부 (기본 false = 단일 정답) */
+  allowMultiple?: boolean;
+}
+
+/**
  * 문제 (DB에 저장되는 단위)
  */
 export interface Question {
@@ -64,6 +83,15 @@ export interface Question {
   topic: Topic;
   week: number;
   gameMode: GameModeId;
+  /**
+   * 답안 형식 축 (ADR-012). DB 컬럼은 not null / default 'single-token'.
+   * GameMode와 직교 조합됨 — 예: gameMode='blank-typing' + answerFormat='multiple-choice'
+   * 는 "빈칸을 보기 중에서 고르는" 객관식 변형.
+   *
+   * 인터페이스 상 optional인 이유: 기존 시드/픽스처/AI 생성기 호환. DB에서 읽을 때는
+   * 항상 값이 채워져 있으며, 미지정 시 런타임 기본값은 'single-token'.
+   */
+  answerFormat?: AnswerFormat;
   difficulty: Difficulty;
   content: QuestionContent;
   answer: string[]; // 정답 (복수 허용)

@@ -4,6 +4,7 @@ import type { Question, Round } from '@oracle-game/shared';
 import { GameSessionService } from './game-session.service';
 import { GameModeRegistry } from '../modes/game-mode.registry';
 import { BlankTypingMode } from '../modes/blank-typing.mode';
+import { MultipleChoiceMode } from '../modes/multiple-choice.mode';
 import { TermMatchMode } from '../modes/term-match.mode';
 import { QuestionPoolService } from '../../content/services/question-pool.service';
 import { AnswerHistoryEntity } from '../../users/entities/answer-history.entity';
@@ -90,7 +91,8 @@ function makeFakeBlankTypingQuestion(): Question {
 function makeService() {
   const blankTyping = new BlankTypingMode();
   const termMatch = new TermMatchMode();
-  const registry = new GameModeRegistry(blankTyping, termMatch);
+  const multipleChoice = new MultipleChoiceMode();
+  const registry = new GameModeRegistry(blankTyping, termMatch, multipleChoice);
   const pool = new FakePool() as unknown as QuestionPoolService;
   const usersService = new FakeUsersService();
   const historyRepo = new FakeHistoryRepo();

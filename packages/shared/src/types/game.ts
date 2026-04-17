@@ -2,7 +2,7 @@ import type { Difficulty, Topic } from './curriculum';
 import type { Question } from './question';
 
 /**
- * 5가지 게임 모드 식별자
+ * 게임 모드 식별자 (ADR-012 §구현 범위 1 — multiple-choice 추가)
  */
 export const GAME_MODE_IDS = [
   'blank-typing',
@@ -10,6 +10,7 @@ export const GAME_MODE_IDS = [
   'result-predict',
   'category-sort',
   'scenario',
+  'multiple-choice',
 ] as const;
 
 export type GameModeId = (typeof GAME_MODE_IDS)[number];
@@ -20,7 +21,23 @@ export const GAME_MODE_LABELS: Record<GameModeId, string> = {
   'result-predict': '결과 예측',
   'category-sort': '카테고리 분류',
   scenario: '시나리오 시뮬레이션',
+  'multiple-choice': '객관식',
 };
+
+/**
+ * 답안 형식 축 (ADR-012) — GameMode와 직교하게 조합됨.
+ * MVP-A: single-token + multiple-choice 만 사용. 나머지는 MVP-B/C 도입.
+ */
+export const ANSWER_FORMATS = [
+  'single-token',
+  'free-form',
+  'multiple-choice',
+  'reorder',
+  'drag-compose',
+  'output-select',
+] as const;
+
+export type AnswerFormat = (typeof ANSWER_FORMATS)[number];
 
 /**
  * 라운드 생성 설정

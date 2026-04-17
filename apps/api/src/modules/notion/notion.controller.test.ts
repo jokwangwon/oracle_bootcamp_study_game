@@ -24,7 +24,7 @@ describe('NotionController', () => {
     const res = await ctl.triggerSync({ databaseId: 'override-db' });
 
     expect(res.databaseId).toBe('override-db');
-    expect(res.jobId).toMatch(/^manual:override-db:/);
+    expect(res.jobId).toMatch(/^manual-override-db-/);
     expect(add).toHaveBeenCalledWith(
       'sync-database',
       { databaseId: 'override-db' },

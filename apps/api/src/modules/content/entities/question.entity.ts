@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import type {
+  AnswerFormat,
   Difficulty,
   GameModeId,
   QuestionContent,
@@ -28,6 +29,17 @@ export class QuestionEntity {
 
   @Column({ type: 'varchar', length: 30, name: 'game_mode' })
   gameMode!: GameModeId;
+
+  /**
+   * 답안 형식 (ADR-012). 기존 행은 synchronize로 'single-token' backfill.
+   */
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'answer_format',
+    default: 'single-token',
+  })
+  answerFormat!: AnswerFormat;
 
   @Column({ type: 'varchar', length: 10 })
   difficulty!: Difficulty;

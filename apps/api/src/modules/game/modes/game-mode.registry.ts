@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { GameMode, GameModeId } from '@oracle-game/shared';
 
 import { BlankTypingMode } from './blank-typing.mode';
+import { MultipleChoiceMode } from './multiple-choice.mode';
 import { TermMatchMode } from './term-match.mode';
 
 /**
@@ -17,9 +18,11 @@ export class GameModeRegistry {
   constructor(
     blankTyping: BlankTypingMode,
     termMatch: TermMatchMode,
+    multipleChoice: MultipleChoiceMode,
   ) {
     this.register(blankTyping);
     this.register(termMatch);
+    this.register(multipleChoice);
   }
 
   private register(mode: GameMode): void {

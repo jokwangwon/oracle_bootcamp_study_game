@@ -6,6 +6,7 @@ import { GameController } from './game.controller';
 import { GameSessionService } from './services/game-session.service';
 import { GameModeRegistry } from './modes/game-mode.registry';
 import { BlankTypingMode } from './modes/blank-typing.mode';
+import { MultipleChoiceMode } from './modes/multiple-choice.mode';
 import { TermMatchMode } from './modes/term-match.mode';
 
 @Module({
@@ -15,6 +16,7 @@ import { TermMatchMode } from './modes/term-match.mode';
     GameModeRegistry,
     BlankTypingMode,
     TermMatchMode,
+    MultipleChoiceMode,
   ],
   controllers: [GameController],
 })
