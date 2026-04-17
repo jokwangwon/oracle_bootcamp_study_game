@@ -129,6 +129,8 @@ defaultTest:
     - type: javascript
       value: 'file://assertions/blank-consistency.ts'
     - type: javascript
+      value: 'file://assertions/mc-option-consistency.ts'
+    - type: javascript
       value: 'file://assertions/latency.ts'
     - type: javascript
       value: 'file://assertions/sanitization.ts'

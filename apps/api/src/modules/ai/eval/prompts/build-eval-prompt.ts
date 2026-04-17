@@ -1,9 +1,11 @@
 import { StructuredOutputParser } from '@langchain/core/output_parsers';
 
 import { BLANK_TYPING_GENERATION_PROMPT } from '../../prompts/blank-typing.prompt';
+import { MULTIPLE_CHOICE_GENERATION_PROMPT } from '../../prompts/multiple-choice.prompt';
 import { TERM_MATCH_GENERATION_PROMPT } from '../../prompts/term-match.prompt';
 import {
   blankTypingOutputSchema,
+  multipleChoiceOutputSchema,
   termMatchOutputSchema,
 } from '../output-schemas';
 
@@ -33,35 +35,42 @@ import {
  *    운영보다 한 줄을 추가해 중심 토큰을 명시한다 (SDD v2 §4.1 Recall 트랙 정의).
  */
 
+export type EvalGameMode = 'blank-typing' | 'term-match' | 'multiple-choice';
+
 export interface EvalPromptVars {
   topic: string;
   week: number;
   difficulty: string;
   allowedKeywords: readonly string[];
   seedFocusKeyword: string;
-  gameMode: 'blank-typing' | 'term-match';
+  gameMode: EvalGameMode;
 }
 
 // format_instructions는 schema에만 의존하므로 모듈 로드 시점에 1회 계산.
 // StructuredOutputParser는 fromZodSchema가 깊은 generic을 만들어 TS2589
 // 위험이 있으므로 AQG와 동일하게 any 캐스팅으로 우회 (오직 generic만 회피).
-function makeFormatInstructions(gameMode: 'blank-typing' | 'term-match'): string {
+function makeFormatInstructions(gameMode: EvalGameMode): string {
   const schema =
-    gameMode === 'blank-typing' ? blankTypingOutputSchema : termMatchOutputSchema;
+    gameMode === 'blank-typing'
+      ? blankTypingOutputSchema
+      : gameMode === 'term-match'
+        ? termMatchOutputSchema
+        : multipleChoiceOutputSchema;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const parser = StructuredOutputParser.fromZodSchema(schema as any);
   return parser.getFormatInstructions();
 }
 
-const FORMAT_INSTRUCTIONS_BY_MODE = {
+const FORMAT_INSTRUCTIONS_BY_MODE: Record<EvalGameMode, string> = {
   'blank-typing': makeFormatInstructions('blank-typing'),
   'term-match': makeFormatInstructions('term-match'),
-} as const;
+  'multiple-choice': makeFormatInstructions('multiple-choice'),
+};
 
-function getPromptTemplate(gameMode: 'blank-typing' | 'term-match') {
-  return gameMode === 'blank-typing'
-    ? BLANK_TYPING_GENERATION_PROMPT
-    : TERM_MATCH_GENERATION_PROMPT;
+function getPromptTemplate(gameMode: EvalGameMode) {
+  if (gameMode === 'blank-typing') return BLANK_TYPING_GENERATION_PROMPT;
+  if (gameMode === 'term-match') return TERM_MATCH_GENERATION_PROMPT;
+  return MULTIPLE_CHOICE_GENERATION_PROMPT;
 }
 
 /**
@@ -104,7 +113,9 @@ export function renderEvalMessages(vars: EvalPromptVars): {
   const focusLine =
     vars.gameMode === 'blank-typing'
       ? `\n\n*** 평가 지시 ***\n이번 문제의 정답에는 반드시 \`${vars.seedFocusKeyword}\`가 포함되어야 합니다.`
-      : `\n\n*** 평가 지시 ***\n이번 용어 문제의 정답은 반드시 \`${vars.seedFocusKeyword}\`이어야 합니다.`;
+      : vars.gameMode === 'term-match'
+        ? `\n\n*** 평가 지시 ***\n이번 용어 문제의 정답은 반드시 \`${vars.seedFocusKeyword}\`이어야 합니다.`
+        : `\n\n*** 평가 지시 ***\n이번 객관식 문제의 정답 옵션 text에는 반드시 \`${vars.seedFocusKeyword}\`가 포함되어야 합니다.`;
 
   return { system, user: userBase + focusLine };
 }
@@ -127,7 +138,9 @@ export default function buildEvalPromptForPromptfoo(context: {
     typeof v.difficulty !== 'string' ||
     !Array.isArray(v.allowedKeywords) ||
     typeof v.seedFocusKeyword !== 'string' ||
-    (v.gameMode !== 'blank-typing' && v.gameMode !== 'term-match')
+    (v.gameMode !== 'blank-typing' &&
+      v.gameMode !== 'term-match' &&
+      v.gameMode !== 'multiple-choice')
   ) {
     throw new Error(
       `build-eval-prompt: vars 필수 필드 누락/오류 — received keys: ${Object.keys(v).join(', ')}`,

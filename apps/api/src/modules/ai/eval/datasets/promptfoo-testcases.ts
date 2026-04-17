@@ -1,5 +1,6 @@
 import { goldSetA, type EvalDatasetEntry } from './gold-set-a';
 import { goldSetB } from './gold-set-b';
+import { goldSetMc } from './gold-set-mc';
 
 /**
  * Gold Set A + B → promptfoo testCase 변환 (SDD v2 §5.3).
@@ -18,6 +19,9 @@ import { goldSetB } from './gold-set-b';
  * 따라서 default export는 `PromptfooTestCase[]` 배열 그대로.
  */
 
+export type PromptfooGameMode = 'blank-typing' | 'term-match' | 'multiple-choice';
+export type PromptfooGoldSet = 'A' | 'B' | 'MC';
+
 export interface PromptfooTestCase {
   description: string;
   vars: {
@@ -26,21 +30,26 @@ export interface PromptfooTestCase {
     difficulty: string;
     allowedKeywords: string[];
     seedFocusKeyword: string;
-    gameMode: 'blank-typing' | 'term-match';
-    /** 감사 trace에 표시되는 entry id (gold-a-*, gold-b-*) */
+    gameMode: PromptfooGameMode;
+    /** 감사 trace에 표시되는 entry id (gold-a-*, gold-b-*, gold-mc-*) */
     entryId: string;
-    /** 'A' (Recall) 또는 'B' (Generalization) — report-generator stratification key */
-    goldSet: 'A' | 'B';
+    /**
+     * 'A' (Recall) / 'B' (Generalization) / 'MC' (ADR-012 Mode 6) —
+     * report-generator stratification key
+     */
+    goldSet: PromptfooGoldSet;
   };
 }
 
-function toTestCase(goldSet: 'A' | 'B') {
+function toTestCase(goldSet: PromptfooGoldSet) {
   return (entry: EvalDatasetEntry): PromptfooTestCase => {
-    // EvalDatasetEntry.gameMode는 5개 모드 union이지만 Gold Set A/B는
-    // blank-typing/term-match만 포함. 런타임 가드로 좁힌다 (방어적).
-    if (entry.gameMode !== 'blank-typing' && entry.gameMode !== 'term-match') {
+    if (
+      entry.gameMode !== 'blank-typing' &&
+      entry.gameMode !== 'term-match' &&
+      entry.gameMode !== 'multiple-choice'
+    ) {
       throw new Error(
-        `promptfoo-testcases: 지원하지 않는 gameMode '${entry.gameMode}' (entry id=${entry.id}). Gold Set A/B는 blank-typing/term-match만 허용`,
+        `promptfoo-testcases: 지원하지 않는 gameMode '${entry.gameMode}' (entry id=${entry.id}). blank-typing/term-match/multiple-choice만 허용`,
       );
     }
     return {
@@ -61,13 +70,18 @@ function toTestCase(goldSet: 'A' | 'B') {
 }
 
 /**
- * Gold Set A 30 + Gold Set B 30 = 총 60 testCase.
+ * Gold Set A 30 + B 30 + MC 15 = 총 75 testCase.
  * promptfoo는 각 testCase × providers × repeat 만큼 호출을 발생시킨다.
  *
- * SDD v2 §3.3: 표본 수는 prompt × 5 run, 모델 5개 → 60 × 5 × 5 = 1,500 호출/라운드.
+ * SDD v2 §3.3 표본 산정은 기존 60 케이스 기준 1,500 호출/라운드. MC 15 추가 시
+ * 75 × 5 × 5 = 1,875 호출/라운드로 증가 (약 +25%). MC 30건 완성 후 재측정.
  */
 export function buildPromptfooTestCases(): PromptfooTestCase[] {
-  return [...goldSetA.map(toTestCase('A')), ...goldSetB.map(toTestCase('B'))];
+  return [
+    ...goldSetA.map(toTestCase('A')),
+    ...goldSetB.map(toTestCase('B')),
+    ...goldSetMc.map(toTestCase('MC')),
+  ];
 }
 
 const testCases = buildPromptfooTestCases();

@@ -5,21 +5,24 @@ import testCases, {
 } from './promptfoo-testcases';
 import { goldSetA } from './gold-set-a';
 import { goldSetB } from './gold-set-b';
+import { goldSetMc } from './gold-set-mc';
 
 /**
  * promptfoo testCase 어댑터 단위 테스트.
  *
  * 검증:
- *  - default export가 Gold Set A + B를 모두 포함 (총 개수)
+ *  - default export가 Gold Set A + B + MC를 모두 포함 (총 개수)
  *  - vars 필수 필드가 모두 채워져 있어 build-eval-prompt + assertion이 실패하지 않음
- *  - goldSet 분류 키가 'A' / 'B'로 정확
+ *  - goldSet 분류 키가 'A' / 'B' / 'MC'로 정확
  *  - allowedKeywords가 mutable copy (원본 readonly 보호)
  */
 
 describe('buildPromptfooTestCases', () => {
-  it('Gold Set A + B의 합과 동일한 길이를 반환', () => {
+  it('Gold Set A + B + MC의 합과 동일한 길이를 반환', () => {
     const cases = buildPromptfooTestCases();
-    expect(cases).toHaveLength(goldSetA.length + goldSetB.length);
+    expect(cases).toHaveLength(
+      goldSetA.length + goldSetB.length + goldSetMc.length,
+    );
   });
 
   it('default export = build 함수 호출 결과 (모듈 로드 시 1회 계산)', () => {
@@ -35,9 +38,11 @@ describe('buildPromptfooTestCases', () => {
       expect(Array.isArray(tc.vars.allowedKeywords)).toBe(true);
       expect(tc.vars.allowedKeywords.length).toBeGreaterThan(0);
       expect(typeof tc.vars.seedFocusKeyword).toBe('string');
-      expect(['blank-typing', 'term-match']).toContain(tc.vars.gameMode);
-      expect(['A', 'B']).toContain(tc.vars.goldSet);
-      expect(tc.vars.entryId).toMatch(/^gold-[ab]-/);
+      expect(['blank-typing', 'term-match', 'multiple-choice']).toContain(
+        tc.vars.gameMode,
+      );
+      expect(['A', 'B', 'MC']).toContain(tc.vars.goldSet);
+      expect(tc.vars.entryId).toMatch(/^gold-(a|b|mc)-/);
     }
   });
 
@@ -53,6 +58,16 @@ describe('buildPromptfooTestCases', () => {
     const bCases = cases.filter((c) => c.vars.goldSet === 'B');
     expect(bCases).toHaveLength(goldSetB.length);
     expect(bCases[0].vars.entryId).toMatch(/^gold-b-/);
+  });
+
+  it('Gold Set MC entry는 goldSet=MC + gameMode=multiple-choice로 매핑', () => {
+    const cases = buildPromptfooTestCases();
+    const mcCases = cases.filter((c) => c.vars.goldSet === 'MC');
+    expect(mcCases).toHaveLength(goldSetMc.length);
+    for (const tc of mcCases) {
+      expect(tc.vars.entryId).toMatch(/^gold-mc-/);
+      expect(tc.vars.gameMode).toBe('multiple-choice');
+    }
   });
 
   it('allowedKeywords는 원본의 mutable copy (push가 원본에 영향 없음)', () => {

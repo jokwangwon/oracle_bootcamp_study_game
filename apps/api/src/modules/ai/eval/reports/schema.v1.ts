@@ -76,11 +76,11 @@ export const evalProviderSchema = z.object({
 // ============================================================================
 
 export const evalTestCaseSchema = z.object({
-  /** Gold Set entry id (예: 'gold-a-blank-typing-01') */
+  /** Gold Set entry id (예: 'gold-a-blank-typing-01', 'gold-mc-01') */
   entryId: z.string().min(1),
-  /** 'A' (Recall) 또는 'B' (Generalization) */
-  goldSet: z.enum(['A', 'B']),
-  gameMode: z.enum(['blank-typing', 'term-match']),
+  /** 'A' (Recall) / 'B' (Generalization) / 'MC' (ADR-012 Mode 6) */
+  goldSet: z.enum(['A', 'B', 'MC']),
+  gameMode: z.enum(['blank-typing', 'term-match', 'multiple-choice']),
   topic: z.string().min(1),
   week: z.number().int().positive(),
   difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
@@ -140,7 +140,7 @@ const passRateSchema = z.object({
 
 const stratifiedBucketSchema = z.object({
   difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
-  gameMode: z.enum(['blank-typing', 'term-match']),
+  gameMode: z.enum(['blank-typing', 'term-match', 'multiple-choice']),
   total: z.number().int().nonnegative(),
   /** 각 메트릭의 bucket 내 pass rate */
   metricRates: z.record(z.string(), z.number().min(0).max(1)),

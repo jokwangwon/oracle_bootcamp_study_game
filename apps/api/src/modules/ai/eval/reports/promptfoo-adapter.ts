@@ -117,7 +117,7 @@ export function aggregateCallRecords(records: readonly RawCallRecord[]): EvalAgg
 
 interface BucketKey {
   difficulty: 'EASY' | 'MEDIUM' | 'HARD';
-  gameMode: 'blank-typing' | 'term-match';
+  gameMode: 'blank-typing' | 'term-match' | 'multiple-choice';
 }
 
 function computeStratified(records: readonly RawCallRecord[]): EvalAggregate['stratified'] {
