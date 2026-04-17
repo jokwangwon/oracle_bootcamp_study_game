@@ -1,6 +1,7 @@
 import type { GameModeId } from '@oracle-game/shared';
 
 import { BLANK_TYPING_GENERATION_PROMPT } from './blank-typing.prompt';
+import { MULTIPLE_CHOICE_GENERATION_PROMPT } from './multiple-choice.prompt';
 import { TERM_MATCH_GENERATION_PROMPT } from './term-match.prompt';
 import type { PromptTemplate } from './types';
 
@@ -14,6 +15,7 @@ export const GENERATION_PROMPTS_BY_MODE: Partial<
 > = {
   'blank-typing': BLANK_TYPING_GENERATION_PROMPT,
   'term-match': TERM_MATCH_GENERATION_PROMPT,
+  'multiple-choice': MULTIPLE_CHOICE_GENERATION_PROMPT,
 };
 
 export type { PromptTemplate } from './types';

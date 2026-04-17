@@ -61,12 +61,35 @@ export const scenarioContentSchema = z.object({
     .min(1),
 });
 
+/**
+ * 객관식 콘텐츠 (ADR-012 Mode 6).
+ * options[i].id 가 안정 식별자(A/B/C/D), Question.answer는 정답 option id 배열.
+ * allowMultiple=false(기본) 시 정답 1개, true 시 2개 이상 허용.
+ *
+ * 고유 id 제약은 AiQuestionGenerator 에서 별도 검증 (z.discriminatedUnion은
+ * ZodObject 원형 멤버만 허용하므로 refine 을 스키마에 붙이지 않는다).
+ */
+export const multipleChoiceContentSchema = z.object({
+  type: z.literal('multiple-choice'),
+  stem: z.string().min(1),
+  options: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        text: z.string().min(1),
+      }),
+    )
+    .min(2),
+  allowMultiple: z.boolean().optional(),
+});
+
 export const questionContentSchema = z.discriminatedUnion('type', [
   blankTypingContentSchema,
   termMatchContentSchema,
   resultPredictContentSchema,
   categorySortContentSchema,
   scenarioContentSchema,
+  multipleChoiceContentSchema,
 ]);
 
 export const questionSchema = z.object({
@@ -79,6 +102,7 @@ export const questionSchema = z.object({
     'result-predict',
     'category-sort',
     'scenario',
+    'multiple-choice',
   ]),
   difficulty: z.enum(['EASY', 'MEDIUM', 'HARD']),
   content: questionContentSchema,

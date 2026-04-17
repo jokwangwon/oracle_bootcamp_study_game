@@ -3,9 +3,11 @@ import { StructuredOutputParser } from '@langchain/core/output_parsers';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import type { z } from 'zod';
 import type {
+  AnswerFormat,
   BlankTypingContent,
   Difficulty,
   GameModeId,
+  MultipleChoiceContent,
   TermMatchContent,
   Topic,
 } from '@oracle-game/shared';
@@ -16,6 +18,7 @@ import { ModelDigestProvider } from './model-digest.provider';
 import { PromptManager } from './prompt-manager';
 import {
   blankTypingOutputSchema,
+  multipleChoiceOutputSchema,
   termMatchOutputSchema,
 } from './eval/output-schemas';
 import { QuestionEntity } from '../content/entities/question.entity';
@@ -87,9 +90,13 @@ export class AiQuestionGenerator {
     if (input.count < 1 || input.count > 20) {
       throw new Error('count는 1~20 사이여야 합니다');
     }
-    if (input.gameMode !== 'blank-typing' && input.gameMode !== 'term-match') {
+    if (
+      input.gameMode !== 'blank-typing' &&
+      input.gameMode !== 'term-match' &&
+      input.gameMode !== 'multiple-choice'
+    ) {
       throw new Error(
-        `현재 AI 생성은 blank-typing, term-match만 지원합니다 (received: ${input.gameMode})`,
+        `현재 AI 생성은 blank-typing, term-match, multiple-choice만 지원합니다 (received: ${input.gameMode})`,
       );
     }
 
@@ -163,16 +170,17 @@ export class AiQuestionGenerator {
 
     // 모드별로 직접 조립 (Pick<QuestionEntity, ...>를 거치면 DeepPartial과
     // 결합되어 TS2589 발생, 따라서 인라인 + content 변수에 명시 타입).
-    let content: BlankTypingContent | TermMatchContent;
+    let content: BlankTypingContent | TermMatchContent | MultipleChoiceContent;
     let answer: string[];
     let explanation: string;
+    let answerFormat: AnswerFormat = 'single-token';
 
     if (input.gameMode === 'blank-typing') {
       const p = parsed as z.infer<typeof blankTypingOutputSchema>;
       content = { type: 'blank-typing', sql: p.sql, blanks: p.blanks };
       answer = p.answer;
       explanation = p.explanation;
-    } else {
+    } else if (input.gameMode === 'term-match') {
       const p = parsed as z.infer<typeof termMatchOutputSchema>;
       content = {
         type: 'term-match',
@@ -181,6 +189,33 @@ export class AiQuestionGenerator {
       };
       answer = p.answer;
       explanation = p.explanation;
+    } else {
+      const p = parsed as z.infer<typeof multipleChoiceOutputSchema>;
+      const optionIds = p.options.map((o) => o.id);
+      if (new Set(optionIds).size !== optionIds.length) {
+        throw new Error(`options[].id 중복: ${optionIds.join(',')}`);
+      }
+      const invalid = p.correctOptionIds.filter((id) => !optionIds.includes(id));
+      if (invalid.length > 0) {
+        throw new Error(
+          `correctOptionIds에 options에 없는 id 포함: ${invalid.join(',')}`,
+        );
+      }
+      const allowMultiple = Boolean(p.allowMultiple);
+      if (!allowMultiple && p.correctOptionIds.length !== 1) {
+        throw new Error(
+          `allowMultiple=false인데 정답이 ${p.correctOptionIds.length}개 (1개만 허용)`,
+        );
+      }
+      content = {
+        type: 'multiple-choice',
+        stem: p.stem,
+        options: p.options,
+        allowMultiple: allowMultiple || undefined,
+      };
+      answer = p.correctOptionIds;
+      explanation = p.explanation;
+      answerFormat = 'multiple-choice';
     }
 
     // Zod content 검증 (계산적 검증 — 헌법 §3)
@@ -195,10 +230,19 @@ export class AiQuestionGenerator {
     const textsToValidate: string[] = [];
     if (content.type === 'blank-typing') {
       textsToValidate.push(content.sql);
-    } else {
+      textsToValidate.push(answer.join(' '));
+    } else if (content.type === 'term-match') {
       textsToValidate.push(content.description);
+      textsToValidate.push(answer.join(' '));
+    } else {
+      // multiple-choice — stem + options.text + explanation 대상.
+      // answer는 option id(A/B/...)이므로 scope 검증에서 제외.
+      textsToValidate.push(content.stem);
+      for (const opt of content.options) {
+        textsToValidate.push(opt.text);
+      }
+      textsToValidate.push(explanation);
     }
-    textsToValidate.push(answer.join(' '));
 
     for (const text of textsToValidate) {
       const v = await this.scopeValidator.validateText(text, input.week, input.topic);
@@ -215,6 +259,7 @@ export class AiQuestionGenerator {
       topic: input.topic,
       week: input.week,
       gameMode: input.gameMode,
+      answerFormat,
       difficulty: input.difficulty,
       content,
       answer,
@@ -253,7 +298,9 @@ export class AiQuestionGenerator {
     const schema =
       gameMode === 'blank-typing'
         ? blankTypingOutputSchema
-        : termMatchOutputSchema;
+        : gameMode === 'term-match'
+          ? termMatchOutputSchema
+          : multipleChoiceOutputSchema;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return StructuredOutputParser.fromZodSchema(schema as any) as {

@@ -42,5 +42,35 @@ export const termMatchOutputSchema = z.object({
   explanation: z.string().min(1),
 });
 
+/**
+ * 객관식 LLM 출력 스키마 (ADR-012 Mode 6).
+ *
+ * 운영 매핑: correctOptionIds → Question.answer (option id 배열 그대로).
+ * Question.content 는 { type: 'multiple-choice', stem, options, allowMultiple? }
+ * 로 조립된다 (type 필드는 AQG가 부여).
+ *
+ * 검증 순서 (계산적 → 추론적, 헌법 §3):
+ *   1. 본 Zod 스키마로 구조 검증
+ *   2. AQG 가 correctOptionIds ⊆ options[].id 확인
+ *   3. options[].id 고유성 확인
+ *   4. allowMultiple=false 또는 unset일 때 correctOptionIds.length === 1
+ *   5. ScopeValidator 로 stem + options[].text + explanation 검증
+ */
+export const multipleChoiceOutputSchema = z.object({
+  stem: z.string().min(1),
+  options: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        text: z.string().min(1),
+      }),
+    )
+    .min(2),
+  correctOptionIds: z.array(z.string().min(1)).min(1),
+  allowMultiple: z.boolean().optional(),
+  explanation: z.string().min(1),
+});
+
 export type BlankTypingOutput = z.infer<typeof blankTypingOutputSchema>;
 export type TermMatchOutput = z.infer<typeof termMatchOutputSchema>;
+export type MultipleChoiceOutput = z.infer<typeof multipleChoiceOutputSchema>;

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThanOrEqual, Repository } from 'typeorm';
 import type {
+  AnswerFormat,
   Difficulty,
   GameModeId,
   QuestionContent,
@@ -31,6 +32,8 @@ export interface SaveQuestionInput {
   topic: Topic;
   week: number;
   gameMode: GameModeId;
+  /** ADR-012 — 미지정 시 DB default 'single-token' */
+  answerFormat?: AnswerFormat;
   difficulty: Difficulty;
   content: unknown;
   answer: string[];
