@@ -171,6 +171,7 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-16 | **SDD v2.9 개정** (§1.3/§1.5/§1.6/§2.2/§3.1/§3.2/§3.3/§4.3/§4.4.2/§5.1/§6.2/§7.1/§9/§11 — 문제 형태 재설계 전면 반영) | `architecture/oracle-dba-learning-game-design.md` |
 | 2026-04-16 | **operational-monitoring v1.1** — MT6/MT7/MT8 신설, ops 스키마 확장, ADR-019 승격 트리거 | `architecture/operational-monitoring-design.md` |
 | 2026-04-16 | **운영 부팅 회귀 6건 수정 + env 노출** (병렬 2에이전트, 9초 간격 커밋) — shared tsconfig ESM→CJS / DI `@Optional()` 3곳 / AiModule TypeOrmModule / nest-cli assets / BullMQ jobId / docker-compose env 6건 / `DIGEST_PIN_SKIP` preprocess. 22건 Notion 동기화 실증 | `SESSION_2026-04-16.md`, 커밋 `327578a`, `afde74b` |
+| 2026-04-17 | **MVP-A 완주 + MVP-B 2/10 착수** — 7 커밋, 84 신규 TDD (380 → 464). MVP-A: Mode 6 객관식 + answerFormat + MT6-8 스켈레톤 + AI MC 분기 + MC promptfoo 하네스. MVP-B: GradingModule 스켈레톤 + AnswerSanitizer + answer_history 메타 컬럼 + Layer 2 Keyword + Orchestrator(Layer 1/3 DI stub). 실시간 대전 후순위 결정. | `SESSION_2026-04-17.md`, 커밋 `452e9aa`/`6c282f2`/`1c29b3b`/`a9895c4`/`c38cc35`/`bc2ccaa` |
 
 ---
 

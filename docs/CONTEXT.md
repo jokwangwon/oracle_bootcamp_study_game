@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-16 (**문제 형태 재설계 v2.9 합의 완료 — consensus-004 + ADR-012~017 6건 + SDD v2.9 + operational-monitoring v1.1**. 운영 모델 교체 + Phase B + Notion Stage 1 + 관리자 review + 결과 정답/해설 노출 — **단계 10 + ADR-011 P1 운영 개시 준비 완료**. 360 tests / typecheck clean. **MVP-A 착수 대기**)
+**최종 업데이트**: 2026-04-17 (**MVP-A 완주 (객관식 모드 Mode 6 + MT6/7/8 스켈레톤 + AI 생성 MC 분기 + promptfoo MC 하네스) + MVP-B 2/10 세션 (GradingModule + AnswerSanitizer + Layer 2 Keyword + Orchestrator 스켈레톤)**. 464 tests / typecheck clean. `feature/oss-model-eval` 브랜치 main 대비 19 커밋 앞섬. **MVP-B Session 3: Layer 1 AST + node-sql-parser 착수 대기**)
 
 ---
 
@@ -147,11 +147,12 @@ Phase 4: 통합 테스트 + 배포
   - **ADR-012~017 6건 작성 완료**: answerFormat 축 / 역피라미드 3단 채점(AST→키워드→LLM-judge) / 캡스톤 구조 / 실시간 사전 풀 / LLM-judge 안전(인젝션+PII+WORM) / MT6-7-8 지표
   - **SDD v2.9 개정 완료**: §1.3 문제형태 추가 + §1.5/§1.6 신설(primary 모델 + 메타편향 6항) + §2.2 3개 모듈 신설 + §3.1 EvaluationResult 확장 + §3.2 Mode 6 신설 + §3.3 매핑 확장 + §4.3 신규 프롬프트 5종 + **§4.4.2 3단 채점 신설** + §5.1 ERD 확장 + §6.2 실시간 재정의 + §7.1 API 확장 + §9 MVP-A~D 재구성 + §11 v2.9 이력
   - **operational-monitoring v1.1 개정 완료**: MT6(free-form-canonical-match) / MT7(capstone-step-consistency) / MT8(llm-judge-invocation-ratio) 신설 + ops 컬럼 확장 + 6종 event kind 추가 + ADR-019 승격 트리거
-- 🔴 **MVP-A 착수 대기** (2주) — 객관식 모드(Mode 6) + `answer_format` 컬럼 + 실시간 사전 풀 매칭(MC 전용) + MT6 스켈레톤. ADR-012/015/017
-- 🔴 MVP-B (4주) — free-form 4형태 + 역피라미드 3단 채점 + LLM-judge 안전 + answer_history WORM + dry-run + SM-2. ADR-012/013/016/017/018
+- ✅ **MVP-A 완료 (2026-04-17, 커밋 4건)** — `452e9aa` Mode 6 객관식 + answerFormat 축 (20 TDD) / `6c282f2` MT6/MT7/MT8 스켈레톤 (ops 차원 컬럼 4 + event kind 3 + Gate breach 3종 / 10 TDD) / `1c29b3b` AI 생성 MC 분기 (AQG 3중 계산적 검증 / 6 TDD) / `a9895c4` MC promptfoo 하네스 + gold-set-mc 15건 (16 TDD). ADR-012 §1~4·§6·§7 이행. §5 Mode 1 variants는 MVP-B §10(free-form 합류 시).
+- 🟡 **MVP-B 진행 중 (2/10 세션 완료, 2026-04-17)** — `c38cc35` Session 1: GradingModule 스켈레톤 + AnswerSanitizer (ADR-016 §2, 26 TDD) + answer_history 채점 메타 4컬럼(nullable) / `bc2ccaa` Session 2: Layer 2 KeywordCoverageGrader (13 TDD, ADR-013 §Layer 2) + GradingOrchestrator (10 TDD, Layer 1/3 DI Symbol + default UNKNOWN stub). **GradingModule AppModule 미등록 유지** — 회귀 위험 0. Roadmap: memory `project_mvp_b_plan.md`.
 - 🔴 MVP-C (3주) — 주차별 미니 캡스톤 + 3-entity + 주제 팩 4종 + MT7. ADR-014
 - 🔴 MVP-C' (2주) — 최종 캡스톤 2트랙(SQL/PL-SQL). ADR-014
 - 🔴 MVP-D (2주) — 주간 릴리스 cron + grading_appeals UI + mc-distractor assertion. ADR-015/016/017
+- 🔴 **실시간 대전 (ADR-015) — 후순위** (사용자 지시 2026-04-17 / memory `project_realtime_priority.md`). 솔로 학습 흐름이 우선
 - 🔴 BullMQ 워커 + AI 문제 생성
 - 🔴 노션 import → 범위 추론 (SDD §4.2 v2 설계 완료, 구현 대기)
 
@@ -176,25 +177,25 @@ Phase 4: 통합 테스트 + 배포
 | 9.6 | Phase 0 Claude 베이스라인 (Anthropic 크레딧 충전 후) | 🔴 후순위 |
 | **10** | **운영 모델 교체 — `ChatAnthropic` → `ChatOllama` (M3)** | 🔴 다음 세션 (ADR-011 채택 조건 3건 선행) |
 
-### 다음 세션 우선순위 (v2.9 재편)
+### 다음 세션 우선순위 (v2.9 재편 + MVP-B 진행 중)
 
-**최우선 — MVP-A 착수 (ADR-012/015/017)**
-1. **[MVP-A] 객관식 모드(Mode 6) + `answer_format` 컬럼** — `packages/shared/src/types/question.ts` `MultipleChoiceContent` 추가 + `MultipleChoiceMode` Strategy 구현 + `questions.answer_format` 마이그레이션 + TDD. ADR-012.
-2. **[MVP-A] 실시간 사전 풀 매칭 스켈레톤** — `MatchModule` 신설 + `status='approved'` 강제 + 주차 동기화 매칭 + Socket.IO 라운드 E2E. ADR-015.
-3. **[MVP-A] MT6 스켈레톤** — `ops_question_measurements` 컬럼 확장(`mode`/`answer_format`/`grading_method`/`grader_digest`) + `OpsAggregationService` MT6/MT7/MT8 집계 추가. ADR-017.
-4. **[MVP-A] MC 전용 promptfoo assertion** — `mc-option-consistency` 추가 + 객관식 gold set 30건.
+**최우선 — MVP-B Session 3/10 (ADR-013 Layer 1 AST)**
+1. **[MVP-B Session 3] Layer 1 `AstCanonicalGrader` 신설** — `node-sql-parser` 의존성 추가 + Oracle 방언 커버리지 (DUAL/ROWNUM/CONNECT BY/(+) 조인/NVL/DECODE/LISTAGG/MERGE). 정규화: identifier case fold / alias 통일 / 공백·주석 제거 / 절 순서 표준화 (SELECT→FROM→WHERE→GROUP→HAVING→ORDER). 비교 대상: 테이블·컬럼 집합 / JOIN 조건 / WHERE 술어 집합 / GROUP BY 집합 / SELECT 프로젝션 순서(프로젝션만 순서 민감). `LAYER_1_GRADER` DI 토큰에 바인딩 — Orchestrator 변경 불필요. ADR-013.
+2. **[MVP-B Session 4] Layer 3 `LlmJudgeGrader`** — Langfuse `evaluation/free-form-sql-v1` 프롬프트 등록 (ADR-009 정합) + temperature=0 + seed=42 + StructuredOutputParser + 경계 태그 + MT8 호출률 기록. ADR-016 7개 안전장치 전체 적용.
+3. **[MVP-B Session 5] `answer_history` WORM 트리거 + `grading_appeals` 테이블/엔드포인트** — DB 레벨 REVOKE UPDATE + append-only 트리거. `POST /api/grading/:answerHistoryId/appeal`. ADR-016.
+4. **[MVP-B Session 6] GameSessionService 배선 + AppModule 등록** — answerFormat='free-form' 분기에서 GradingOrchestrator 호출. 기존 BlankTyping/TermMatch/MultipleChoice는 영향 없음.
+5. **[MVP-B Session 7~10] SM-2 / dry-run / 작성형 gold set / Mode 1 variants.
 
 **병렬 운영 (기존 유지)**
-5. **사용자 작업: `.env` 운영 교체 + 재기동** — `LLM_PROVIDER=ollama` / `LLM_MODEL=qwen3-coder-next:latest`로 변경 후 docker compose 재기동. 부팅 시 ModelDigestProvider pin 검증 (fail-closed).
-6. **`NOTION_DATABASE_ID` 사용자 입력 + 노션 sync 실증** — Notion DB URL의 32자 hex(하이픈 제거)를 `.env`에 입력 + `POST /api/notion/sync` 수동 호출로 Stage 1 e2e 검증.
-7. **프론트 결과 페이지 UI** — submitAnswer 응답의 correctAnswer/explanation을 표시 (MVP-A 확장 전 처리 권장).
+6. **사용자 작업: `.env` 운영 교체 완료 상태** — 2026-04-16 이후 기동 정상 (LLM_PROVIDER=ollama, digest 검증 통과).
+7. **`NOTION_DATABASE_ID` 사용자 입력 + 노션 sync 실증** — 2026-04-16 `POST /api/notion/sync`로 22건 동기화 이미 실증됨. Stage 2(LLM 정리) 진입 여부는 MVP-B 완료 후 결정.
+8. **프론트 결과 페이지 UI** — submitAnswer 응답의 correctAnswer/explanation 표시 (MC 도입으로 필요성 증가).
 
-**MVP-A 이후 순차**
-8. **[MVP-B] 작성형 4형태 + 역피라미드 3단 채점** — `GradingModule` 신설 + Layer 1 AST(`node-sql-parser` + Oracle 방언) + Layer 2 키워드 + Layer 3 LLM-judge(ADR-016 안전 프로토콜) + dry-run 시뮬레이터 + SM-2. ADR-012/013/016/017/018.
-9. **[MVP-B] `answer_history` WORM + `grading_appeals`** — UPDATE 권한 회수 + appeal 엔드포인트. ADR-016.
-10. **[MVP-C] 주차별 미니 캡스톤** — `CapstoneModule` 신설 + 3-entity 마이그레이션 + 주제 팩 4종 + `userId×주차` 시드. ADR-014.
-11. **[MVP-C'] 최종 캡스톤 2트랙 (SQL/PL-SQL)** — 각 트랙 10~15 step + 관리자 승인. ADR-014.
-12. **[MVP-D] 주간 릴리스 cron + mc-distractor-plausibility assertion**. ADR-015/017.
+**MVP-B 이후 순차**
+9. **[MVP-C] 주차별 미니 캡스톤** — `CapstoneModule` 신설 + 3-entity 마이그레이션 + 주제 팩 4종 + `userId×주차` 시드. ADR-014.
+10. **[MVP-C'] 최종 캡스톤 2트랙 (SQL/PL-SQL)** — 각 트랙 10~15 step + 관리자 승인. ADR-014.
+11. **[MVP-D] 주간 릴리스 cron + mc-distractor-plausibility assertion + grading_appeals UI**. ADR-015/016/017.
+12. **실시간 대전 (ADR-015) — 후순위** (2026-04-17 사용자 결정). 위 과제 완료 후 개별 섹션으로 진행.
 
 **후순위 (MVP 스프린트 병렬/이후)**
 13. **Notion Stage 2 (LLM 정리)** — input sanitization → ChatOllama → StructuredOutputParser → `notion_documents.structured_content`. raw_markdown 불변 보존.
