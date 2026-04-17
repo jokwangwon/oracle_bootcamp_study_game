@@ -48,6 +48,30 @@ export class AnswerHistoryEntity {
   @Column({ type: 'varchar', length: 30, name: 'game_mode' })
   gameMode!: GameModeId;
 
+  /**
+   * ADR-013 §기록 필드 — 채점 메타 컬럼 (nullable, 점진적 도입).
+   *
+   * 현재 BlankTyping/TermMatch/MultipleChoice는 all-or-nothing 채점이라 null.
+   * MVP-B 작성형 파이프라인 가동 시 채움:
+   *   - grading_method: 'ast' | 'keyword' | 'llm-v{N}' | 'held' | 'admin-override'
+   *   - grader_digest: AST/keyword는 harness_version, LLM은 모델 digest (ADR-011 pin 재사용)
+   *   - grading_layers_used: [1], [1,2], [1,2,3] 중 하나 (역피라미드 경로 기록)
+   *   - partial_score: 0.0 ~ 1.0, Layer 2 coverage 또는 Layer 3 confidence
+   *
+   * WORM 트리거는 별도 마이그레이션 (ADR-016 §6). 컬럼만 먼저 연다.
+   */
+  @Column({ type: 'varchar', length: 32, name: 'grading_method', nullable: true })
+  gradingMethod!: string | null;
+
+  @Column({ type: 'text', name: 'grader_digest', nullable: true })
+  graderDigest!: string | null;
+
+  @Column({ type: 'jsonb', name: 'grading_layers_used', nullable: true })
+  gradingLayersUsed!: number[] | null;
+
+  @Column({ type: 'numeric', precision: 4, scale: 3, name: 'partial_score', nullable: true })
+  partialScore!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }
