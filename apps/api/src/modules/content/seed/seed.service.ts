@@ -7,6 +7,12 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { AstCanonicalGrader } from '../../grading/graders/ast-canonical.grader';
+import {
+  formatReport,
+  validateFreeFormSeeds,
+  type FreeFormSeedCandidate,
+} from '../../grading/validate-free-form-seeds';
 import { QuestionEntity } from '../entities/question.entity';
 import { WeeklyScopeEntity } from '../entities/weekly-scope.entity';
 import { ScopeValidatorService } from '../services/scope-validator.service';
@@ -73,6 +79,10 @@ export class SeedService implements OnApplicationBootstrap {
       return { inserted: { questions: 0, scopes: 0 } };
     }
 
+    // 0.5. free-form 정답 템플릿 Layer 1 파싱 사전검증 (ADR-013, 3+1 합의 MVP-B Session 3).
+    //      현재 시드는 free-form 없음 → no-op. 추후 추가 시 자동 게이트화.
+    this.validateFreeFormSeedsOrThrow();
+
     // 1. weekly_scope 먼저 INSERT (검증 기준이 되므로)
     //    week1 sql-basics + week2 transactions를 모두 등록
     await this.insertScope(WEEK1_SQL_BASICS_SCOPE);
@@ -93,6 +103,29 @@ export class SeedService implements OnApplicationBootstrap {
       `시드 완료: questions=${inserted}, scopes=2 (week1 sql-basics + week2 transactions)`,
     );
     return { inserted: { questions: inserted, scopes: 2 } };
+  }
+
+  private validateFreeFormSeedsOrThrow(): void {
+    const candidates: FreeFormSeedCandidate[] = [
+      ...WEEK1_SQL_BASICS_QUESTIONS,
+      ...WEEK2_TRANSACTIONS_QUESTIONS,
+    ].map((q, i) => ({
+      id: `week${q.week}-${q.gameMode}-${i}`,
+      answerFormat: q.answerFormat,
+      answer: q.answer,
+    }));
+
+    const report = validateFreeFormSeeds(new AstCanonicalGrader(), candidates);
+    if (report.failed.length > 0) {
+      throw new Error(
+        `free-form seed Layer 1 파싱 사전검증 실패:\n${formatReport(report)}`,
+      );
+    }
+    if (report.checked > 0) {
+      this.logger.log(
+        `free-form seed 사전검증 통과: ${report.passed}/${report.checked}`,
+      );
+    }
   }
 
   private async insertScope(seed: WeeklyScopeSeed): Promise<void> {

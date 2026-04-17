@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate:free-form-seeds": "tsx src/scripts/validate-free-form-seeds.ts"
   },
   "dependencies": {
     "@langchain/anthropic": "^0.3.7",
