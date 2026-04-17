@@ -159,12 +159,14 @@ describe('OpsAggregationService.runAggregation', () => {
     free_form_layer1_resolved?: number;
     llm_judge_calls?: number;
     graded_total?: number;
+    parser_dialect_skipped?: number;
   }) {
     const filled = {
       free_form_total: 0,
       free_form_layer1_resolved: 0,
       llm_judge_calls: 0,
       graded_total: 0,
+      parser_dialect_skipped: 0,
       ...raw,
     };
     return {
@@ -370,6 +372,64 @@ describe('OpsAggregationService.runAggregation', () => {
       await service.runAggregation();
 
       expect(eventRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('파서 한계(parser_dialect_skipped) 건수가 window-1 리포트에 투명 표기된다 (ADR-013 Session 3 보정)', async () => {
+      measureRepo = {
+        createQueryBuilder: vi.fn().mockReturnValue(
+          makeBuilder({
+            window_size: 100,
+            mt3_pass_count: 99,
+            mt4_eligible_count: 60,
+            mt4_pass_count: 58,
+            p95_ms: 44900,
+            free_form_total: 30,
+            free_form_layer1_resolved: 25,
+            graded_total: 100,
+            llm_judge_calls: 5,
+            parser_dialect_skipped: 7,
+          }),
+        ),
+      };
+      const service = new OpsAggregationService(
+        measureRepo as never,
+        eventRepo as never,
+        writer as never,
+      );
+
+      await service.runAggregation();
+
+      const [, content] = writer.write.mock.calls[0]!;
+      expect(content).toContain('ADR-013 Session 3 보정');
+      expect(content).toContain('**7건**');
+    });
+
+    it('파서 한계 샘플 0건이면 리포트에 "0건"으로 표기', async () => {
+      measureRepo = {
+        createQueryBuilder: vi.fn().mockReturnValue(
+          makeBuilder({
+            window_size: 100,
+            mt3_pass_count: 99,
+            mt4_eligible_count: 60,
+            mt4_pass_count: 58,
+            p95_ms: 44900,
+            free_form_total: 30,
+            free_form_layer1_resolved: 25,
+            graded_total: 100,
+            llm_judge_calls: 5,
+          }),
+        ),
+      };
+      const service = new OpsAggregationService(
+        measureRepo as never,
+        eventRepo as never,
+        writer as never,
+      );
+
+      await service.runAggregation();
+
+      const [, content] = writer.write.mock.calls[0]!;
+      expect(content).toContain('**0건**');
     });
 
     it('window-1 리포트에 MT6/MT7/MT8 행이 포함된다', async () => {

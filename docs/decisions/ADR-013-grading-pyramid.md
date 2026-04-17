@@ -83,6 +83,23 @@ Layer 3 (LLM-judge)                  [추론적, UNKNOWN일 때만]
 - `grading_layers_used`: `[1]` / `[1,2]` / `[1,2,3]` 배열
 - `partial_score`: 0.0 ~ 1.0
 
+#### 부록 (MVP-B Session 3 — 3+1 합의 보강)
+
+Layer 1 AST grader 가 UNKNOWN 을 반환하여 Layer 2/3 로 강등된 경우, 그 사유를
+다음 필드로 기록한다. **Session 3 은 기록만 (행동 분기는 Session 4+ Rewriter 와
+함께)**. MT6/MT8 집계에서 파서 한계 샘플을 분모에서 제외해 "진짜 모호성" 지표와
+"파서 한계로 인한 강등"을 분리한다.
+
+- `ast_failure_reason`: `'dialect_unsupported' | 'truly_invalid_syntax' | 'empty_answer' | 'non_sql_block' | NULL`
+  - `dialect_unsupported` — Oracle 고유 구문(CONNECT BY / START WITH / PRIOR / LISTAGG / MERGE INTO / `(+)`) 감지 후 파서 throw
+  - `truly_invalid_syntax` — 방언 키워드 없이 파싱 실패 (진짜 문법 오류 의심)
+  - `empty_answer` — 공백·주석 제거 후 의미 있는 SQL 토큰 0
+  - `non_sql_block` — `BEGIN ... END;` 등 채점 범위 외 PL/SQL 블록
+  - `NULL` — Layer 1 정상 판정(PASS/FAIL) 또는 free-form 이 아님
+
+저장 위치는 `answer_history` 와 `ops_question_measurements` 양쪽 (감사·MT 집계용).
+Rewriter(Session 4+) 도입 후 `dialect_unsupported` 비율이 감소해야 정상.
+
 ## 선택지 (Options Considered)
 
 ### 선택지 A: 역피라미드 3단 (채택)

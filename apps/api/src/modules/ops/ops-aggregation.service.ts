@@ -145,14 +145,26 @@ interface RawAggregate {
   mt4_eligible_count: number;
   mt4_pass_count: number;
   p95_ms: number;
-  /** ADR-017 MT6 — free-form 샘플 수 (answer_format='free-form') */
+  /**
+   * ADR-017 MT6 — free-form 샘플 수. **ADR-013 커밋 3 보정**: 파서 한계
+   * (ast_failure_reason IS NOT NULL) 샘플은 분모에서 제외해 "진짜 모호성"만 추적.
+   */
   free_form_total: number;
-  /** Layer 1에서 해소된 free-form 수 (layer_1_resolved=true) */
+  /** Layer 1에서 해소된 free-form 수 (layer_1_resolved=true AND ast_failure_reason IS NULL) */
   free_form_layer1_resolved: number;
-  /** ADR-017 MT8 — grading_method='llm' 채점 수 */
+  /**
+   * ADR-017 MT8 — grading_method='llm' 채점 수. **ADR-013 커밋 3 보정**: 파서 한계
+   * (ast_failure_reason IS NOT NULL) 샘플은 분모/분자에서 제외. 파서 버그가 강제로
+   * LLM 호출을 유발하는 경우가 MT8 breach 로 오인되는 것을 방지.
+   */
   llm_judge_calls: number;
-  /** 채점 기록된 총 샘플 (grading_method IS NOT NULL) */
+  /** 채점 기록된 총 샘플 (grading_method IS NOT NULL AND ast_failure_reason IS NULL) */
   graded_total: number;
+  /**
+   * ADR-013 커밋 3 — 파서 한계로 MT6/MT8 분모에서 제외된 샘플 수.
+   * 리포트 투명성용. Rewriter(Session 4+) 도입 후 감소해야 정상.
+   */
+  parser_dialect_skipped: number;
 }
 
 @Injectable()
@@ -248,20 +260,24 @@ export class OpsAggregationService {
         'p95_ms',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE m.answer_format = 'free-form')",
+        "COUNT(*) FILTER (WHERE m.answer_format = 'free-form' AND m.ast_failure_reason IS NULL)",
         'free_form_total',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE m.answer_format = 'free-form' AND m.layer_1_resolved = TRUE)",
+        "COUNT(*) FILTER (WHERE m.answer_format = 'free-form' AND m.layer_1_resolved = TRUE AND m.ast_failure_reason IS NULL)",
         'free_form_layer1_resolved',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE m.grading_method = 'llm')",
+        "COUNT(*) FILTER (WHERE m.grading_method = 'llm' AND m.ast_failure_reason IS NULL)",
         'llm_judge_calls',
       )
       .addSelect(
-        'COUNT(*) FILTER (WHERE m.grading_method IS NOT NULL)',
+        'COUNT(*) FILTER (WHERE m.grading_method IS NOT NULL AND m.ast_failure_reason IS NULL)',
         'graded_total',
+      )
+      .addSelect(
+        'COUNT(*) FILTER (WHERE m.ast_failure_reason IS NOT NULL)',
+        'parser_dialect_skipped',
       )
       .where('m.window_index BETWEEN 1 AND :max', { max: MONITORING_WINDOW_SIZE });
 
@@ -278,6 +294,7 @@ export class OpsAggregationService {
       free_form_layer1_resolved: Number(raw?.free_form_layer1_resolved ?? 0),
       llm_judge_calls: Number(raw?.llm_judge_calls ?? 0),
       graded_total: Number(raw?.graded_total ?? 0),
+      parser_dialect_skipped: Number(raw?.parser_dialect_skipped ?? 0),
     };
   }
 
@@ -383,6 +400,8 @@ function renderWindowOneReport(input: RenderInput): string {
     `| MT8 (LLM-judge 호출률) | ${mt8Cell} | ≤ ${pct(thresholds.mt8BreachAbove)} | ${mt8Pass ? '✅' : '❌'} |`,
     `| p95 지연 | ${(raw.p95_ms / 1000).toFixed(1)}s | ≤ ${(thresholds.p95MaxMs / 1000).toFixed(0)}s | ${raw.p95_ms <= thresholds.p95MaxMs ? '✅' : '❌'} |`,
     `| 수강생 신고율 | ${pct(studentReportRate)} | ≤ ${pct(thresholds.studentReportMaxRate)} | ${studentReportRate <= thresholds.studentReportMaxRate ? '✅' : '❌'} |`,
+    '',
+    `> **ADR-013 Session 3 보정**: Layer 1 파서 한계로 MT6/MT8 분모에서 제외된 샘플 **${raw.parser_dialect_skipped}건**. Session 4+ Rewriter 도입 후 감소해야 정상.`,
     '',
     '## 게이트 위반 요약',
     '',

@@ -73,6 +73,19 @@ export class OpsQuestionMeasurementEntity {
    */
   @Column({ type: 'boolean', name: 'layer_1_resolved', nullable: true })
   layer1Resolved!: boolean | null;
+
+  /**
+   * ADR-013 Layer 1 UNKNOWN 사유 (MVP-B Session 3, 커밋 3).
+   *
+   * Layer 1 AST grader 가 UNKNOWN 을 반환해 Layer 2/3 로 강등된 경우 사유를 기록.
+   * MT6/MT8 집계에서 **파서 한계로 인한 샘플**을 분모에서 제외하여 "진짜 모호성"
+   * 지표를 왜곡 없이 추적한다.
+   *
+   * 값: `dialect_unsupported` | `truly_invalid_syntax` | `empty_answer` | `non_sql_block` | NULL
+   * NULL = Layer 1 정상 판정 또는 free-form 이 아님.
+   */
+  @Column({ type: 'varchar', length: 32, name: 'ast_failure_reason', nullable: true })
+  astFailureReason!: string | null;
 }
 
 export interface Mt4FailureDetail {
