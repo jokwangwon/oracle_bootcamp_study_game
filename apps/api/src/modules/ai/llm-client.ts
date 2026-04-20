@@ -7,6 +7,8 @@ import type { BaseMessage } from '@langchain/core/messages';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
 import { CallbackHandler } from 'langfuse-langchain';
 
+import { MaskingLangfuseCallbackHandler } from './masking-callback-handler';
+
 /**
  * LLM 클라이언트 (ADR-009 + SDD v2 §7).
  *
@@ -177,7 +179,10 @@ export class LlmClient {
       return null;
     }
 
-    return new CallbackHandler({
+    // consensus-005 선행 PR: CallbackHandler 를 마스킹 래퍼로 교체.
+    // Langfuse cloud 에 전송되는 payload 에서 `<student_answer>` 태그 내부
+    // 평문을 해시 메타로 치환. Session 4 LLM-judge 배포 전 필수.
+    return new MaskingLangfuseCallbackHandler({
       publicKey,
       secretKey,
       baseUrl,
