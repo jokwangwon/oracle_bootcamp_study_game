@@ -72,6 +72,20 @@ export class AnswerHistoryEntity {
   @Column({ type: 'numeric', precision: 4, scale: 3, name: 'partial_score', nullable: true })
   partialScore!: string | null;
 
+  /**
+   * ADR-016 §7 + consensus-005 §커밋2 — userId 의 HMAC-SHA256 (첫 16 hex chars).
+   *
+   * 목적: Langfuse trace metadata / PII 필터 내부 참조에서 평문 userId 노출 방지.
+   * hash 값 자체는 DB 에 저장하여 재구성 없이도 "같은 학생" 여부 판정 가능.
+   * 산출: `hashUserToken(userId, env.USER_TOKEN_HASH_SALT)` (grading/user-token-hash.ts).
+   *
+   * nullable 인 이유:
+   *  - 기존 all-or-nothing 게임 모드(BlankTyping/TermMatch/MC) 경로는 본 컬럼 미설정
+   *  - 작성형 경로(free-form, Session 6 GameSessionService 배선 이후)만 기입
+   */
+  @Column({ type: 'varchar', length: 32, name: 'user_token_hash', nullable: true })
+  userTokenHash!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

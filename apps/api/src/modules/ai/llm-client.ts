@@ -48,6 +48,13 @@ export interface LlmClientOptions {
   baseUrl?: string;
   /** 기본 0.7(anthropic) / 0.2(ollama, SDD v2 §10.2). 명시 시 override */
   temperature?: number;
+  /**
+   * consensus-005 §커밋1-4 — 결정성 확보 (Layer 3 LLM-judge 전용).
+   * Ollama seed 는 chat_models.d.ts:382 에 실재. Anthropic 은 미지원(무시됨).
+   */
+  seed?: number;
+  /** Ollama top_k — consensus-005 Agent C Ollama issue #586/#1749/#5321 근거. */
+  topK?: number;
 }
 
 interface ResolvedOptions {
@@ -56,6 +63,8 @@ interface ResolvedOptions {
   apiKey: string;
   baseUrl: string | undefined;
   temperature: number;
+  seed: number | undefined;
+  topK: number | undefined;
 }
 
 @Injectable()
@@ -119,6 +128,8 @@ export class LlmClient {
           ? (opts.baseUrl ?? this.config.get<string>('OLLAMA_BASE_URL'))
           : undefined,
         temperature: opts.temperature ?? (isOllama ? 0.2 : 0.7),
+        seed: opts.seed,
+        topK: opts.topK,
       };
     }
 
@@ -131,6 +142,8 @@ export class LlmClient {
       apiKey: this.config.get<string>('LLM_API_KEY') ?? '',
       baseUrl: isOllama ? this.config.get<string>('OLLAMA_BASE_URL') : undefined,
       temperature: isOllama ? 0.2 : 0.7,
+      seed: undefined,
+      topK: undefined,
     };
   }
 
@@ -147,6 +160,9 @@ export class LlmClient {
         apiKey: opts.apiKey,
         temperature: opts.temperature,
         maxTokens: 4096,
+        // Anthropic SDK 는 seed 를 노출하지 않음 (consensus-005 Agent A 실측).
+        // Layer 3 재현성 기대치는 "verdict 필드만 동일" 수준.
+        ...(opts.topK !== undefined ? { topK: opts.topK } : {}),
       });
     }
     if (opts.provider === 'ollama') {
@@ -161,6 +177,8 @@ export class LlmClient {
         baseUrl: opts.baseUrl,
         model: opts.model,
         temperature: opts.temperature,
+        ...(opts.seed !== undefined ? { seed: opts.seed } : {}),
+        ...(opts.topK !== undefined ? { topK: opts.topK } : {}),
       });
     }
     // 미지원 provider는 명확한 오류

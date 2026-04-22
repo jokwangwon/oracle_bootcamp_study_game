@@ -1,0 +1,247 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { BaseMessage } from '@langchain/core/messages';
+import type { BaseOutputParser } from '@langchain/core/output_parsers';
+import { OutputFixingParser, StructuredOutputParser } from 'langchain/output_parsers';
+import { z } from 'zod';
+
+import { LlmClient, type LlmProvider } from '../../ai/llm-client';
+import { LlmClientFactory } from '../../ai/llm-client.factory';
+import { ModelDigestProvider } from '../../ai/model-digest.provider';
+import {
+  PromptManager,
+  type ResolvedEvaluationPrompt,
+} from '../../ai/prompt-manager';
+import { EVALUATION_FREE_FORM_SQL_PROMPT } from '../../ai/prompts';
+import type { Layer3Grader } from '../grading.orchestrator';
+import type { GradingVerdict, LayerVerdict } from '../grading.types';
+
+/**
+ * ADR-013 Layer 3 + ADR-016 §1·§3·§4 + consensus-005 §커밋1.
+ *
+ * Layer 1 (AST) / Layer 2 (Keyword) 가 UNKNOWN 을 반환했을 때 호출되는
+ * 마지막 판정기. LangChain + Langfuse 경유 LLM 호출로 의미적 동치성을 판단.
+ *
+ * 안전장치:
+ *  1. **입력 경계 분리** — 학생 답안은
+ *     `<student_answer id="{nonce}">...</student_answer id="{nonce}">`
+ *     (이중 센티넬 + nonce UUID) 로 감싸 system 프롬프트와 분리.
+ *  2. **구조화 출력** — Zod schema + StructuredOutputParser + OutputFixingParser.
+ *     파싱 최종 실패 → UNKNOWN (fail-closed).
+ *  3. **결정성** — Ollama: temp=0, seed=42, top_k=1 / Anthropic: temp=0 (seed 미지원).
+ *  4. **Langfuse prompt 숫자 버전 pin** — `getEvaluationPrompt(name, version)` 필수.
+ *  5. **rationale 500 자 제한** — response 측에서 추가 truncate (LLM 준수 실패 보강).
+ *  6. **grader_digest 규약**:
+ *     `prompt:{name}:v{ver}|model:{digest8}|parser:sov1|temp:0|seed:42|topk:1`
+ *     로컬 fallback 시 `|local-{sha8(system+user)}` 접미사.
+ *
+ * LLM-judge 호출률은 MT8 게이트로 별도 감시 (ops-aggregation.service).
+ */
+
+export const LLM_JUDGE_PROMPT_NAME = EVALUATION_FREE_FORM_SQL_PROMPT.name;
+export const LLM_JUDGE_PROMPT_VERSION = 1;
+export const LLM_JUDGE_PARSER_VERSION = 'sov1';
+export const LLM_JUDGE_SEED = 42;
+export const LLM_JUDGE_TOP_K = 1;
+export const LLM_JUDGE_TEMPERATURE = 0;
+export const RATIONALE_MAX_LENGTH = 500;
+
+export const JUDGE_OUTPUT_SCHEMA = z.object({
+  verdict: z.enum(['PASS', 'FAIL', 'UNKNOWN']),
+  rationale: z.string().max(RATIONALE_MAX_LENGTH),
+  confidence: z.number().min(0).max(1),
+});
+export type JudgeOutput = z.infer<typeof JUDGE_OUTPUT_SCHEMA>;
+
+/**
+ * consensus-005 §커밋1-4 — grader_digest 검증 정규식.
+ * prompt name 은 `a-z`, `0-9`, `-`, `/` 만 허용.
+ * local fallback 접미사 `|local-{8 hex}` 는 선택.
+ */
+export const GRADER_DIGEST_REGEX =
+  /^prompt:[a-z0-9\-/]+:v\d+\|model:[a-f0-9]{8}\|parser:sov1\|temp:0\|seed:42\|topk:1(\|local-[a-f0-9]{8})?$/;
+
+export interface Layer3GradeInput {
+  studentAnswer: string;
+  expected: readonly string[];
+  sanitizationFlags: readonly string[];
+}
+
+@Injectable()
+export class LlmJudgeGrader implements Layer3Grader {
+  private readonly logger = new Logger(LlmJudgeGrader.name);
+  private readonly judgeLlm: LlmClient;
+  // langchain 의 InteropZodType(bundled zod) 와 앱 zod 버전 스큐 때문에
+  // StructuredOutputParser 제네릭은 never 로 두고 parse 결과만 JudgeOutput 로 시그니처화.
+  private readonly parser: BaseOutputParser<JudgeOutput>;
+  private readonly fixingParser: OutputFixingParser<JudgeOutput>;
+
+  constructor(
+    config: ConfigService,
+    factory: LlmClientFactory,
+    private readonly promptManager: PromptManager,
+    private readonly digestProvider: ModelDigestProvider,
+  ) {
+    const provider = (config.get<string>('LLM_PROVIDER') ?? 'anthropic') as LlmProvider;
+    const model = config.get<string>('LLM_MODEL') ?? '';
+    const baseUrl = config.get<string>('OLLAMA_BASE_URL');
+    const apiKey = config.get<string>('LLM_API_KEY');
+
+    // Judge LLM — 결정성 옵션 고정.
+    this.judgeLlm = factory.createFor({
+      provider,
+      model,
+      apiKey,
+      baseUrl,
+      temperature: LLM_JUDGE_TEMPERATURE,
+      seed: LLM_JUDGE_SEED,
+      topK: LLM_JUDGE_TOP_K,
+    });
+
+    // Fixer LLM — consensus-005 §커밋1-3 (A 지적): fixer 도 동일 결정성 옵션 주입.
+    // 별도 인스턴스지만 옵션 동일.
+    const fixerLlm = factory.createFor({
+      provider,
+      model,
+      apiKey,
+      baseUrl,
+      temperature: LLM_JUDGE_TEMPERATURE,
+      seed: LLM_JUDGE_SEED,
+      topK: LLM_JUDGE_TOP_K,
+    });
+
+    // StructuredOutputParser.fromZodSchema 의 InteropZodType 제약은 bundled zod 타입
+    // 기준. 런타임 동작은 동일하므로 로컬 zod schema 를 unknown 경유로 투영.
+    this.parser = StructuredOutputParser.fromZodSchema(
+      JUDGE_OUTPUT_SCHEMA as unknown as never,
+    ) as unknown as BaseOutputParser<JudgeOutput>;
+    this.fixingParser = OutputFixingParser.fromLLM<JudgeOutput>(
+      fixerLlm.getModel() as never,
+      this.parser,
+    );
+  }
+
+  async grade(input: Layer3GradeInput): Promise<LayerVerdict> {
+    // 1. 경계 태그 — nonce 매 호출 신선.
+    const nonce = randomUUID();
+    const openTag = `<student_answer id="${nonce}">`;
+    const closeTag = `</student_answer id="${nonce}">`;
+    const studentAnswerTagged = `${openTag}\n${input.studentAnswer}\n${closeTag}`;
+
+    // 2. Prompt resolve (Langfuse 우선, 실패 시 local fallback).
+    let resolved: ResolvedEvaluationPrompt;
+    try {
+      resolved = await this.promptManager.getEvaluationPrompt(
+        LLM_JUDGE_PROMPT_NAME,
+        LLM_JUDGE_PROMPT_VERSION,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Layer 3 prompt resolution failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return this.unknownFallback(
+        'Layer 3 prompt resolution failed',
+        { source: 'local', version: LLM_JUDGE_PROMPT_VERSION, name: LLM_JUDGE_PROMPT_NAME } as ResolvedEvaluationPrompt,
+      );
+    }
+
+    // 3. Prompt 변수 주입.
+    const formatInstructions = this.parser.getFormatInstructions();
+    const suspiciousFlags =
+      input.sanitizationFlags.length > 0
+        ? input.sanitizationFlags.join(',')
+        : 'none';
+    let messages: BaseMessage[];
+    try {
+      messages = (await resolved.template.formatMessages({
+        expected: input.expected.join('\n'),
+        student_answer_tagged: studentAnswerTagged,
+        suspicious_flags: suspiciousFlags,
+        format_instructions: formatInstructions,
+      })) as BaseMessage[];
+    } catch (err) {
+      this.logger.warn(
+        `Layer 3 prompt format failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return this.unknownFallback('Layer 3 prompt format failed', resolved);
+    }
+
+    // 4. LLM 호출.
+    let responseText: string;
+    try {
+      const response = await this.judgeLlm.invoke(messages);
+      responseText =
+        typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
+    } catch (err) {
+      this.logger.warn(
+        `Layer 3 LLM invocation failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return this.unknownFallback('Layer 3 LLM invocation failed', resolved);
+    }
+
+    // 5. 구조화 파싱 (+ fixer retry).
+    let parsed: JudgeOutput;
+    try {
+      parsed = await this.fixingParser.parse(responseText);
+    } catch (err) {
+      this.logger.warn(
+        `Layer 3 structured output parse failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return this.unknownFallback(
+        'Layer 3 structured output parse failed after fixer retry',
+        resolved,
+      );
+    }
+
+    // 6. rationale 최종 truncate (LLM이 500자 규칙을 준수하지 않은 경우 보강).
+    const rationale =
+      parsed.rationale.length > RATIONALE_MAX_LENGTH
+        ? parsed.rationale.slice(0, RATIONALE_MAX_LENGTH)
+        : parsed.rationale;
+
+    return {
+      verdict: parsed.verdict as GradingVerdict,
+      confidence: parsed.confidence,
+      rationale,
+      graderDigest: this.buildDigest(resolved),
+    };
+  }
+
+  private unknownFallback(
+    reason: string,
+    resolved: ResolvedEvaluationPrompt,
+  ): LayerVerdict {
+    return {
+      verdict: 'UNKNOWN',
+      rationale: reason,
+      graderDigest: this.buildDigest(resolved),
+    };
+  }
+
+  private buildDigest(resolved: ResolvedEvaluationPrompt): string {
+    const modelDigestFull = this.safeGetModelDigest();
+    const modelShort = sha8(modelDigestFull);
+    const base = `prompt:${resolved.name}:v${resolved.version}|model:${modelShort}|parser:${LLM_JUDGE_PARSER_VERSION}|temp:0|seed:${LLM_JUDGE_SEED}|topk:${LLM_JUDGE_TOP_K}`;
+    if (resolved.source === 'local') {
+      const tpl = EVALUATION_FREE_FORM_SQL_PROMPT;
+      const localHash = sha8(tpl.systemTemplate + '\n' + tpl.userTemplate);
+      return `${base}|local-${localHash}`;
+    }
+    return base;
+  }
+
+  private safeGetModelDigest(): string {
+    try {
+      return this.digestProvider.getDigest();
+    } catch {
+      return 'unverified';
+    }
+  }
+}
+
+function sha8(s: string): string {
+  return createHash('sha256').update(s).digest('hex').slice(0, 8);
+}

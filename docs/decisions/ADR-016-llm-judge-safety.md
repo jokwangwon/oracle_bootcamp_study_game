@@ -174,12 +174,51 @@ Agent B가 필수 안전장치로 지적. CLAUDE.md 제8조(보안) + 헌법 준
 - **AnswerSanitizer 단위 테스트** — 인젝션 시도 시나리오 ≥ 20건.
 - **레이트리밋 Redis 기반 구현** — `rate_limit:grading:user:{userId}:{minute}` key TTL.
 - **appeal UI** — 프론트 결과 페이지에 "이의제기" 버튼 추가 (MVP-C 이후).
-- **LLM-judge 프롬프트 버전 관리** — Langfuse Prompt Management 버전 변경 시 `grader_digest` 자동 갱신.
+- **LLM-judge 프롬프트 버전 관리** — Langfuse Prompt Management 버전 변경 시
+  `grader_digest` 는 **명시적 승인 후 pin 파일 PR 로만 갱신**. 자동 갱신 금지
+  (consensus-005 Agent A 지적 — 자동 갱신 시 과거 채점 재현성 붕괴).
+  `LLM_JUDGE_PROMPT_VERSION` 은 코드 상수로 관리하고 변경은 코드 리뷰 + ADR
+  부록 추가로 감사 체인 유지.
+
+---
+
+## 개정 이력
+
+### 부록 — MVP-B Session 4 커밋 1 (2026-04-22, consensus-005)
+
+본 PR (Session 4 커밋 1) 는 안전장치 1·2·3·4·5 를 실 구현했다.
+
+**구현 세부**:
+- **§1 경계 태그**: `<student_answer id="{nonce-uuid}">...</student_answer id="{nonce-uuid}">`
+  (C nonce + B 이중 센티넬 병합). `crypto.randomUUID()` 매 호출 신선.
+- **§2 입력 검증**: `AnswerSanitizer` 에 한국어 injection 패턴 6종 추가 +
+  경계 태그 탈출 탐지(`BOUNDARY_ESCAPE` flag + `[[ANSWER_TAG_STRIPPED]]` 치환).
+- **§3 구조화 출력**: `StructuredOutputParser.fromZodSchema` +
+  `OutputFixingParser.fromLLM` (fixer LLM 에 temp=0/seed=42/topK=1 명시 주입).
+  최종 실패 → `verdict='UNKNOWN'`.
+- **§4 결정성**:
+  - Ollama: `temperature=0` + `seed=42` + `topK=1` (consensus-005 Agent C —
+    Ollama issues #586/#1749/#5321 실측 근거).
+  - Anthropic: `temperature=0` (seed 부재 실측 — consensus-005 Agent A).
+  - Langfuse `getEvaluationPrompt(name, version)` **숫자 버전 pin 필수**.
+  - `grader_digest` 규약:
+    `prompt:{name}:v{ver}|model:{digest8}|parser:sov1|temp:0|seed:42|topk:1`
+    (로컬 fallback 시 `|local-{sha8}` 접미사).
+- **§5 호출률 게이트**: Session 3 MT8 집계 필터 재사용 (별도 변경 없음).
+
+**Session 5 이관**:
+- §6 WORM 트리거 + `grading_appeals` 테이블
+- §7 `user_token_hash` 기반 Langfuse PII 필터링 (`user_token_hash` 컬럼 자체는
+  본 PR 커밋 2 에서 엔티티/마이그레이션 추가. HMAC salt 회전 정책은 ADR-018
+  별도 세션).
+
+**관련 합의**: `docs/review/consensus-005-llm-judge-safety-architecture.md`
 
 ---
 
 **관련 문서**:
 - `docs/review/consensus-004-problem-format-redesign.md`
+- `docs/review/consensus-005-llm-judge-safety-architecture.md`
 - ADR-009 (LangChain + Langfuse), ADR-011 (M3 digest pin), ADR-013 (3단 채점), ADR-017 (MT 지표)
 - CLAUDE.md §8 (보안)
 - `apps/api/src/modules/ai/eval/pins/` (digest 재사용)
