@@ -13,7 +13,9 @@ export type OpsEventKind =
   | 'measurement_fail'
   | 'mt6_breach'
   | 'mt7_breach'
-  | 'mt8_breach';
+  | 'mt8_breach'
+  | 'grading_appeal' // ADR-016 §추가 이의제기 / S5-C3
+  | 'salt_rotation'; // ADR-018 §6 salt rotation / S5-C4
 
 export type StudentReportReason = 'incorrect_answer' | 'sql_error' | 'other';
 
@@ -40,6 +42,21 @@ export interface GateBreachPayload {
 export interface MeasurementFailPayload {
   error: string;
   stage: 'mt3' | 'mt4' | 'other';
+}
+
+/** ADR-016 §추가 + S5-C3 — grading_appeals 제출 이벤트 payload */
+export interface GradingAppealPayload {
+  appealId: string;
+  answerHistoryId: string;
+  reason: 'incorrect_grading' | 'scope_dispute' | 'technical_error' | 'other';
+}
+
+/** ADR-018 §6 + S5-C4 — salt rotation 이벤트 payload. salt 평문 저장 금지. */
+export interface SaltRotationPayload {
+  prevFingerprint: string | null; // 최초 rotation 시 null. sha256(salt).slice(0,8)
+  newFingerprint: string; // sha256(salt).slice(0,8)
+  rotatedBy: string; // admin user uuid
+  reason: 'scheduled' | 'incident';
 }
 
 /**
