@@ -91,4 +91,47 @@ describe('Langfuse trace privacy (Layer 4 회귀 방지)', () => {
     // System 메시지는 보존
     expect(flatTexts).toContain('당신은 SQL 채점자입니다');
   });
+
+  /**
+   * ADR-018 §4 D3 Hybrid + §8 금지 6 — Langfuse 에 user_token_hash 누출 회귀 방지.
+   *
+   * LlmJudgeGrader / 호출자 코드가 실수로 prompt 에 user_token_hash 를 inject 해도
+   * masker 가 차단해야 한다. 본 테스트가 실패하면 Langfuse cloud 로 학생 식별자가
+   * 유출될 위험이 있으므로 병합 차단.
+   */
+  it('D3 Hybrid — user_token_hash 가 포함된 payload 는 Langfuse super 도달 전 REDACTED', async () => {
+    const superSpy = vi
+      .spyOn(CallbackHandler.prototype, 'handleChatModelStart')
+      .mockImplementation(async () => {});
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = new LlmClient(new FakeConfig(LANGFUSE_ENABLED_ENV) as any);
+    const handler = client.getCallbacks()[0] as MaskingLangfuseCallbackHandler;
+
+    const leakyMessage = new HumanMessage(
+      'context: user_token_hash=1234567890abcdef userTokenHash: "deadbeefcafe0000"',
+    );
+
+    await handler.handleChatModelStart(
+      {
+        lc: 1,
+        type: 'constructor',
+        id: ['langchain', 'chat_models', 'ChatOllama'],
+        kwargs: {},
+      },
+      [[leakyMessage]],
+      'run-d3-hybrid',
+    );
+
+    expect(superSpy).toHaveBeenCalledOnce();
+    const [, forwardedMessages] = superSpy.mock.calls[0];
+    const flatTexts = forwardedMessages
+      .flat()
+      .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+      .join(' || ');
+
+    expect(flatTexts).not.toContain('1234567890abcdef');
+    expect(flatTexts).not.toContain('deadbeefcafe0000');
+    expect(flatTexts).toContain('[USER_TOKEN_HASH_REDACTED]');
+  });
 });
