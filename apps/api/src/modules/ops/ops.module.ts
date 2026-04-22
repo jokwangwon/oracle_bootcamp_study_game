@@ -15,6 +15,7 @@ import { OpsAggregationService } from './ops-aggregation.service';
 import { OpsMeasurementService } from './ops-measurement.service';
 import { QuestionReportController } from './question-report.controller';
 import { QuestionReportService } from './question-report.service';
+import { SaltRotationService } from './salt-rotation.service';
 
 /**
  * 운영 모니터링 모듈 (Phase A).
@@ -43,6 +44,7 @@ import { QuestionReportService } from './question-report.service';
     QuestionReportService,
     OpsAggregationService,
     AdminReviewService,
+    SaltRotationService,
     EvalAdminGuard,
     {
       provide: 'EVAL_ADMIN_USERNAMES',
@@ -50,6 +52,6 @@ import { QuestionReportService } from './question-report.service';
       useFactory: (config: ConfigService) => config.get<string>('EVAL_ADMIN_USERNAMES'),
     },
   ],
-  exports: [OpsMeasurementService, OpsAggregationService],
+  exports: [OpsMeasurementService, OpsAggregationService, SaltRotationService],
 })
 export class OpsModule {}

@@ -12,6 +12,7 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "validate:free-form-seeds": "tsx src/scripts/validate-free-form-seeds.ts",
+    "ops:rotate-salt": "tsx src/scripts/rotate-salt.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- -d src/config/data-source.ts migration:generate",
     "migration:create": "npm run typeorm -- migration:create",
