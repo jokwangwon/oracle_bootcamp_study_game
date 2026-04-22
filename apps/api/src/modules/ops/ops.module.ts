@@ -5,6 +5,7 @@ import { ContentModule } from '../content/content.module';
 import { QuestionEntity } from '../content/entities/question.entity';
 import { OpsEventLogEntity } from './entities/ops-event-log.entity';
 import { OpsQuestionMeasurementEntity } from './entities/ops-question-measurement.entity';
+import { UserTokenHashSaltEpochEntity } from './entities/user-token-hash-salt-epoch.entity';
 import { ConfigService } from '@nestjs/config';
 
 import { EvalAdminGuard } from '../ai/eval/eval-admin.guard';
@@ -31,6 +32,7 @@ import { QuestionReportService } from './question-report.service';
     TypeOrmModule.forFeature([
       OpsQuestionMeasurementEntity,
       OpsEventLogEntity,
+      UserTokenHashSaltEpochEntity,
       QuestionEntity,
     ]),
     ContentModule,
