@@ -49,6 +49,12 @@ const envSchema = z.object({
   NOTION_API_TOKEN: z.string().optional(),
   NOTION_DATABASE_ID: z.string().optional(),
   NOTION_SYNC_CRON: z.string().default('0 0 * * 1'), // 매주 월요일 00:00
+  // ADR-016 §7 + consensus-005 §커밋2 — userId hash 용 HMAC salt (fail-closed).
+  // 환경별로 다른 값 강제 (dev/staging/prod 트레이스 교차 추적 방지).
+  // 최소 16자. rotation 정책은 ADR-018 (별도 세션에서 작성 예정).
+  USER_TOKEN_HASH_SALT: z
+    .string()
+    .min(16, 'USER_TOKEN_HASH_SALT 은 최소 16자 (ADR-016 §7)'),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
