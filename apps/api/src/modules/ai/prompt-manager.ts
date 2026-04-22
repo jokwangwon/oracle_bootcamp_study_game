@@ -3,7 +3,27 @@ import { ConfigService } from '@nestjs/config';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { Langfuse } from 'langfuse';
 
-import { GENERATION_PROMPTS_BY_MODE, type PromptTemplate } from './prompts';
+import {
+  EVALUATION_PROMPTS_BY_NAME,
+  GENERATION_PROMPTS_BY_MODE,
+  type PromptTemplate,
+} from './prompts';
+
+/**
+ * 평가 프롬프트 조회 결과.
+ *
+ * - `source='langfuse'` — Langfuse 에서 fetch 성공. 해당 version 으로 pin 된 상태.
+ * - `source='local'` — Langfuse fetch 실패 또는 키 미설정. 로컬 fallback 사용.
+ *   LlmJudgeGrader 는 이 경우 `grader_digest` 에 `local-{sha256_8}` 접미사를
+ *   추가해야 한다 (consensus-005 §커밋1-4).
+ */
+export interface ResolvedEvaluationPrompt {
+  template: ChatPromptTemplate;
+  source: 'langfuse' | 'local';
+  /** 요청된 version (pin). Langfuse 미설정/fetch 실패여도 동일 version 반환. */
+  version: number;
+  name: string;
+}
 
 /**
  * 프롬프트 관리자 (ADR-009 §강제 사항 2번).
@@ -74,6 +94,93 @@ export class PromptManager {
       ['system', localTemplate.systemTemplate],
       ['user', localTemplate.userTemplate],
     ]);
+  }
+
+  /**
+   * 평가(Layer 3 LLM-judge) 프롬프트 조회.
+   *
+   * consensus-005 §커밋1-4 — Langfuse `getPrompt(name, version)` **숫자 버전 pin 필수**.
+   * 재현성 확보를 위해 version 은 호출자가 명시 지정해야 한다.
+   *
+   * 반환은 `{ template, source, version, name }` — source 가 'local' 이면
+   * Langfuse 미설정/fetch 실패. LlmJudgeGrader 에서 digest 접미사 분기에 사용.
+   *
+   * fetch 실패는 throw 하지 않고 로컬 fallback 으로 복귀 (개발 환경 호환).
+   */
+  async getEvaluationPrompt(
+    name: string,
+    version: number,
+  ): Promise<ResolvedEvaluationPrompt> {
+    const localTemplate = EVALUATION_PROMPTS_BY_NAME[name];
+    if (!localTemplate) {
+      throw new NotFoundException(
+        `'${name}'에 해당하는 평가 프롬프트 정의가 없습니다 (local fallback 부재)`,
+      );
+    }
+
+    const langfuseTemplate = await this.tryFetchEvaluationFromLangfuse(
+      name,
+      version,
+    );
+
+    if (langfuseTemplate) {
+      this.logger.log(
+        `evaluation prompt '${name}' v${version} loaded from Langfuse`,
+      );
+      return {
+        template: ChatPromptTemplate.fromMessages([
+          ['system', langfuseTemplate.system],
+          ['user', langfuseTemplate.user],
+        ]),
+        source: 'langfuse',
+        version,
+        name,
+      };
+    }
+
+    this.logger.log(
+      `evaluation prompt '${name}' v${version} loaded from local fallback (Langfuse miss)`,
+    );
+    return {
+      template: ChatPromptTemplate.fromMessages([
+        ['system', localTemplate.systemTemplate],
+        ['user', localTemplate.userTemplate],
+      ]),
+      source: 'local',
+      version,
+      name,
+    };
+  }
+
+  private async tryFetchEvaluationFromLangfuse(
+    name: string,
+    version: number,
+  ): Promise<{ system: string; user: string } | null> {
+    if (!this.langfuse) {
+      return null;
+    }
+
+    try {
+      const prompt = await this.langfuse.getPrompt(name, version);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = (prompt as any).prompt;
+      if (Array.isArray(raw)) {
+        const systemMsg = raw.find((m: { role: string }) => m.role === 'system');
+        const userMsg = raw.find((m: { role: string }) => m.role === 'user');
+        if (systemMsg?.content && userMsg?.content) {
+          return { system: systemMsg.content, user: userMsg.content };
+        }
+      }
+      this.logger.warn(
+        `Langfuse evaluation prompt '${name}' v${version}가 예상 형식(chat: system+user)이 아닙니다 — 로컬 fallback 사용`,
+      );
+      return null;
+    } catch (err) {
+      this.logger.warn(
+        `Langfuse evaluation prompt '${name}' v${version} fetch 실패 (${err instanceof Error ? err.message : String(err)}) — 로컬 fallback 사용`,
+      );
+      return null;
+    }
   }
 
   /**
