@@ -80,23 +80,28 @@ Agent B가 필수 안전장치로 지적. CLAUDE.md 제8조(보안) + 헌법 준
   ```
 - Append-only 트리거: UPDATE 시도 시 `RAISE EXCEPTION`.
 - 관리자 override는 **`answer_history` 수정 금지** — 대신 `grading_appeals` 신규 테이블에 새 레코드 INSERT + `grading_method='admin-override'` 기록.
+- **WORM 트리거는 ADR-018 §8 재계산 금지 조항의 DB 레벨 시행체** — salt rotation 시 과거 `user_token_hash` 재계산 migration 은 DB 레벨에서 차단된다. 감사 목적은 `user_token_hash_salt_epochs` 원장 조회(ADR-018 §5) 로 대체.
 
-### 7. Langfuse PII 필터링
+### 7. Langfuse PII 필터링 (ADR-018 D3 Hybrid 반영 — 2026-04-22 개정)
 
 - `answer_history.answer`의 평문은 Langfuse trace에 포함 금지.
-- Langfuse trace input/output은 **해시(sha256 첫 16 chars) + 길이 + 키워드 빈도 top 5**만 저장.
-- userId는 해시된 `user_token_hash`로 변환하여 trace metadata에 삽입. 평문 userId 저장 금지.
-- Langfuse Trace 속성:
+- Langfuse trace input/output은 **해시(sha256 첫 16 chars) + 길이 + SQL 예약어 top 3 화이트리스트**만 저장.
+- **Langfuse trace metadata 에 userId 또는 userId 파생 정보(해시 포함) 저장 금지** (ADR-018 §4 D3 Hybrid).
+  - 학생 단위 trace 그룹화가 필요한 감사·분석은 Langfuse 에서는 `session_id` 로 묶고, 필요 시 내부 DB 조회로 `session_id → userId` 매핑.
+  - `session_id` 는 DB `answer_history.id` 또는 추후 신설될 `grading_sessions.id` 재사용 (별도 컬럼 불필요).
+- `user_token_hash` 는 **DB 한정** — `answer_history.user_token_hash` 컬럼에만 저장, 감사·분석 전용. Langfuse 외부 SaaS 로 유출 금지 (ADR-018 §8 금지 6).
+- Langfuse Trace 속성 (D3 Hybrid 후):
   ```json
   {
     "answer_hash": "abc123...",
     "answer_length": 142,
-    "answer_top_tokens": ["SELECT", "FROM", "WHERE", "JOIN", "emp"],
-    "user_token_hash": "def456...",
+    "answer_top_tokens": ["SELECT", "FROM", "WHERE"],
+    "session_id": "a1b2c3d4-...",
     "grader_digest": "ca06e9e4087c...",
     "verdict": "PASS"
   }
   ```
+- **rotation 정책**: `USER_TOKEN_HASH_SALT` rotation 은 ADR-018 참조. Langfuse 측은 rotation 영향권 외 (session_id 는 rotation 무관).
 
 ### 추가: 이의제기 파이프라인
 

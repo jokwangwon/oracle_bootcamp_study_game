@@ -238,6 +238,8 @@ docs/architecture/idea-driven-stack-decision-design.md 수정 시 → multi-agen
 | 환경+Docker | `docs/architecture/environment-and-docker-design.md` | 하드코딩 금지, Docker-First |
 | 변경 영향 분석 | `docs/architecture/change-impact-analysis-design.md` | 의존성/장애 사전 검증 |
 | 멀티에이전트 설계 | `docs/architecture/multi-agent-system-design.md` | 3+1 에이전트 상세 |
+| LLM-judge 안전 (ADR-016) | `docs/decisions/ADR-016-llm-judge-safety.md` | 7종 안전장치 + D3 Hybrid |
+| Salt rotation 정책 (ADR-018) | `docs/decisions/ADR-018-user-token-hash-salt-rotation.md` | USER_TOKEN_HASH_SALT 운영 정책 |
 | 개발 가이드 | `docs/guides/DEVELOPMENT_GUIDE.md` | 개발 프로세스 |
 | 테스트 전략 | `docs/guides/TEST_STRATEGY.md` | 테스트 방법론 |
 | 컨텍스트 | `docs/CONTEXT.md` | 현재 프로젝트 상태 |

@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-17 야간 (MVP-B Session 3 완료 — 3+1 합의 첫 실전 + 3 커밋)
+**최종 업데이트**: 2026-04-22 (MVP-B Session 4 본 PR merge 완료 + ADR-018 분리 세션 + 사용자 결정 Q1~Q4 반영)
 
 ---
 
@@ -88,16 +88,19 @@ docs/
 │   ├── ADR-013-grading-pyramid.md               # 역피라미드 3단 채점 (v2.9)
 │   ├── ADR-014-capstone-structure.md            # 주차별 미니 + 최종 2트랙 캡스톤 (v2.9)
 │   ├── ADR-015-realtime-prebuilt-pool.md        # 실시간 사전 풀 매칭 (v2.9)
-│   ├── ADR-016-llm-judge-safety.md              # LLM-judge 안전 프로토콜 (v2.9)
-│   └── ADR-017-mt6-mt7-mt8-metrics.md           # 운영 지표 MT6/MT7/MT8 (v2.9)
+│   ├── ADR-016-llm-judge-safety.md              # LLM-judge 안전 프로토콜 (v2.9, D3 Hybrid 반영 2026-04-22)
+│   ├── ADR-017-mt6-mt7-mt8-metrics.md           # 운영 지표 MT6/MT7/MT8 (v2.9)
+│   └── ADR-018-user-token-hash-salt-rotation.md # USER_TOKEN_HASH_SALT rotation 정책 (2026-04-22)
 │
 ├── sessions/                             # 세션 로그
 │   └── ...
 │
 ├── review/                               # 3+1 합의 보고서
-│   ├── consensus-001-oracle-dba-game.md            # Oracle DBA 게임 합의
-│   ├── consensus-002-oss-model-evaluation.md       # OSS 모델 평가 SDD 합의 (REQUEST_CHANGES)
-│   └── consensus-004-problem-format-redesign.md    # 문제 형태 재설계 합의 (v2.9, 2026-04-16)
+│   ├── consensus-001-oracle-dba-game.md                        # Oracle DBA 게임 합의
+│   ├── consensus-002-oss-model-evaluation.md                   # OSS 모델 평가 SDD 합의 (REQUEST_CHANGES)
+│   ├── consensus-004-problem-format-redesign.md                # 문제 형태 재설계 합의 (v2.9, 2026-04-16)
+│   ├── consensus-005-llm-judge-safety-architecture.md          # MVP-B Session 4 LLM-judge 안전 합의 (2026-04-17)
+│   └── consensus-006-adr-018-salt-rotation.md                  # ADR-018 salt rotation 합의 (2026-04-22)
 │
 └── rationale/                            # 판단 근거 (의사결정 narrative)
     ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
@@ -172,8 +175,12 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-16 | **operational-monitoring v1.1** — MT6/MT7/MT8 신설, ops 스키마 확장, ADR-019 승격 트리거 | `architecture/operational-monitoring-design.md` |
 | 2026-04-16 | **운영 부팅 회귀 6건 수정 + env 노출** (병렬 2에이전트, 9초 간격 커밋) — shared tsconfig ESM→CJS / DI `@Optional()` 3곳 / AiModule TypeOrmModule / nest-cli assets / BullMQ jobId / docker-compose env 6건 / `DIGEST_PIN_SKIP` preprocess. 22건 Notion 동기화 실증 | `SESSION_2026-04-16.md`, 커밋 `327578a`, `afde74b` |
 | 2026-04-17 | **MVP-A 완주 + MVP-B 2/10 착수** — 7 커밋, 84 신규 TDD (380 → 464). MVP-A: Mode 6 객관식 + answerFormat + MT6-8 스켈레톤 + AI MC 분기 + MC promptfoo 하네스. MVP-B: GradingModule 스켈레톤 + AnswerSanitizer + answer_history 메타 컬럼 + Layer 2 Keyword + Orchestrator(Layer 1/3 DI stub). 실시간 대전 후순위 결정. | `SESSION_2026-04-17.md`, 커밋 `452e9aa`/`6c282f2`/`1c29b3b`/`a9895c4`/`c38cc35`/`bc2ccaa` |
-| 2026-04-17 야간 | **MVP-B Session 3 완료 (3 커밋, +49 TDD, 464 → 513)** — 3+1 합의 첫 실전 사용(정책 X 채택 + 보강 3종). (1) Layer 1 `AstCanonicalGrader` + `node-sql-parser@5.4.0` (MySQL→PG fallback, Oracle dialect 미지원 실측) + 방언 8종 매트릭스 + `ast_failure_reason` 4종 분류. (2) free-form seed Layer 0.5 사전검증 게이트 + SeedService 부팅 차단 + CLI. (3) MT6/MT8 집계 `ast_failure_reason IS NULL` 필터 + 리포트 투명 표기 + ADR-013 §기록 필드 부록. Rewriter·sqlglot(ADR-018 초안)은 Session 4+ 연기. **main 대비 27 커밋 — 머지 권장 포인트**. | `SESSION_2026-04-17.md` §9, 커밋 `b0e485d`/`589a570`/`6582d38`, `ADR-013` 부록 |
+| 2026-04-17 야간 | **MVP-B Session 3 완료 (3 커밋, +49 TDD, 464 → 513)** — 3+1 합의 첫 실전 사용(정책 X 채택 + 보강 3종). (1) Layer 1 `AstCanonicalGrader` + `node-sql-parser@5.4.0` (MySQL→PG fallback, Oracle dialect 미지원 실측) + 방언 8종 매트릭스 + `ast_failure_reason` 4종 분류. (2) free-form seed Layer 0.5 사전검증 게이트 + SeedService 부팅 차단 + CLI. (3) MT6/MT8 집계 `ast_failure_reason IS NULL` 필터 + 리포트 투명 표기 + ADR-013 §기록 필드 부록. Rewriter·sqlglot은 Session 4+ 연기. **main 대비 27 커밋 — 머지 권장 포인트**. | `SESSION_2026-04-17.md` §9, 커밋 `b0e485d`/`589a570`/`6582d38`, `ADR-013` 부록 |
 | 2026-04-17 저녁 | **하네스 점검 5 커밋** — (1) Layer 1 PostToolUse 실제 `tsc --noEmit` 훅 + 미지원 PreCommit 제거 (직전 세션 `.claude/settings.json`) (2) Layer 2/3 pre-commit 센서 활성화 (`typecheck`+`test`, 문서 전용 스킵, `core.hooksPath .githooks` 설정) (3) `settings.local.json` 212→48줄 트리밍 (위험 wildcard + 평문 비밀번호 + 일회성 명령 제거) (4) `.claude/agents/` 3+1 서브에이전트 4종 (+256 LoC) — 프롬프트 규약을 하네스 승격 (5) Notion MCP 권한 3단 정책 (allow/ask/deny) + 판단 근거 narrative. 별도: ESLint 뼈대 복구 (devDep + `.eslintrc.cjs` × 2, pre-commit 미연결). | `SESSION_2026-04-17.md` §8, 커밋 `dda09f0`/`235ceef`/`e62560e`/`964fcdc`/`f64c887`, `rationale/notion-mcp-permission-policy.md`, `.claude/agents/` |
+| 2026-04-20 | **MVP-B Session 4 선행 PR (+33 TDD, 513 → 546)** — consensus-005 Langfuse PII CRITICAL 해소. `langfuse-masker.ts` (pure) + `MaskingLangfuseCallbackHandler` + `langfuse-trace-privacy.test.ts` Layer 4 스냅샷. Session 4 본 커밋 착수 조건 충족. **PR #2 merge**. | PR #2, 커밋 `0c96802`, `consensus-005-llm-judge-safety-architecture.md` |
+| 2026-04-22 | **MVP-B Session 4 본 PR (+36 TDD, 546 → 582)** — consensus-005 §커밋1~3 구현. 커밋1: Layer 3 `LlmJudgeGrader` (Zod + StructuredOutputParser + OutputFixingParser, Ollama temp=0/seed=42/topK=1, Langfuse prompt 숫자 버전 pin, `grader_digest` 규약 + `GRADER_DIGEST_REGEX`) + ADR-016 §주의사항 "자동 갱신→명시적 승인" 수정. 커밋2: `user_token_hash` 컬럼 + HMAC-SHA256 salt + `USER_TOKEN_HASH_SALT` env required(min 16). 커밋3: `LAYER_3_GRADER` DI 배선 + PR 체크리스트 + Orchestrator+Layer3 통합 테스트. **PR #3 merge**. | PR #3, 커밋 `c6a9c37`/`cf03f39`/`d7a5c55` |
+| 2026-04-22 | **CRITICAL 수선 PR (1 커밋)** — consensus-006 CRITICAL-1: `docker-compose.yml:229-252` api environment 블록에 `USER_TOKEN_HASH_SALT: ${USER_TOKEN_HASH_SALT}` 1줄 추가. PR #3 이후 main 재기동 불가 상태 해소. | PR #4, 커밋 `e436e1f` |
+| 2026-04-22 | **ADR-018 분리 세션 (3+1 합의 + 사용자 Q1~Q4)** — consensus-006 합의 도출(CRITICAL 4건 전부 격상). 사용자 결정: Q1=b (D3 Hybrid: Langfuse=session_id 만, DB=hash) / Q2=a (외부 표준 인용 최소화) / Q3=a (R2 dual-salt 유보) / Q4=a (docker-compose 별도 PR = PR #4). ADR-018 v1 본문 + ADR-016 §7 연쇄 수정 + CLAUDE.md §8 참조 표 + INDEX/CONTEXT 동기화. | `consensus-006-adr-018-salt-rotation.md`, `ADR-018-user-token-hash-salt-rotation.md`, `ADR-016` §6/§7 개정 |
 
 ---
 
