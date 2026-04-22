@@ -249,6 +249,10 @@ services:
       EVAL_ADMIN_USERNAMES: ${EVAL_ADMIN_USERNAMES}
       # Seed on boot (개발/CI 전용)
       SEED_ON_BOOT: ${SEED_ON_BOOT:-false}
+      # ADR-016 §7 + consensus-005 §커밋2 — Layer 3 user_token_hash 용 HMAC salt.
+      # env.validation.ts 가 required(min 16)로 강제하므로 compose 부팅 시 반드시 필요.
+      # .env 에 USER_TOKEN_HASH_SALT=openssl rand -base64 32 결과 기입.
+      USER_TOKEN_HASH_SALT: ${USER_TOKEN_HASH_SALT}
       PORT: 3001
     ports:
       - "${API_PORT:-3001}:3001"
