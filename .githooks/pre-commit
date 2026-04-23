@@ -35,6 +35,21 @@ if git diff --cached --diff-filter=ACM \
 fi
 
 # ---------------------------------------------------------------------------
+# Layer 3-a3: Prompt template PII 회귀 방지 (consensus-007 C1-5)
+# ADR-016 §7 / ADR-018 §8 금지 6 — LLM prompt 에 학생 식별자 파생정보 주입 금지.
+# prompts/*.prompt.ts 스캔, user_token_hash / userId / user-id 감지 시 차단.
+# (.test.ts 파일 별도 — pii-regression.test.ts 가 패턴을 참조하는 정당한 소스)
+# ---------------------------------------------------------------------------
+if git diff --cached --diff-filter=ACM \
+    -- 'apps/api/src/modules/ai/prompts/*.prompt.ts' \
+    | grep -iE '(user[_-]?token[_-]?hash|\buser[_-]?id\b)' > /dev/null 2>&1; then
+    echo "[ERROR] prompt template 에 PII 키워드 감지 (ADR-016 §7 / ADR-018 §8 금지 6)!"
+    echo "  → LLM prompt 본문에 user_token_hash / userId 주입 금지."
+    echo "  → 학생 단위 trace 그룹화는 metadata 의 session_id 만 사용."
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Layer 3-b: 디버그 코드 체크 (경고만)
 # ---------------------------------------------------------------------------
 if git diff --cached --diff-filter=ACM | grep -E '(console\.log|print\(|debugger|TODO:.*FIXME)' > /dev/null 2>&1; then

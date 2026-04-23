@@ -11,6 +11,8 @@ import {
   maskLlmOutput,
   BOUNDARY_ESCAPE_SENTINEL,
   RATIONALE_MAX_LENGTH,
+  ALLOWED_METADATA_KEYS,
+  filterLangfuseMetadata,
 } from './langfuse-masker';
 
 /**
@@ -251,5 +253,49 @@ describe('langfuse-masker — pure functions', () => {
       expect(masked).toContain('ca06e9e4'); // model fingerprint 유지
       expect(masked).not.toContain('[USER_TOKEN_HASH_REDACTED]');
     });
+  });
+});
+
+describe('filterLangfuseMetadata (consensus-007 C1-2 — ADR-016 §7 화이트리스트)', () => {
+  it('허용 키 4종 모두 통과', () => {
+    const input = {
+      session_id: 'uuid-1',
+      prompt_name: 'grading-judge',
+      prompt_version: 3,
+      model_digest: 'ca06e9e4',
+    };
+    const { allowed, violations } = filterLangfuseMetadata(input);
+    expect(allowed).toEqual(input);
+    expect(violations).toEqual([]);
+  });
+
+  it('허용 외 키는 drop + violations 수집', () => {
+    const input = {
+      session_id: 'uuid-2',
+      user_token_hash: 'abcdef1234567890',
+      userId: 'u-99',
+    };
+    const { allowed, violations } = filterLangfuseMetadata(input);
+    expect(allowed).toEqual({ session_id: 'uuid-2' });
+    expect(violations.sort()).toEqual(['userId', 'user_token_hash'].sort());
+  });
+
+  it('undefined 입력 — 빈 결과', () => {
+    const { allowed, violations } = filterLangfuseMetadata(undefined);
+    expect(allowed).toEqual({});
+    expect(violations).toEqual([]);
+  });
+
+  it('키 이름 대소문자는 정확 매칭 — Session_Id 등은 violation', () => {
+    const input = { Session_Id: 'x', SESSION_ID: 'y' };
+    const { allowed, violations } = filterLangfuseMetadata(input);
+    expect(Object.keys(allowed)).toEqual([]);
+    expect(violations.sort()).toEqual(['SESSION_ID', 'Session_Id'].sort());
+  });
+
+  it('ALLOWED_METADATA_KEYS 는 4종 exact (Q4 결정)', () => {
+    expect([...ALLOWED_METADATA_KEYS].sort()).toEqual(
+      ['model_digest', 'prompt_name', 'prompt_version', 'session_id'].sort(),
+    );
   });
 });

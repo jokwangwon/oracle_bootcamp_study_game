@@ -103,6 +103,25 @@ Agent B가 필수 안전장치로 지적. CLAUDE.md 제8조(보안) + 헌법 준
   ```
 - **rotation 정책**: `USER_TOKEN_HASH_SALT` rotation 은 ADR-018 참조. Langfuse 측은 rotation 영향권 외 (session_id 는 rotation 무관).
 
+**Metadata 화이트리스트 강제** (consensus-007, Session 6 PR #1 C1-2):
+- `MaskingLangfuseCallbackHandler` 가 전달하는 `metadata` 인자에 **허용 키 4종** 만 통과:
+  - `session_id` — UUID, rotation 무관
+  - `prompt_name` — `langfuse.getPrompt()` 식별자
+  - `prompt_version` — 숫자 버전 pin
+  - `model_digest` — ADR-011 digest pin
+- 위반 키 발견 시:
+  - **development**: `throw new Error(...)` (즉시 인지)
+  - **production**: silent drop + `ops_event_log(kind='pii_masker_triggered', payload={ violation: 'metadata_key', key })` 기록
+- 호출자 코드에서 `metadata: { user_token_hash: ... }` 등으로 ADR-018 §8 금지 6 을 우회하는 경로를 runtime 차단하는 최후 보루.
+
+**Layer 3 LLM timeout 정책** (consensus-007, Session 6 PR #2 C2-5):
+- 기본 `LLM_JUDGE_TIMEOUT_MS = 8000` (사용자 Q1 결정).
+- 초과 시:
+  - `answer_history` 에 `gradingMethod='held'` persist (감사 체인 보존).
+  - HTTP 응답 **에러 반환** (사용자 Q3 결정 = B). Student 는 재제출 또는 `grading_appeals` 경로로 이의 제기 가능.
+  - `ops_event_log(kind='llm_timeout', payload={ answer_history_id, timeout_ms })` 기록.
+- held 건의 admin 검토 UI/CLI 는 MVP-C 백로그 (consensus-007 §4).
+
 ### 추가: 이의제기 파이프라인
 
 - 신규 테이블: `grading_appeals`
@@ -218,6 +237,17 @@ Agent B가 필수 안전장치로 지적. CLAUDE.md 제8조(보안) + 헌법 준
   별도 세션).
 
 **관련 합의**: `docs/review/consensus-005-llm-judge-safety-architecture.md`
+
+### 부록 — MVP-B Session 6 consensus-007 (2026-04-23)
+
+Session 6 3+1 합의 (Agent A/B/C + Reviewer) 에서 B 단독 CRITICAL 2 건 격상.
+사용자 Q1~Q5 결정 반영.
+
+**추가된 정책**:
+- **§7 Metadata 화이트리스트 강제** — `session_id`/`prompt_name`/`prompt_version`/`model_digest` 4종만 허용. dev throw / prod drop + `ops_event_log(kind='pii_masker_triggered')`.
+- **§추가 Layer 3 LLM timeout** — 기본 8000ms. 초과 시 `gradingMethod='held'` persist + HTTP 에러 응답. `ops_event_log(kind='llm_timeout')` 기록.
+
+**관련 합의**: `docs/review/consensus-007-session-6-grading-wiring.md`
 
 ---
 

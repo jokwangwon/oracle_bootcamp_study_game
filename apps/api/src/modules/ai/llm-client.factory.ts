@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { PiiMaskerEventRecorder } from '../ops/pii-masker-event.recorder';
 import { LlmClient, type LlmClientOptions } from './llm-client';
 
 /**
@@ -24,15 +25,18 @@ import { LlmClient, type LlmClientOptions } from './llm-client';
  */
 @Injectable()
 export class LlmClientFactory {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly piiRecorder?: PiiMaskerEventRecorder,
+  ) {}
 
   /** 운영용 — 환경변수 기반 단일 인스턴스 (기존 NestJS DI 동작 호환) */
   createDefault(): LlmClient {
-    return new LlmClient(this.config);
+    return new LlmClient(this.config, undefined, this.piiRecorder);
   }
 
   /** 평가용 — provider/model을 호출 시점에 지정 */
   createFor(opts: LlmClientOptions): LlmClient {
-    return new LlmClient(this.config, opts);
+    return new LlmClient(this.config, opts, this.piiRecorder);
   }
 }

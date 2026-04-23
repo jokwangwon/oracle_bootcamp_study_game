@@ -110,6 +110,14 @@ CREATE UNIQUE INDEX ux_user_token_hash_salt_epochs_active
 - `admin_id` 는 rotation 을 수행한 운영자의 `users.id` 로 강제.
 - 활성 salt 는 항상 1건 (unique partial index 로 강제).
 
+**Bootstrap seed 정책** (consensus-007, Session 6 PR #1 C1-1):
+- 신규 DB 부팅 시 `user_token_hash_salt_epochs` row 0 건 감지되면 migration 이 **자동 INSERT** 1건.
+  - `salt_fingerprint = sha256(env.USER_TOKEN_HASH_SALT).slice(0, 8)`
+  - `admin_id = '00000000-0000-0000-0000-000000000000'` (system sentinel)
+  - `reason = 'scheduled'`, `note = 'bootstrap seed'`
+- `ops_event_log(kind='salt_rotation', payload={ bootstrap: true, ... })` 동시 기록 (감사 체인 개시).
+- **fail-closed**: 런타임에 active epoch 조회 결과 null 이면 throw + `ops_event_log(kind='active_epoch_missing')`. NULL 저장 금지.
+
 **조회 패턴** (감사 시):
 ```sql
 -- 2026-06-01 ~ 2026-06-15 구간 활성 salt 의 fingerprint 조회
@@ -192,6 +200,7 @@ export type OpsEventKind =
 - R3 epoch 전환 — §3 트리거 시에만
 - `grader_digest` 에 `saltep:{N}` 포함 — 기존 `GRADER_DIGEST_REGEX` 변경 비용 > 이득, Session 8+ 재검토
 - Vault/age/sops 재평가 — §2 미래 트리거
+- **epoch 조회 캐시** (consensus-007 P1) — 현재 매 INSERT SELECT 유지 (1.7 rps × 1ms 무시 가능). 트리거: **100 rps 초과 또는 DB CPU p95 > 70%**. 도입 시 invalidation 경로 = `SaltRotationService.rotate()` commit 후 in-process 이벤트 + `LISTEN/NOTIFY` 또는 Redis pub/sub 후보.
 
 ### §11. 긴급 rotation 절차
 
@@ -304,6 +313,7 @@ export type OpsEventKind =
 | Vault/age/sops | "팀 3명+ OR 다중 VPS/K8s 전환" | 조건 충족 시 |
 | `grader_digest` `saltep:{N}` 포함 | "감사 쿼리에서 saltep 필터 필요 발생" | Session 8+ |
 | truncation 폭 확장 | "수강생 >1만 명 도달" | 별도 ADR 필수 |
+| Epoch 조회 캐시 (in-memory / `LISTEN/NOTIFY` / Redis) | "100 rps 초과 또는 DB CPU p95 > 70%" | consensus-007 추가, 미도래 시 현 상태 유지 |
 
 ---
 
@@ -314,6 +324,7 @@ export type OpsEventKind =
 - ADR-016 §6 (answer_history WORM 트리거), §7 (PII — 본 ADR 채택으로 D3 Hybrid 수정)
 - `docs/review/consensus-005-llm-judge-safety-architecture.md` §커밋2
 - `docs/review/consensus-006-adr-018-salt-rotation.md` (본 ADR 의 전제 합의)
+- `docs/review/consensus-007-session-6-grading-wiring.md` — Session 6 합의 (§5 bootstrap seed, §10 epoch 캐시 트리거 추가)
 - PR #3 (Session 4) — `cf03f39` 원인 커밋
 - PR #4 (`fix/docker-compose-salt`) — CRITICAL-1 선행 수선
 - `apps/api/src/modules/grading/user-token-hash.ts` — 구현

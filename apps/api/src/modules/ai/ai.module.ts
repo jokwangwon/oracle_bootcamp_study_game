@@ -6,6 +6,7 @@ import IORedis from 'ioredis';
 
 import { ContentModule } from '../content/content.module';
 import { WeeklyScopeEntity } from '../content/entities/weekly-scope.entity';
+import { OpsModule } from '../ops/ops.module';
 import { LlmClient } from './llm-client';
 import { LlmClientFactory } from './llm-client.factory';
 import { ModelDigestProvider } from './model-digest.provider';
@@ -32,6 +33,7 @@ import { AI_QUESTION_GENERATION_QUEUE } from './queue/queue.constants';
 @Module({
   imports: [
     ContentModule,
+    OpsModule,
     TypeOrmModule.forFeature([WeeklyScopeEntity]),
     BullModule.forRootAsync({
       imports: [ConfigModule],

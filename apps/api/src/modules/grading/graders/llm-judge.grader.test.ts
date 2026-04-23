@@ -11,11 +11,13 @@ import type {
 } from '../../ai/prompt-manager';
 import { EVALUATION_FREE_FORM_SQL_PROMPT } from '../../ai/prompts';
 import {
+  ERROR_MESSAGE_MAX_LENGTH,
   GRADER_DIGEST_REGEX,
   LLM_JUDGE_PROMPT_NAME,
   LLM_JUDGE_PROMPT_VERSION,
   LlmJudgeGrader,
   RATIONALE_MAX_LENGTH,
+  redactErrorMessage,
 } from './llm-judge.grader';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 
@@ -504,5 +506,55 @@ describe('LlmJudgeGrader', () => {
     expect(result.graderDigest).toContain('|temp:0|');
     expect(result.graderDigest).toContain('|seed:42|');
     expect(result.graderDigest).toMatch(/topk:1(\||$)/);
+  });
+});
+
+describe('redactErrorMessage (consensus-007 C1-3 — 에러 로깅 redaction)', () => {
+  it('student_answer 태그 구간은 mask 되어 학생 답안 평문 미노출', () => {
+    const err = new Error(
+      'Parsing failed. Raw output: <student_answer id="abc">SELECT secret FROM vault</student_answer id="abc">',
+    );
+    const red = redactErrorMessage(err);
+    expect(red).not.toContain('SELECT secret FROM vault');
+    expect(red).toMatch(/\[HASH=/);
+    expect(red).toContain('Parsing failed');
+  });
+
+  it('경계 태그 불균형 (태그 일부만) → BOUNDARY_ESCAPE_SENTINEL 치환', () => {
+    const err = new Error(
+      'Parser: <student_answer id="x">secret input leaked without close',
+    );
+    const red = redactErrorMessage(err);
+    expect(red).not.toContain('secret input leaked');
+    expect(red).toContain('[BOUNDARY_ESCAPE_DETECTED]');
+  });
+
+  it('에러 유형 정보 (학생 답안 태그 없음) 는 그대로 유지', () => {
+    const err = new Error('Ollama unreachable: ECONNREFUSED 127.0.0.1:11434');
+    const red = redactErrorMessage(err);
+    expect(red).toContain('Ollama unreachable');
+    expect(red).toContain('ECONNREFUSED');
+  });
+
+  it('err 가 Error 인스턴스 아닐 때도 String() 경유 동작', () => {
+    expect(redactErrorMessage('plain string error')).toBe('plain string error');
+    expect(redactErrorMessage(null)).toBe('null');
+  });
+
+  it('길이 초과 시 truncate + 마크 추가', () => {
+    const longMsg = 'x'.repeat(ERROR_MESSAGE_MAX_LENGTH + 100);
+    const err = new Error(longMsg);
+    const red = redactErrorMessage(err);
+    expect(red.length).toBe(ERROR_MESSAGE_MAX_LENGTH + 1);
+    expect(red.endsWith('…')).toBe(true);
+  });
+
+  it('user_token_hash 패턴도 같이 redact (masker USER_TOKEN_HASH_PATTERNS 재사용)', () => {
+    const err = new Error(
+      'LLM error: user_token_hash=abcdef1234567890 was leaked in raw response',
+    );
+    const red = redactErrorMessage(err);
+    expect(red).not.toContain('abcdef1234567890');
+    expect(red).toContain('[USER_TOKEN_HASH_REDACTED]');
   });
 });
