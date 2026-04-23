@@ -253,6 +253,8 @@ services:
       # env.validation.ts 가 required(min 16)로 강제하므로 compose 부팅 시 반드시 필요.
       # .env 에 USER_TOKEN_HASH_SALT=openssl rand -base64 32 결과 기입.
       USER_TOKEN_HASH_SALT: ${USER_TOKEN_HASH_SALT}
+      # main.ts enableCors origin — web 의 브라우저 origin (복수 comma 구분).
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       PORT: 3001
     ports:
       - "${API_PORT:-3001}:3001"
@@ -261,6 +263,11 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        # Next.js 빌드 타임 replacement — .env 값을 build 에 전달.
+        # runtime env 만으로는 브라우저 번들에 값이 박히지 않음.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:3001}
     container_name: oracle-game-web
     restart: unless-stopped
     depends_on:
