@@ -9,6 +9,7 @@ import { UserTokenHashSaltEpochEntity } from './entities/user-token-hash-salt-ep
 import { ConfigService } from '@nestjs/config';
 
 import { EvalAdminGuard } from '../ai/eval/eval-admin.guard';
+import { ActiveEpochLookup } from './active-epoch.lookup';
 import { AdminReviewController } from './admin-review.controller';
 import { AdminReviewService } from './admin-review.service';
 import { OpsAggregationService } from './ops-aggregation.service';
@@ -47,6 +48,7 @@ import { SaltRotationService } from './salt-rotation.service';
     AdminReviewService,
     SaltRotationService,
     PiiMaskerEventRecorder,
+    ActiveEpochLookup,
     EvalAdminGuard,
     {
       provide: 'EVAL_ADMIN_USERNAMES',
@@ -59,6 +61,7 @@ import { SaltRotationService } from './salt-rotation.service';
     OpsAggregationService,
     SaltRotationService,
     PiiMaskerEventRecorder,
+    ActiveEpochLookup,
   ],
 })
 export class OpsModule {}
