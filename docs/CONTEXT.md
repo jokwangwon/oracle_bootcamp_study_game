@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-23 (**MVP-B Session 6/10 PR #1 머지** — consensus-007 + Q1~Q5 사용자 결정 + 보안·인프라 가드 6 커밋 + docs 2 커밋): C0 consensus-007 + ADR-016 §7/§추가 + ADR-018 §5/§10 → C1-1 bootstrap active epoch seed migration (CRITICAL-1) → C1-2 Langfuse metadata 화이트리스트 가드 (CRITICAL-2) → C1-3 LlmJudgeGrader 에러 로깅 redaction (HIGH-1) → C1-4 pii_masker_triggered ops event + session_id uuid schema test → C1-5 prompt template PII lint 룰 (pre-commit + vitest) → C1-6 ActiveEpochLookup + race 회귀 테스트 (PR #2 선행 헬퍼). **653 → 695 tests (+42) / typecheck clean**. **PR #8 merge (`0c17e08`)**. **`ENABLE_FREE_FORM_GRADING` 부재 / GradingModule 미등록 유지** — PR #2 (free-form 채점 배선 7 커밋) 는 **프로덕션 배포 1일 관측 후** (Q5=B). **다음: PR #1 프로덕션 배포 + staging 부팅 smoke(active epoch 자동 시드 확인) + `salt_rotation(bootstrap:true)` 이벤트 집계 관측 → PR #2 세션 개시**
+**최종 업데이트**: 2026-04-23 오후 (**사용자 첫 실플레이 + 인프라/UX 개선 3 PR 머지**): 2026-04-23 오전 Session 6 PR #1 머지(`0c17e08`) 후 사용자가 tailscale(100.102.41.122:3002) 로 첫 실플레이 시도 → 4 건 이슈 + 2 건 요구사항 발견 → PR #10 (`7b6a86b` tailscale build args + `main.ts:18` CORS origin 버그 수정) / PR #11 (`a245819` UX 재설계 브리프 v1 — programmers/Discord+Reddit/끄투온라인 레퍼런스) / PR #12 (`aa79dec` UX #1 즉시 피드백 카드 / `dee664f` 헤더 로그인 상태 즉시 반영 버그 / `bd328cb` UX #2 scenario+rationale 필드 + 1·2주차 seed 60건 전수 재작성 + 스포일러 방지) 순차 머지. **695 tests GREEN 유지 / typecheck clean**. `WEB_PORT=3002`(기존 portfolio-blog 3000 선점 회피), `USER_TOKEN_HASH_SALT`/`SEED_ON_BOOT=true`/`CORS_ORIGIN` env 추가. **Session 6 PR #2 (free-form 채점 배선) 는 Q5=B 에 따라 별도 세션 대기 유지**. **다음: (a) 전면 UI 재설계 별도 세션 (brief R4~R7, ADR-020 가칭, Tailwind+shadcn 도입) (b) Session 6 PR #2 착수 (1일 관측 후)**
 
 ---
 
@@ -177,7 +177,21 @@ Phase 4: 통합 테스트 + 배포
 | 9.6 | Phase 0 Claude 베이스라인 (Anthropic 크레딧 충전 후) | 🔴 후순위 |
 | **10** | **운영 모델 교체 — `ChatAnthropic` → `ChatOllama` (M3)** | 🔴 다음 세션 (ADR-011 채택 조건 3건 선행) |
 
-### 다음 세션 우선순위 (PR #1 관측 1일 후 PR #2 착수 — Q5=B)
+### 다음 세션 우선순위 (2 트랙 병행)
+
+**트랙 X — 전면 UI 재설계 (별도 세션 권장)** — PR #11 `ux-redesign-brief-v1.md` 기반.
+
+- **Phase 0 검토 질문지 작성** (ADR-001) — 브리프 §5 시드 6개 활용:
+  1. 레퍼런스 4종 중 가장 가까운 하나 / 피해야 할 것
+  2. R1~R7 중 MVP-C 이전 반드시 필요한 것
+  3. 커뮤니티 심도: (a) 질문/답변만 (b) + upvote (c) + 댓글 (d) + 실시간 반응
+  4. 학습 진지함 vs 끄투온라인 캐주얼 톤 트레이드오프
+  5. Mobile-first 여부
+  6. 다크모드 선호도
+- **Phase 1 3+1 합의** → ADR-020 (가칭) UX 재설계 + SDD UI 섹션 + Tailwind CSS + shadcn/ui 도입 결정
+- **구현 순서 제안** (ADR 통과 후): 홈 재설계 → 솔로 랜덤 진입 (R3) → 문제당 토론 쓰레드 entity/API/UI → Discord 스타일 반응 → Mobile 대응
+
+**트랙 Y — MVP-B Session 6 PR #2 (PR #1 관측 1일 후, Q5=B)**
 
 **0순위 — PR #1 (PR #8) 프로덕션 배포 + 관측 (사용자 Q5=B)**
 - **staging 부팅 smoke** — migration 1714000004000 자동 실행 → `user_token_hash_salt_epochs` active row 1건 자동 시드 확인 + `ops_event_log(kind='salt_rotation', payload={bootstrap:true})` 1건 기록 확인.
