@@ -148,4 +148,154 @@ describe('MaskingLangfuseCallbackHandler', () => {
     expect(forwardedOutput.generations[0][0].text).not.toContain('>inner<');
     expect(forwardedOutput.generations[0][0].text).toMatch(/\[HASH=/);
   });
+
+  describe('metadata 화이트리스트 (consensus-007 C1-2)', () => {
+    it('허용 키만 있으면 그대로 통과 (handleChatModelStart)', async () => {
+      const spy = vi
+        .spyOn(CallbackHandler.prototype, 'handleChatModelStart')
+        .mockImplementation(async () => {});
+
+      const h = new MaskingLangfuseCallbackHandler(TEST_PARAMS, {
+        envMode: 'development',
+      });
+      const metadata = {
+        session_id: 'uuid-1',
+        prompt_name: 'grading-judge',
+        prompt_version: 3,
+        model_digest: 'ca06e9e4',
+      };
+      await h.handleChatModelStart(
+        LLM_SERIALIZED,
+        [[new HumanMessage('hi')]],
+        'run-x',
+        undefined,
+        undefined,
+        undefined,
+        metadata,
+      );
+
+      const forwardedMetadata = spy.mock.calls[0][6];
+      expect(forwardedMetadata).toEqual(metadata);
+    });
+
+    it('dev 모드 + 위반 키 발견 → throw (ADR-016 §7)', async () => {
+      vi.spyOn(CallbackHandler.prototype, 'handleChatModelStart').mockImplementation(
+        async () => {},
+      );
+
+      const h = new MaskingLangfuseCallbackHandler(TEST_PARAMS, {
+        envMode: 'development',
+      });
+
+      await expect(
+        h.handleChatModelStart(
+          LLM_SERIALIZED,
+          [[new HumanMessage('hi')]],
+          'run-x',
+          undefined,
+          undefined,
+          undefined,
+          { session_id: 'ok', user_token_hash: 'abcdef1234567890' },
+        ),
+      ).rejects.toThrow(/화이트리스트|user_token_hash/);
+    });
+
+    it('prod 모드 + 위반 키 → silent drop + reporter 호출', async () => {
+      const spy = vi
+        .spyOn(CallbackHandler.prototype, 'handleChatModelStart')
+        .mockImplementation(async () => {});
+      const reporter = vi.fn();
+
+      const h = new MaskingLangfuseCallbackHandler(TEST_PARAMS, {
+        envMode: 'production',
+        violationReporter: reporter,
+      });
+      await h.handleChatModelStart(
+        LLM_SERIALIZED,
+        [[new HumanMessage('hi')]],
+        'run-x',
+        undefined,
+        undefined,
+        undefined,
+        { session_id: 'ok', user_token_hash: 'abcdef1234567890', userId: 'u-1' },
+      );
+
+      const forwardedMetadata = spy.mock.calls[0][6] as Record<string, unknown>;
+      expect(forwardedMetadata).toEqual({ session_id: 'ok' });
+      expect(reporter).toHaveBeenCalledTimes(2);
+      const violatedKeys = reporter.mock.calls
+        .map((c) => (c[0] as { key: string }).key)
+        .sort();
+      expect(violatedKeys).toEqual(['userId', 'user_token_hash'].sort());
+      expect((reporter.mock.calls[0][0] as { handler: string }).handler).toBe(
+        'handleChatModelStart',
+      );
+    });
+
+    it('metadata 부재 (undefined) 는 guard 무영향', async () => {
+      const spy = vi
+        .spyOn(CallbackHandler.prototype, 'handleChatModelStart')
+        .mockImplementation(async () => {});
+
+      const h = new MaskingLangfuseCallbackHandler(TEST_PARAMS, {
+        envMode: 'development',
+      });
+      await h.handleChatModelStart(LLM_SERIALIZED, [[new HumanMessage('x')]], 'run-x');
+
+      expect(spy.mock.calls[0][6]).toBeUndefined();
+    });
+
+    it('handleLLMStart 에도 동일 guard 적용', async () => {
+      const spy = vi
+        .spyOn(CallbackHandler.prototype, 'handleLLMStart')
+        .mockImplementation(async () => {});
+      const reporter = vi.fn();
+
+      const h = new MaskingLangfuseCallbackHandler(TEST_PARAMS, {
+        envMode: 'production',
+        violationReporter: reporter,
+      });
+      await h.handleLLMStart(
+        LLM_SERIALIZED,
+        ['prompt'],
+        'run-y',
+        undefined,
+        undefined,
+        undefined,
+        { prompt_name: 'ok', leak: 'abc' },
+      );
+
+      expect(spy.mock.calls[0][6]).toEqual({ prompt_name: 'ok' });
+      expect(reporter).toHaveBeenCalledOnce();
+      expect((reporter.mock.calls[0][0] as { key: string; handler: string }).handler).toBe(
+        'handleLLMStart',
+      );
+    });
+
+    it('handleChainStart 에도 동일 guard 적용', async () => {
+      const spy = vi
+        .spyOn(CallbackHandler.prototype, 'handleChainStart')
+        .mockImplementation(async () => {});
+      const reporter = vi.fn();
+
+      const h = new MaskingLangfuseCallbackHandler(TEST_PARAMS, {
+        envMode: 'production',
+        violationReporter: reporter,
+      });
+      await h.handleChainStart(
+        CHAIN_SERIALIZED,
+        { input: 'x' },
+        'run-z',
+        undefined,
+        undefined,
+        { session_id: 'ok', email: 'x@y.z' },
+      );
+
+      expect(spy.mock.calls[0][5]).toEqual({ session_id: 'ok' });
+      expect(reporter).toHaveBeenCalledOnce();
+      expect((reporter.mock.calls[0][0] as { handler: string }).handler).toBe(
+        'handleChainStart',
+      );
+    });
+  });
 });

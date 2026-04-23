@@ -59,6 +59,43 @@ const USER_TOKEN_HASH_PATTERNS: readonly RegExp[] = [
 ];
 export const USER_TOKEN_HASH_SENTINEL = '[USER_TOKEN_HASH_REDACTED]';
 
+/**
+ * ADR-016 §7 + ADR-018 §8 금지 6 — Langfuse trace `metadata` 필드 화이트리스트.
+ *
+ * consensus-007 Session 6 PR#1 C1-2 (사용자 Q4 결정 = 4종). 호출자 코드가
+ * `metadata: { user_token_hash: ... }` 등을 주입해도 본 필터에서 drop.
+ *
+ * 허용 키만 통과, 위반 키는 `violations` 배열로 수집. Handler 레이어에서 dev throw /
+ * prod silent drop + reporter 경로로 분기.
+ */
+export const ALLOWED_METADATA_KEYS: ReadonlySet<string> = new Set<string>([
+  'session_id',
+  'prompt_name',
+  'prompt_version',
+  'model_digest',
+]);
+
+export interface MetadataFilterResult {
+  allowed: Record<string, unknown>;
+  violations: string[];
+}
+
+export function filterLangfuseMetadata(
+  metadata: Record<string, unknown> | undefined,
+): MetadataFilterResult {
+  if (!metadata) return { allowed: {}, violations: [] };
+  const allowed: Record<string, unknown> = {};
+  const violations: string[] = [];
+  for (const [k, v] of Object.entries(metadata)) {
+    if (ALLOWED_METADATA_KEYS.has(k)) {
+      allowed[k] = v;
+    } else {
+      violations.push(k);
+    }
+  }
+  return { allowed, violations };
+}
+
 export function hashPii(text: string, len = 16): string {
   return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, len);
 }
