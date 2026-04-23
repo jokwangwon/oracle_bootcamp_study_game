@@ -96,6 +96,17 @@ export interface Question {
   content: QuestionContent;
   answer: string[]; // 정답 (복수 허용)
   explanation?: string | null;
+  /**
+   * UX #2 (ux-redesign-brief-v1.md §2.2) — 문맥 결여 해소.
+   *
+   * `scenario`: 이 쿼리가 해결하는 **상황**. 예: "10번 부서 사원의 이름과 직책을 조회".
+   * `rationale`: **왜** 이 문법을 쓰는가. 예: "WHERE 로 행 필터링, SELECT 로 컬럼 선택".
+   *
+   * 모든 게임 모드 공통 (top-level). 없을 수 있음 — 기존 AI 생성/미작성 문제 호환.
+   * UI 는 있으면 표시, 없으면 숨김.
+   */
+  scenario?: string | null;
+  rationale?: string | null;
   status: QuestionStatus;
   source: QuestionSource;
   createdAt: Date;

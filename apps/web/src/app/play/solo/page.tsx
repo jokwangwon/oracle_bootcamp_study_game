@@ -278,16 +278,28 @@ function RoundPlayer({
   const [answer, setAnswer] = useState('');
   const [hintsUsed, setHintsUsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<EvaluationResult | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const startedAt = useRef(Date.now());
 
   useEffect(() => {
     setAnswer('');
     setHintsUsed(0);
+    setLastResult(null);
+    setError(null);
     startedAt.current = Date.now();
   }, [round.id]);
 
+  // 즉시 피드백 후 "다음" 진행 (UX #1, ux-redesign-brief-v1.md §2.1)
+  const advance = () => {
+    if (!lastResult) return;
+    onComplete(lastResult);
+  };
+
   const submit = async () => {
+    if (submitting || lastResult) return; // 중복 제출/피드백 중 제출 방지
     setError(null);
+    setSubmitting(true);
     try {
       const result = await apiClient.solo.answer(token, {
         roundId: round.id,
@@ -295,19 +307,31 @@ function RoundPlayer({
         submittedAt: Date.now() - startedAt.current,
         hintsUsed,
       });
-      onComplete(result);
+      setLastResult(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const content = round.question.content;
+  const showingFeedback = lastResult !== null;
+  const scenario = round.question.scenario ?? null;
+  const rationale = round.question.rationale ?? null;
 
   return (
     <Container>
       <p style={{ color: 'var(--fg-muted)', marginBottom: '0.5rem' }}>
         라운드 {roundNumber} / {totalRounds}
       </p>
+
+      {/*
+        UX #2 개정 (2026-04-23 사용자 피드백): `rationale` 에 정답 문법 이름이
+        포함돼 있어 풀이 전 노출 시 스포일러. 문제 풀이 단계에는 **scenario 만**,
+        rationale 은 제출 후 FeedbackCard 에서 공개.
+      */}
+      {scenario && <ContextPanel scenario={scenario} />}
 
       {content.type === 'blank-typing' && (
         <pre
@@ -343,9 +367,12 @@ function RoundPlayer({
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') submit();
+          if (e.key !== 'Enter') return;
+          if (showingFeedback) advance();
+          else submit();
         }}
-        placeholder="정답을 입력하세요"
+        placeholder={showingFeedback ? '제출 완료 — Enter 로 다음 라운드' : '정답을 입력하세요'}
+        readOnly={showingFeedback}
         style={{
           width: '100%',
           padding: '0.75rem 1rem',
@@ -353,26 +380,49 @@ function RoundPlayer({
           border: '1px solid var(--border)',
           borderRadius: 8,
           color: 'var(--fg)',
+          opacity: showingFeedback ? 0.6 : 1,
         }}
         autoFocus
       />
 
       <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-        <button
-          type="button"
-          onClick={submit}
-          style={{
-            padding: '0.6rem 1.25rem',
-            background: 'var(--accent)',
-            border: 'none',
-            borderRadius: 8,
-            color: '#0f172a',
-            fontWeight: 700,
-          }}
-        >
-          제출
-        </button>
-        {hintsUsed < round.hints.length && (
+        {!showingFeedback && (
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting}
+            style={{
+              padding: '0.6rem 1.25rem',
+              background: 'var(--accent)',
+              border: 'none',
+              borderRadius: 8,
+              color: '#0f172a',
+              fontWeight: 700,
+              opacity: submitting ? 0.5 : 1,
+              cursor: submitting ? 'wait' : 'pointer',
+            }}
+          >
+            {submitting ? '채점 중...' : '제출'}
+          </button>
+        )}
+        {showingFeedback && (
+          <button
+            type="button"
+            onClick={advance}
+            style={{
+              padding: '0.6rem 1.25rem',
+              background: 'var(--accent)',
+              border: 'none',
+              borderRadius: 8,
+              color: '#0f172a',
+              fontWeight: 700,
+            }}
+            autoFocus
+          >
+            {roundNumber >= totalRounds ? '결과 보기' : '다음 라운드 →'}
+          </button>
+        )}
+        {!showingFeedback && hintsUsed < round.hints.length && (
           <button
             type="button"
             onClick={() => setHintsUsed(hintsUsed + 1)}
@@ -406,8 +456,140 @@ function RoundPlayer({
         </ul>
       )}
 
+      {showingFeedback && (
+        <FeedbackCard
+          result={lastResult!}
+          submittedAnswer={answer}
+          rationale={rationale}
+        />
+      )}
+
       {error && <p style={{ color: 'var(--error)', marginTop: '1rem' }}>{error}</p>}
     </Container>
+  );
+}
+
+/**
+ * UX #1 즉시 피드백 카드 (ux-redesign-brief-v1.md §2.1).
+ * 정/오 + 사용자 답 + 정답 + 해설을 한 번에 표시. 카드 색상으로 정/오 즉시 인지.
+ */
+function FeedbackCard({
+  result,
+  submittedAnswer,
+  rationale,
+}: {
+  result: EvaluationResult;
+  submittedAnswer: string;
+  rationale: string | null;
+}) {
+  const correct = result.isCorrect;
+  const accent = correct ? 'var(--success, #10b981)' : 'var(--error, #ef4444)';
+  return (
+    <section
+      aria-live="polite"
+      style={{
+        marginTop: '1.25rem',
+        padding: '1rem 1.25rem',
+        borderRadius: 10,
+        border: `1px solid ${accent}`,
+        background: 'var(--bg-elevated)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontWeight: 700,
+          color: accent,
+          marginBottom: '0.75rem',
+          fontSize: '1.05rem',
+        }}
+      >
+        {correct ? '✓ 정답' : '✕ 오답'}
+        <span style={{ color: 'var(--fg-muted)', fontWeight: 400, fontSize: '0.9rem' }}>
+          (+{result.score}점)
+        </span>
+      </div>
+
+      <dl style={{ margin: 0, color: 'var(--fg)', fontSize: '0.95rem' }}>
+        <Row label="내 답">{submittedAnswer || <em style={{ color: 'var(--fg-muted)' }}>(빈 답)</em>}</Row>
+        <Row label="정답">
+          {result.correctAnswer.length === 0
+            ? '-'
+            : result.correctAnswer.join(' / ')}
+        </Row>
+        {result.explanation && <Row label="해설">{result.explanation}</Row>}
+        {rationale && <Row label="💡 왜?">{rationale}</Row>}
+      </dl>
+    </section>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.4rem' }}>
+      <dt
+        style={{
+          flex: '0 0 3.5rem',
+          color: 'var(--fg-muted)',
+          fontSize: '0.85rem',
+          paddingTop: '0.15rem',
+        }}
+      >
+        {label}
+      </dt>
+      <dd style={{ margin: 0, flex: 1 }}>{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * UX #2 (ux-redesign-brief-v1.md §2.2, 2026-04-23) — 문맥 결여 해소.
+ * `scenario` (상황) + `rationale` (왜 이 문법) 을 문제 쿼리/설명 위에 표시.
+ * 둘 다 optional — 하나라도 있으면 패널 표시.
+ */
+function ContextPanel({ scenario }: { scenario: string }) {
+  return (
+    <section
+      style={{
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border)',
+        borderLeft: '3px solid var(--accent)',
+        borderRadius: 8,
+        padding: '0.9rem 1.1rem',
+        marginBottom: '1rem',
+        fontSize: '0.95rem',
+        lineHeight: 1.55,
+      }}
+    >
+      <ContextRow label="상황" emoji="📋" body={scenario} />
+    </section>
+  );
+}
+
+function ContextRow({
+  label,
+  emoji,
+  body,
+}: {
+  label: string;
+  emoji: string;
+  body: string;
+}) {
+  return (
+    <div style={{ marginBottom: '0.45rem' }}>
+      <strong
+        style={{
+          color: 'var(--fg-muted)',
+          fontSize: '0.8rem',
+          marginRight: '0.4rem',
+        }}
+      >
+        {emoji} {label}
+      </strong>
+      <span style={{ color: 'var(--fg)' }}>{body}</span>
+    </div>
   );
 }
 
