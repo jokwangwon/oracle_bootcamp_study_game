@@ -65,3 +65,6 @@ logs/
 
 # Claude Code 자동 생성 세션 데이터
 .claude/projects/
+
+# Claude Code 로컬 권한/환경 설정 (개인 환경별로 다름)
+.claude/settings.local.json
