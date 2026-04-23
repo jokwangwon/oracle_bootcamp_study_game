@@ -7,6 +7,7 @@ import type { BaseMessage } from '@langchain/core/messages';
 import type { Callbacks } from '@langchain/core/callbacks/manager';
 import { CallbackHandler } from 'langfuse-langchain';
 
+import { PiiMaskerEventRecorder } from '../ops/pii-masker-event.recorder';
 import { MaskingLangfuseCallbackHandler } from './masking-callback-handler';
 
 /**
@@ -77,6 +78,7 @@ export class LlmClient {
   constructor(
     private readonly config: ConfigService,
     @Optional() opts?: LlmClientOptions,
+    @Optional() private readonly piiRecorder?: PiiMaskerEventRecorder,
   ) {
     const resolved = this.resolveOptions(opts);
     this.model = this.createModel(resolved);
@@ -200,10 +202,21 @@ export class LlmClient {
     // consensus-005 선행 PR: CallbackHandler 를 마스킹 래퍼로 교체.
     // Langfuse cloud 에 전송되는 payload 에서 `<student_answer>` 태그 내부
     // 평문을 해시 메타로 치환. Session 4 LLM-judge 배포 전 필수.
-    return new MaskingLangfuseCallbackHandler({
-      publicKey,
-      secretKey,
-      baseUrl,
-    });
+    //
+    // consensus-007 S6-C1-4: metadata 화이트리스트 위반 시 production 에서
+    // silent drop 된 key 를 `ops_event_log(pii_masker_triggered)` 로 기록.
+    // dev 모드는 throw 동작 유지. piiRecorder 미주입 환경(unit test)은 noop.
+    const recorder = this.piiRecorder;
+    return new MaskingLangfuseCallbackHandler(
+      { publicKey, secretKey, baseUrl },
+      recorder
+        ? {
+            violationReporter: (violation) => {
+              // fire-and-forget. recorder 내부에서 이미 fail-safe 로깅.
+              void recorder.record(violation);
+            },
+          }
+        : undefined,
+    );
   }
 }

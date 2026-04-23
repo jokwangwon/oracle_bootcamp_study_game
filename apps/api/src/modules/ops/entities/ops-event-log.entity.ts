@@ -15,7 +15,8 @@ export type OpsEventKind =
   | 'mt7_breach'
   | 'mt8_breach'
   | 'grading_appeal' // ADR-016 §추가 이의제기 / S5-C3
-  | 'salt_rotation'; // ADR-018 §6 salt rotation / S5-C4
+  | 'salt_rotation' // ADR-018 §6 salt rotation / S5-C4
+  | 'pii_masker_triggered'; // ADR-016 §7 metadata 화이트리스트 위반 / S6-C1-4
 
 export type StudentReportReason = 'incorrect_answer' | 'sql_error' | 'other';
 
@@ -57,6 +58,18 @@ export interface SaltRotationPayload {
   newFingerprint: string; // sha256(salt).slice(0,8)
   rotatedBy: string; // admin user uuid
   reason: 'scheduled' | 'incident';
+}
+
+/**
+ * ADR-016 §7 + consensus-007 S6-C1-4 — Langfuse metadata 화이트리스트 위반 감지.
+ * production 에서 silent drop 된 key 를 관측성 확보용으로 기록.
+ * payload 에 **값은 저장 금지** (PII 유출 방지) — key 이름과 발생 위치만.
+ */
+export interface PiiMaskerTriggeredPayload {
+  violation: 'metadata_key';
+  key: string; // drop 된 메타데이터 key 이름 (값은 저장 금지)
+  handler: string; // handleChatModelStart / handleLLMStart / handleChainStart
+  runId?: string; // LangChain run id (trace 연동)
 }
 
 /**

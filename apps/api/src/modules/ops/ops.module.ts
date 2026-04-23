@@ -13,6 +13,7 @@ import { AdminReviewController } from './admin-review.controller';
 import { AdminReviewService } from './admin-review.service';
 import { OpsAggregationService } from './ops-aggregation.service';
 import { OpsMeasurementService } from './ops-measurement.service';
+import { PiiMaskerEventRecorder } from './pii-masker-event.recorder';
 import { QuestionReportController } from './question-report.controller';
 import { QuestionReportService } from './question-report.service';
 import { SaltRotationService } from './salt-rotation.service';
@@ -45,6 +46,7 @@ import { SaltRotationService } from './salt-rotation.service';
     OpsAggregationService,
     AdminReviewService,
     SaltRotationService,
+    PiiMaskerEventRecorder,
     EvalAdminGuard,
     {
       provide: 'EVAL_ADMIN_USERNAMES',
@@ -52,6 +54,11 @@ import { SaltRotationService } from './salt-rotation.service';
       useFactory: (config: ConfigService) => config.get<string>('EVAL_ADMIN_USERNAMES'),
     },
   ],
-  exports: [OpsMeasurementService, OpsAggregationService, SaltRotationService],
+  exports: [
+    OpsMeasurementService,
+    OpsAggregationService,
+    SaltRotationService,
+    PiiMaskerEventRecorder,
+  ],
 })
 export class OpsModule {}
