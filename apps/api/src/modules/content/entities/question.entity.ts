@@ -53,6 +53,17 @@ export class QuestionEntity {
   @Column({ type: 'text', nullable: true })
   explanation!: string | null;
 
+  /**
+   * UX #2 (ux-redesign-brief-v1.md §2.2) — 문맥 결여 해소.
+   * `scenario`: 이 쿼리가 해결하는 상황. `rationale`: 왜 이 문법을 쓰는가.
+   * 기존 seed 호환 위해 nullable. synchronize=true 환경에서는 자동 ALTER.
+   */
+  @Column({ type: 'text', nullable: true })
+  scenario!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  rationale!: string | null;
+
   @Column({ type: 'varchar', length: 20, default: 'pending_review' })
   status!: QuestionStatus;
 

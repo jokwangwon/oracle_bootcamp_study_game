@@ -201,6 +201,9 @@ export class SeedService implements OnApplicationBootstrap {
       content: seed.content,
       answer: seed.answer,
       explanation: seed.explanation ?? null,
+      // UX #2 (ux-redesign-brief-v1.md §2.2) — 시드의 scenario/rationale 전달
+      scenario: seed.scenario ?? null,
+      rationale: seed.rationale ?? null,
       status: seed.status,
       source: seed.source,
     });
