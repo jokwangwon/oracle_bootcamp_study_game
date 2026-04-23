@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-22 (**MVP-B Session 5/10 6커밋 일괄 + PR #6**): S5-C1 migrations 인프라 + epochs 원장 + user_token_hash_epoch 컬럼 → S5-C2 answer_history WORM 트리거 → S5-C3 grading_appeals 엔티티 + endpoint + Redis rate limit → S5-C4 salt_rotation ops event + pnpm ops:rotate-salt CLI → S5-C5 env.validation refinement 4종 + pre-commit 패턴 확장 + WORM 회귀 방지 vitest → S5-C6 D3 Hybrid masker 방어 계층 + Layer 4 회귀 테스트. **582 → 653 tests (+71) / typecheck clean**. ADR-018 §10 Session 5 이관 항목 + ADR-016 §6 WORM + §추가 이의제기 전부 이행. **GradingAppealsModule AppModule 등록 완료 / GradingModule 미등록 유지(Session 6 격리)**. **PR #6 OPEN mergeable**. **다음: Session 6 (GameSessionService answerFormat='free-form' 분기 + GradingModule AppModule 등록 + ast_failure_reason ops 저장 + session_id Langfuse metadata 배선)**
+**최종 업데이트**: 2026-04-23 (**MVP-B Session 6/10 PR #1 머지** — consensus-007 + Q1~Q5 사용자 결정 + 보안·인프라 가드 6 커밋 + docs 2 커밋): C0 consensus-007 + ADR-016 §7/§추가 + ADR-018 §5/§10 → C1-1 bootstrap active epoch seed migration (CRITICAL-1) → C1-2 Langfuse metadata 화이트리스트 가드 (CRITICAL-2) → C1-3 LlmJudgeGrader 에러 로깅 redaction (HIGH-1) → C1-4 pii_masker_triggered ops event + session_id uuid schema test → C1-5 prompt template PII lint 룰 (pre-commit + vitest) → C1-6 ActiveEpochLookup + race 회귀 테스트 (PR #2 선행 헬퍼). **653 → 695 tests (+42) / typecheck clean**. **PR #8 merge (`0c17e08`)**. **`ENABLE_FREE_FORM_GRADING` 부재 / GradingModule 미등록 유지** — PR #2 (free-form 채점 배선 7 커밋) 는 **프로덕션 배포 1일 관측 후** (Q5=B). **다음: PR #1 프로덕션 배포 + staging 부팅 smoke(active epoch 자동 시드 확인) + `salt_rotation(bootstrap:true)` 이벤트 집계 관측 → PR #2 세션 개시**
 
 ---
 
@@ -148,7 +148,7 @@ Phase 4: 통합 테스트 + 배포
   - **SDD v2.9 개정 완료**: §1.3 문제형태 추가 + §1.5/§1.6 신설(primary 모델 + 메타편향 6항) + §2.2 3개 모듈 신설 + §3.1 EvaluationResult 확장 + §3.2 Mode 6 신설 + §3.3 매핑 확장 + §4.3 신규 프롬프트 5종 + **§4.4.2 3단 채점 신설** + §5.1 ERD 확장 + §6.2 실시간 재정의 + §7.1 API 확장 + §9 MVP-A~D 재구성 + §11 v2.9 이력
   - **operational-monitoring v1.1 개정 완료**: MT6(free-form-canonical-match) / MT7(capstone-step-consistency) / MT8(llm-judge-invocation-ratio) 신설 + ops 컬럼 확장 + 6종 event kind 추가 + ADR-019 승격 트리거
 - ✅ **MVP-A 완료 (2026-04-17, 커밋 4건)** — `452e9aa` Mode 6 객관식 + answerFormat 축 (20 TDD) / `6c282f2` MT6/MT7/MT8 스켈레톤 (ops 차원 컬럼 4 + event kind 3 + Gate breach 3종 / 10 TDD) / `1c29b3b` AI 생성 MC 분기 (AQG 3중 계산적 검증 / 6 TDD) / `a9895c4` MC promptfoo 하네스 + gold-set-mc 15건 (16 TDD). ADR-012 §1~4·§6·§7 이행. §5 Mode 1 variants는 MVP-B §10(free-form 합류 시).
-- 🟡 **MVP-B 진행 중 (5/10 세션 완료 + ADR-018 분리 세션, 2026-04-22)** — `c38cc35` Session 1: GradingModule 스켈레톤 + AnswerSanitizer (26 TDD) / `bc2ccaa` Session 2: Layer 2 + Orchestrator (23 TDD) / **Session 3 (3 커밋)**: Layer 1 AstCanonicalGrader + free-form seed 게이트 + MT6/MT8 필터 (+49 TDD, **3+1 합의 첫 실전**) / **Session 4 선행 PR #2** (`0c96802`): Langfuse masker wrapper + Layer 4 스냅샷 (+33 TDD) / **Session 4 본 PR #3** (`c6a9c37`/`cf03f39`/`d7a5c55`): Layer 3 LlmJudgeGrader + user_token_hash + HMAC salt + DI 배선 + 통합 테스트 (+36 TDD, 546→582). **PR #4** (`e436e1f`): docker-compose salt 주입 CRITICAL 수선. **ADR-018 분리 세션** (`1bdcd89`): consensus-006 합의 + 사용자 Q1=b (D3 Hybrid) / Q2=a / Q3=a / Q4=a → ADR-018 v1 + ADR-016 §7 연쇄 수정. **Session 5 6커밋 일괄 (PR #6)**: `4750e07` migrations+epochs / `6f3ffbe` WORM 트리거 / `03afe4b` grading_appeals+endpoint+Redis rate limit / `eba8514` rotate-salt CLI / `8af2d0d` env refinement 4종+하네스 강화 / `ef12082` D3 Hybrid masker 방어 (+71 TDD, 582→653). **GradingAppealsModule AppModule 등록 / GradingModule 미등록 유지**. Roadmap: memory `project_mvp_b_plan.md`.
+- 🟡 **MVP-B 진행 중 (6/10 세션, Session 6 은 PR #1 머지까지. PR #2 는 후속, 2026-04-23)** — Session 1~5 (~PR #6) 는 위 요약 유지. **Session 6 PR #1 (PR #8 merge)**: consensus-007 3+1 합의 + 사용자 Q1~Q5 결정 → `cd712bf` C0 consensus-007 + ADR 연쇄 / `c252f41` C1-1 bootstrap epoch seed migration (CRITICAL-1) / `eac7205` C1-2 Langfuse metadata 화이트리스트 가드 (CRITICAL-2, 4종: session_id/prompt_name/prompt_version/model_digest) / `b13a3f4` C1-3 LlmJudgeGrader 에러 로깅 redaction (HIGH-1, redactErrorMessage + maskStudentAnswerInText 재사용) / `f923c87` C1-4 pii_masker_triggered ops event + session_id PK uuid schema test (PiiMaskerEventRecorder DI 배선 / AiModule ↔ OpsModule) / `79f67f5` C1-5 prompt template PII lint (pre-commit + vitest 이중 방어, prompts/*.prompt.ts 스캔) / `9b0f6e2` C1-6 ActiveEpochLookup + race 회귀 테스트 (653→695 tests / +42). **`ENABLE_FREE_FORM_GRADING` 부재 / GradingModule AppModule 미등록 유지** — PR #2 대기. Roadmap: memory `project_mvp_b_plan.md`.
 - 🔴 MVP-C (3주) — 주차별 미니 캡스톤 + 3-entity + 주제 팩 4종 + MT7. ADR-014
 - 🔴 MVP-C' (2주) — 최종 캡스톤 2트랙(SQL/PL-SQL). ADR-014
 - 🔴 MVP-D (2주) — 주간 릴리스 cron + grading_appeals UI + mc-distractor assertion. ADR-015/016/017
@@ -177,18 +177,24 @@ Phase 4: 통합 테스트 + 배포
 | 9.6 | Phase 0 Claude 베이스라인 (Anthropic 크레딧 충전 후) | 🔴 후순위 |
 | **10** | **운영 모델 교체 — `ChatAnthropic` → `ChatOllama` (M3)** | 🔴 다음 세션 (ADR-011 채택 조건 3건 선행) |
 
-### 다음 세션 우선순위 (Session 5 PR #6 merge 대기 → Session 6 착수)
+### 다음 세션 우선순위 (PR #1 관측 1일 후 PR #2 착수 — Q5=B)
 
-**0순위 — PR #6 머지 선행 (gh rate limit 해제 후)**
-- PR body Test plan 후반 3개 체크박스: (a) staging 에서 `pnpm migration:run` 수동 실행, (b) `pnpm ops:rotate-salt --reason=scheduled --admin-id=<uuid>` 1회 실행으로 첫 epoch 기록, (c) `.env` USER_TOKEN_HASH_SALT 확인(PR #4 에서 이미 주입됨).
-- 머지 시점은 Session 6 배선 **전**. WORM 트리거 + epochs 원장이 GradingModule 등록 전에 이미 DB 에 존재해야 안전.
+**0순위 — PR #1 (PR #8) 프로덕션 배포 + 관측 (사용자 Q5=B)**
+- **staging 부팅 smoke** — migration 1714000004000 자동 실행 → `user_token_hash_salt_epochs` active row 1건 자동 시드 확인 + `ops_event_log(kind='salt_rotation', payload={bootstrap:true})` 1건 기록 확인.
+- **프로덕션 배포 1일 관측**:
+  - `pii_masker_triggered` 이벤트 기대값 = 0 (호출자 코드 정합 확인용). 발생 시 즉시 원인 조사.
+  - `answer_history` INSERT 경로 회귀 없음 (MC/BlankTyping/TermMatch 게임 모드 동작 유지).
+  - pre-commit Layer 3-a3 (prompt template PII grep) 실사용 중 false positive 확인.
+- 이상 없으면 **PR #2 세션 개시**. 이상 발견 시 hotfix PR 선행.
 
-**최우선 — MVP-B Session 6/10 (GradingModule 배선 + D3 Hybrid 실 배선)**
-1. **`GameSessionService` 배선** — `submitAnswer` 의 `answerFormat==='free-form'` 분기에서 `GradingOrchestrator.grade()` 호출. 기존 MC/single-token 경로는 건드리지 않음. 결과 `GradingResult` 를 `EvaluationResult` 로 변환 후 반환.
-2. **`GradingModule` AppModule 등록** — Session 1 부터 격리되어 있던 모듈을 본격 활성화. LlmJudgeGrader + AstCanonicalGrader + LAYER_2 + Orchestrator + Sanitizer 전 체인 가동.
-3. **`ast_failure_reason` → `ops_question_measurements` 저장 배선** — Session 3 에서 추가한 차원 컬럼을 실제로 채우는 경로. `OpsMeasurementService.measureSync` 확장.
-4. **Langfuse trace metadata D3 Hybrid 실 배선** — `session_id` 만 기록, `user_token_hash` 주입 경로가 **없는지** E2E 테스트(현재는 masker 방어만 있음).
-5. **`user_token_hash_epoch` 값 채움** — `answer_history` INSERT 시 active epoch 조회 후 저장 (Session 5 원장 테이블 활용 첫 경로).
+**최우선 — MVP-B Session 6/10 PR #2 (free-form 채점 배선, 7 커밋 / consensus-007 §5)**
+1. **C2-1**: `LlmClient.invoke(messages, opts?: { metadata?: WhitelistedMetadata })` + `sessionId` 전파. `PlayerAnswer.sessionId` 축 신설 → `GameSessionService` → `GradingOrchestrator` → `LlmJudgeGrader`. 기존 호출자 회귀 0 (optional).
+2. **C2-2**: `GradingMeasurementService.measureGrading()` 신규 — `OpsMeasurementService.measureSync` 와 시맨틱 분리. `ast_failure_reason` / `judge_invocation_count` / `llm_timeout` 등 채점 차원 일관 기록.
+3. **C2-3**: `GradingModule` AppModule 등록 (격리 해제). wiring smoke test (DI 해결 확인, Ollama lazy 연결로 부팅 영향 0).
+4. **C2-4**: `GameSessionService.gradeFreeForm()` private 추출 + `answerFormat==='free-form'` 분기 + `ENABLE_FREE_FORM_GRADING` env kill-switch (Q2=false 프로덕션 기본). MC/single-token 회귀 없음.
+5. **C2-5**: `LLM_JUDGE_TIMEOUT_MS=8000` env (Q1) + held fallback + **HTTP 에러 응답 (Q3=B)**. `answer_history.gradingMethod='held'` persist 유지로 감사 체인 보존. `ops_event_log(kind='llm_timeout')` 기록.
+6. **C2-6**: `GradingResult → EvaluationResult` 변환 + 7항 persist (gradingMethod/graderDigest/gradingLayersUsed/partialScore/rationale/sanitizationFlags/astFailureReason) + `user_token_hash_epoch` 채움 (PR #1 C1-6 `ActiveEpochLookup` 재사용).
+7. **C2-7**: E2E `OLLAMA_INTEGRATION` env gate (nightly). Langfuse mock 송신 payload 전수 캡처 → userId 파생정보 0건 assert.
 
 **최우선 — 합의 산출물 백로그 (Session 3/4 에서 연기)**
 - **Session 6+**: 에러 타입 행동 분기 (`truly_invalid_syntax` → 즉시 FAIL). 현재 기록만, 행동 분기는 Rewriter 와 함께.
