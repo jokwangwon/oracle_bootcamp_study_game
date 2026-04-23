@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-22 (**MVP-B Session 4 본 PR merge + ADR-018 분리 세션 완료**): PR #2 Langfuse masker 선행(+33 TDD) → PR #3 Session 4 본(+36 TDD) → PR #4 docker-compose salt 주입 선행 수선(CRITICAL-1) → ADR-018 v1 작성(사용자 Q1=b D3 Hybrid / Q2=a 외부 표준 배제 / Q3=a R2 유보 / Q4=a 별도 PR = PR #4) + ADR-016 §7 연쇄 수정(Langfuse 는 session_id 만, user_token_hash 는 DB 한정). **582 tests / typecheck clean**. **다음: MVP-B Session 5 (WORM 트리거 + grading_appeals + user_token_hash_salt_epochs + salt_rotation ops event + 부팅 검증 4종 + production migrations 디렉토리)**
+**최종 업데이트**: 2026-04-22 (**MVP-B Session 5/10 6커밋 일괄 + PR #6**): S5-C1 migrations 인프라 + epochs 원장 + user_token_hash_epoch 컬럼 → S5-C2 answer_history WORM 트리거 → S5-C3 grading_appeals 엔티티 + endpoint + Redis rate limit → S5-C4 salt_rotation ops event + pnpm ops:rotate-salt CLI → S5-C5 env.validation refinement 4종 + pre-commit 패턴 확장 + WORM 회귀 방지 vitest → S5-C6 D3 Hybrid masker 방어 계층 + Layer 4 회귀 테스트. **582 → 653 tests (+71) / typecheck clean**. ADR-018 §10 Session 5 이관 항목 + ADR-016 §6 WORM + §추가 이의제기 전부 이행. **GradingAppealsModule AppModule 등록 완료 / GradingModule 미등록 유지(Session 6 격리)**. **PR #6 OPEN mergeable**. **다음: Session 6 (GameSessionService answerFormat='free-form' 분기 + GradingModule AppModule 등록 + ast_failure_reason ops 저장 + session_id Langfuse metadata 배선)**
 
 ---
 
@@ -148,7 +148,7 @@ Phase 4: 통합 테스트 + 배포
   - **SDD v2.9 개정 완료**: §1.3 문제형태 추가 + §1.5/§1.6 신설(primary 모델 + 메타편향 6항) + §2.2 3개 모듈 신설 + §3.1 EvaluationResult 확장 + §3.2 Mode 6 신설 + §3.3 매핑 확장 + §4.3 신규 프롬프트 5종 + **§4.4.2 3단 채점 신설** + §5.1 ERD 확장 + §6.2 실시간 재정의 + §7.1 API 확장 + §9 MVP-A~D 재구성 + §11 v2.9 이력
   - **operational-monitoring v1.1 개정 완료**: MT6(free-form-canonical-match) / MT7(capstone-step-consistency) / MT8(llm-judge-invocation-ratio) 신설 + ops 컬럼 확장 + 6종 event kind 추가 + ADR-019 승격 트리거
 - ✅ **MVP-A 완료 (2026-04-17, 커밋 4건)** — `452e9aa` Mode 6 객관식 + answerFormat 축 (20 TDD) / `6c282f2` MT6/MT7/MT8 스켈레톤 (ops 차원 컬럼 4 + event kind 3 + Gate breach 3종 / 10 TDD) / `1c29b3b` AI 생성 MC 분기 (AQG 3중 계산적 검증 / 6 TDD) / `a9895c4` MC promptfoo 하네스 + gold-set-mc 15건 (16 TDD). ADR-012 §1~4·§6·§7 이행. §5 Mode 1 variants는 MVP-B §10(free-form 합류 시).
-- 🟡 **MVP-B 진행 중 (4/10 세션 완료 + ADR-018 분리 세션, 2026-04-22)** — `c38cc35` Session 1: GradingModule 스켈레톤 + AnswerSanitizer (26 TDD) / `bc2ccaa` Session 2: Layer 2 + Orchestrator (23 TDD) / **Session 3 (3 커밋)**: Layer 1 AstCanonicalGrader + free-form seed 게이트 + MT6/MT8 필터 (+49 TDD, **3+1 합의 첫 실전**) / **Session 4 선행 PR #2** (`0c96802`): Langfuse masker wrapper + Layer 4 스냅샷 (+33 TDD) / **Session 4 본 PR #3** (`c6a9c37`/`cf03f39`/`d7a5c55`): Layer 3 LlmJudgeGrader + user_token_hash + HMAC salt + DI 배선 + 통합 테스트 (+36 TDD, **546→582**). **PR #4** (`e436e1f`): docker-compose salt 주입 CRITICAL 수선. **ADR-018 분리 세션 (2026-04-22)**: consensus-006 합의 + 사용자 Q1=b (D3 Hybrid) / Q2=a / Q3=a / Q4=a → ADR-018 v1 + ADR-016 §7 D3 Hybrid 연쇄 수정. **GradingModule AppModule 미등록 유지**. Roadmap: memory `project_mvp_b_plan.md`.
+- 🟡 **MVP-B 진행 중 (5/10 세션 완료 + ADR-018 분리 세션, 2026-04-22)** — `c38cc35` Session 1: GradingModule 스켈레톤 + AnswerSanitizer (26 TDD) / `bc2ccaa` Session 2: Layer 2 + Orchestrator (23 TDD) / **Session 3 (3 커밋)**: Layer 1 AstCanonicalGrader + free-form seed 게이트 + MT6/MT8 필터 (+49 TDD, **3+1 합의 첫 실전**) / **Session 4 선행 PR #2** (`0c96802`): Langfuse masker wrapper + Layer 4 스냅샷 (+33 TDD) / **Session 4 본 PR #3** (`c6a9c37`/`cf03f39`/`d7a5c55`): Layer 3 LlmJudgeGrader + user_token_hash + HMAC salt + DI 배선 + 통합 테스트 (+36 TDD, 546→582). **PR #4** (`e436e1f`): docker-compose salt 주입 CRITICAL 수선. **ADR-018 분리 세션** (`1bdcd89`): consensus-006 합의 + 사용자 Q1=b (D3 Hybrid) / Q2=a / Q3=a / Q4=a → ADR-018 v1 + ADR-016 §7 연쇄 수정. **Session 5 6커밋 일괄 (PR #6)**: `4750e07` migrations+epochs / `6f3ffbe` WORM 트리거 / `03afe4b` grading_appeals+endpoint+Redis rate limit / `eba8514` rotate-salt CLI / `8af2d0d` env refinement 4종+하네스 강화 / `ef12082` D3 Hybrid masker 방어 (+71 TDD, 582→653). **GradingAppealsModule AppModule 등록 / GradingModule 미등록 유지**. Roadmap: memory `project_mvp_b_plan.md`.
 - 🔴 MVP-C (3주) — 주차별 미니 캡스톤 + 3-entity + 주제 팩 4종 + MT7. ADR-014
 - 🔴 MVP-C' (2주) — 최종 캡스톤 2트랙(SQL/PL-SQL). ADR-014
 - 🔴 MVP-D (2주) — 주간 릴리스 cron + grading_appeals UI + mc-distractor assertion. ADR-015/016/017
@@ -177,46 +177,55 @@ Phase 4: 통합 테스트 + 배포
 | 9.6 | Phase 0 Claude 베이스라인 (Anthropic 크레딧 충전 후) | 🔴 후순위 |
 | **10** | **운영 모델 교체 — `ChatAnthropic` → `ChatOllama` (M3)** | 🔴 다음 세션 (ADR-011 채택 조건 3건 선행) |
 
-### 다음 세션 우선순위 (ADR-018 수용 직후 — Session 5 착수 대기)
+### 다음 세션 우선순위 (Session 5 PR #6 merge 대기 → Session 6 착수)
 
-**최우선 — MVP-B Session 5/10 (WORM + grading_appeals + ADR-018 §10 Session 5 이관 일괄)**
-1. **`answer_history` WORM 트리거** — DB 레벨 REVOKE UPDATE + `RAISE EXCEPTION` append-only 트리거. 본 트리거가 ADR-018 §8 금지 1 (재계산 migration) 의 DB 레벨 시행체. **production `migrations/` 디렉토리 신설 동시 필수** (A [WARNING]).
-2. **`grading_appeals` 테이블 + `POST /api/grading/:answerHistoryId/appeal`** — 분당 10회 / 일당 5회 rate limit. ADR-016 §추가.
-3. **ADR-018 §10 Session 5 이관 항목 일괄**:
-   - `user_token_hash_salt_epochs` 테이블 + `answer_history.user_token_hash_epoch SMALLINT` 컬럼
-   - `OpsEventKind` `salt_rotation` enum 추가 + `pnpm ops:rotate-salt` CLI (2-step ADMIN_ACK 게이트)
-   - `env.validation.ts` refinement 4종 (placeholder 거부 / 이중 salt 일치 / secret 재사용 / 엔트로피 하한)
-   - Layer 3 pre-commit gitleaks 패턴 확장 (`salt|hmac|token_hash`)
-   - Layer 4 CI "재계산 migration 회귀 방지" grep 테스트
-4. **Langfuse trace metadata 경로 배선 (D3 Hybrid 원칙)** — `session_id` 만 기록, `user_token_hash` 는 DB 내부 전용.
-5. **[MVP-B Session 6] GameSessionService 배선 + AppModule 등록** — answerFormat='free-form' 분기에서 GradingOrchestrator 호출 + `ast_failure_reason` 를 `ops_question_measurements` 에 저장.
-6. **[MVP-B Session 7~10] SM-2 / dry-run / 작성형 gold set / Mode 1 variants.**
+**0순위 — PR #6 머지 선행 (gh rate limit 해제 후)**
+- PR body Test plan 후반 3개 체크박스: (a) staging 에서 `pnpm migration:run` 수동 실행, (b) `pnpm ops:rotate-salt --reason=scheduled --admin-id=<uuid>` 1회 실행으로 첫 epoch 기록, (c) `.env` USER_TOKEN_HASH_SALT 확인(PR #4 에서 이미 주입됨).
+- 머지 시점은 Session 6 배선 **전**. WORM 트리거 + epochs 원장이 GradingModule 등록 전에 이미 DB 에 존재해야 안전.
 
-**합의 산출물 백로그 (Session 4 에서 연기)**
-- **Session 4+**: 에러 타입 행동 분기 (`truly_invalid_syntax` → 즉시 FAIL) — 현재 기록만 완료, 행동 분기는 Rewriter 와 함께 도입
-- **Session 4+**: 전처리 Rewriter (`(+)` → ANSI JOIN, `NVL` → `COALESCE`) — `grader_digest` 재현성 재설계 선행 필요
-- **MVP-B 이후**: sqlglot Python 마이크로서비스 (Agent C 2순위 제안)
-- **Session 8+ 유보 (ADR-018 §10)**: R2 dual-salt overlap / R3 epoch 컬럼 / `grader_digest` saltep 포함 / Vault-age-sops 재평가 (각 트리거 조건 ADR-018 §3/§4 참조)
+**최우선 — MVP-B Session 6/10 (GradingModule 배선 + D3 Hybrid 실 배선)**
+1. **`GameSessionService` 배선** — `submitAnswer` 의 `answerFormat==='free-form'` 분기에서 `GradingOrchestrator.grade()` 호출. 기존 MC/single-token 경로는 건드리지 않음. 결과 `GradingResult` 를 `EvaluationResult` 로 변환 후 반환.
+2. **`GradingModule` AppModule 등록** — Session 1 부터 격리되어 있던 모듈을 본격 활성화. LlmJudgeGrader + AstCanonicalGrader + LAYER_2 + Orchestrator + Sanitizer 전 체인 가동.
+3. **`ast_failure_reason` → `ops_question_measurements` 저장 배선** — Session 3 에서 추가한 차원 컬럼을 실제로 채우는 경로. `OpsMeasurementService.measureSync` 확장.
+4. **Langfuse trace metadata D3 Hybrid 실 배선** — `session_id` 만 기록, `user_token_hash` 주입 경로가 **없는지** E2E 테스트(현재는 masker 방어만 있음).
+5. **`user_token_hash_epoch` 값 채움** — `answer_history` INSERT 시 active epoch 조회 후 저장 (Session 5 원장 테이블 활용 첫 경로).
+
+**최우선 — 합의 산출물 백로그 (Session 3/4 에서 연기)**
+- **Session 6+**: 에러 타입 행동 분기 (`truly_invalid_syntax` → 즉시 FAIL). 현재 기록만, 행동 분기는 Rewriter 와 함께.
+- **Session 6+**: 전처리 Rewriter (`(+)` → ANSI JOIN, `NVL` → `COALESCE`). `grader_digest` 재현성 재설계 선행 필요.
+
+**Session 7~10**
+- Session 7: SM-2 복습 간격 시스템
+- Session 8: dry-run 채점 모드 (개발 편의)
+- Session 9: 작성형 gold set 15+건 (Mode 1 variants 준비)
+- Session 10: Mode 1 variants 실제 도입 + free-form seed 가동
+
+**Session 8+ 유보 (ADR-018 §10 트리거 조건)**
+- R2 dual-salt overlap — salt rotation 후 24h 동안 구 salt 병행 수용. 현재는 없음.
+- R3 `user_token_hash_epoch` 컬럼 전파 — answer_history 이외 테이블. (Session 5 에서 answer_history 만 추가)
+- `grader_digest` 에 saltep 포함 — rotation 후 digest 재현성 이슈 발생 시
+- Vault-age-sops 재평가 — 운영 규모 확대 시
+- sqlglot Python 마이크로서비스 — Agent C 2순위 제안, MVP-B 이후
 
 **병렬 운영 (기존 유지)**
-6. **사용자 작업: `.env` 운영 교체 완료 상태** — 2026-04-16 이후 기동 정상 (LLM_PROVIDER=ollama, digest 검증 통과).
-7. **`NOTION_DATABASE_ID` 사용자 입력 + 노션 sync 실증** — 2026-04-16 `POST /api/notion/sync`로 22건 동기화 이미 실증됨. Stage 2(LLM 정리) 진입 여부는 MVP-B 완료 후 결정.
-8. **프론트 결과 페이지 UI** — submitAnswer 응답의 correctAnswer/explanation 표시 (MC 도입으로 필요성 증가).
+- **사용자 작업: `.env` 운영 교체 완료 상태** — 2026-04-16 이후 기동 정상 (LLM_PROVIDER=ollama, digest 검증 통과).
+- **`NOTION_DATABASE_ID` 사용자 입력 + 노션 sync 실증** — 2026-04-16 `POST /api/notion/sync`로 22건 동기화 이미 실증됨. Stage 2(LLM 정리) 진입 여부는 MVP-B 완료 후 결정.
+- **프론트 결과 페이지 UI** — submitAnswer 응답의 correctAnswer/explanation 표시 (MC 도입으로 필요성 증가).
 
 **MVP-B 이후 순차**
-9. **[MVP-C] 주차별 미니 캡스톤** — `CapstoneModule` 신설 + 3-entity 마이그레이션 + 주제 팩 4종 + `userId×주차` 시드. ADR-014.
-10. **[MVP-C'] 최종 캡스톤 2트랙 (SQL/PL-SQL)** — 각 트랙 10~15 step + 관리자 승인. ADR-014.
-11. **[MVP-D] 주간 릴리스 cron + mc-distractor-plausibility assertion + grading_appeals UI**. ADR-015/016/017.
-12. **실시간 대전 (ADR-015) — 후순위** (2026-04-17 사용자 결정). 위 과제 완료 후 개별 섹션으로 진행.
+- **[MVP-C] 주차별 미니 캡스톤** — `CapstoneModule` 신설 + 3-entity 마이그레이션 + 주제 팩 4종 + `userId×주차` 시드. ADR-014.
+- **[MVP-C'] 최종 캡스톤 2트랙 (SQL/PL-SQL)** — 각 트랙 10~15 step + 관리자 승인. ADR-014.
+- **[MVP-D] 주간 릴리스 cron + mc-distractor-plausibility assertion + grading_appeals UI**. ADR-015/016/017.
+- **실시간 대전 (ADR-015) — 후순위** (2026-04-17 사용자 결정). 위 과제 완료 후 개별 섹션으로 진행.
 
 **후순위 (MVP 스프린트 병렬/이후)**
-13. **Notion Stage 2 (LLM 정리)** — input sanitization → ChatOllama → StructuredOutputParser → `notion_documents.structured_content`. raw_markdown 불변 보존.
-14. **Notion Stage 3 (자동 범위 추론)** — extractOracleTokens + LLM 보조 → 주차/주제 매핑 → weekly_scope upsert.
-15. **operational-monitoring Phase C** — 대시보드 UI + Slack/email 알림 채널 (Phase B 2주 안정 후).
-16. **2주차+ 시드 확장** — IMPLEMENTATION_STATUS §4.3 line 163~164 미작성 주차 채우기.
-17. **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿.
-18. **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인.
-19. **(조건부)** ADR-019 채점 모델 분리 — MT8 breach 3회/월 또는 `grading_appeals` ≥ 10건/주 시 트리거.
+- **Notion Stage 2 (LLM 정리)** — input sanitization → ChatOllama → StructuredOutputParser → `notion_documents.structured_content`. raw_markdown 불변 보존.
+- **Notion Stage 3 (자동 범위 추론)** — extractOracleTokens + LLM 보조 → 주차/주제 매핑 → weekly_scope upsert.
+- **operational-monitoring Phase C** — 대시보드 UI + Slack/email 알림 채널 (Phase B 2주 안정 후).
+- **2주차+ 시드 확장** — IMPLEMENTATION_STATUS §4.3 line 163~164 미작성 주차 채우기.
+- **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿.
+- **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인.
+- **(조건부)** ADR-019 채점 모델 분리 — MT8 breach 3회/월 또는 `grading_appeals` ≥ 10건/주 시 트리거.
 
 ### 환경/운영 메모
 
