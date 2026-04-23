@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { LlmClient, type LlmProvider } from '../../ai/llm-client';
 import { LlmClientFactory } from '../../ai/llm-client.factory';
+import { maskStudentAnswerInText } from '../../ai/langfuse-masker';
 import { ModelDigestProvider } from '../../ai/model-digest.provider';
 import {
   PromptManager,
@@ -61,6 +62,25 @@ export type JudgeOutput = z.infer<typeof JUDGE_OUTPUT_SCHEMA>;
  */
 export const GRADER_DIGEST_REGEX =
   /^prompt:[a-z0-9\-/]+:v\d+\|model:[a-f0-9]{8}\|parser:sov1\|temp:0\|seed:42\|topk:1(\|local-[a-f0-9]{8})?$/;
+
+/**
+ * consensus-007 Session 6 PR#1 C1-3 — 에러 로깅 redaction.
+ *
+ * LangChain `OutputFixingParser` 가 2차 파싱 실패 시 raw LLM response 를 error
+ * message 에 그대로 포함하는 경우가 있다. raw response 에는 prompt echo + 학생
+ * 답안 경계 태그가 섞여 있을 수 있어, stdout/journald 로 출력되면 학생 답안 평문
+ * 유출 위험. `maskStudentAnswerInText` 를 재사용해 태그 구간 치환 + 최대 길이 제한.
+ */
+export const ERROR_MESSAGE_MAX_LENGTH = 500;
+export const ERROR_MESSAGE_TRUNCATE_MARK = '…';
+
+export function redactErrorMessage(err: unknown, maxLen = ERROR_MESSAGE_MAX_LENGTH): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const masked = maskStudentAnswerInText(raw);
+  return masked.length > maxLen
+    ? masked.slice(0, maxLen) + ERROR_MESSAGE_TRUNCATE_MARK
+    : masked;
+}
 
 export interface Layer3GradeInput {
   studentAnswer: string;
@@ -138,7 +158,7 @@ export class LlmJudgeGrader implements Layer3Grader {
       );
     } catch (err) {
       this.logger.warn(
-        `Layer 3 prompt resolution failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Layer 3 prompt resolution failed: ${redactErrorMessage(err)}`,
       );
       return this.unknownFallback(
         'Layer 3 prompt resolution failed',
@@ -162,7 +182,7 @@ export class LlmJudgeGrader implements Layer3Grader {
       })) as BaseMessage[];
     } catch (err) {
       this.logger.warn(
-        `Layer 3 prompt format failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Layer 3 prompt format failed: ${redactErrorMessage(err)}`,
       );
       return this.unknownFallback('Layer 3 prompt format failed', resolved);
     }
@@ -177,7 +197,7 @@ export class LlmJudgeGrader implements Layer3Grader {
           : JSON.stringify(response.content);
     } catch (err) {
       this.logger.warn(
-        `Layer 3 LLM invocation failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Layer 3 LLM invocation failed: ${redactErrorMessage(err)}`,
       );
       return this.unknownFallback('Layer 3 LLM invocation failed', resolved);
     }
@@ -188,7 +208,7 @@ export class LlmJudgeGrader implements Layer3Grader {
       parsed = await this.fixingParser.parse(responseText);
     } catch (err) {
       this.logger.warn(
-        `Layer 3 structured output parse failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Layer 3 structured output parse failed: ${redactErrorMessage(err)}`,
       );
       return this.unknownFallback(
         'Layer 3 structured output parse failed after fixer retry',
