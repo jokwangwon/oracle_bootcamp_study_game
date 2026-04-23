@@ -75,8 +75,9 @@ export class AnswerHistoryEntity {
   /**
    * ADR-016 §7 + consensus-005 §커밋2 — userId 의 HMAC-SHA256 (첫 16 hex chars).
    *
-   * 목적: Langfuse trace metadata / PII 필터 내부 참조에서 평문 userId 노출 방지.
-   * hash 값 자체는 DB 에 저장하여 재구성 없이도 "같은 학생" 여부 판정 가능.
+   * 목적 (ADR-018 §4 D3 Hybrid 반영): Langfuse 에는 저장하지 않고 **DB 한정** 감사·분석용.
+   *  - `answer_history.user_token_hash` 컬럼에만 저장.
+   *  - Langfuse trace metadata 에는 `session_id` 만 기록 — ADR-018 §8 금지 6.
    * 산출: `hashUserToken(userId, env.USER_TOKEN_HASH_SALT)` (grading/user-token-hash.ts).
    *
    * nullable 인 이유:
@@ -85,6 +86,18 @@ export class AnswerHistoryEntity {
    */
   @Column({ type: 'varchar', length: 32, name: 'user_token_hash', nullable: true })
   userTokenHash!: string | null;
+
+  /**
+   * ADR-018 §4 + §5 — 해당 레코드 작성 시점 활성 salt 의 epoch_id.
+   *
+   * 목적: salt rotation 발생 후에도 "이 행의 user_token_hash 가 어느 salt 로 계산됐는지"
+   * 복원 가능 (감사 쿼리). `user_token_hash_salt_epochs` 원장 조인 축.
+   *
+   * nullable 인 이유: `user_token_hash` 와 동일 정책 (free-form 경로 전에는 null).
+   * 값이 있을 때는 현재 활성 epoch_id.
+   */
+  @Column({ type: 'smallint', name: 'user_token_hash_epoch', nullable: true })
+  userTokenHashEpoch!: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

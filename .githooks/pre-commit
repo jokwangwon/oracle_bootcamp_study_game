@@ -10,11 +10,27 @@ set -u
 echo "[Harness Layer 2/3] pre-commit hook 실행 중..."
 
 # ---------------------------------------------------------------------------
-# Layer 3-a: 민감 정보 스캔 (API 키, 비밀번호 등) — 항상 실행
+# Layer 3-a: 민감 정보 스캔 (API 키, 비밀번호, salt/hmac 등) — 항상 실행
+# ADR-018 §10 Session 5 반영: salt|hmac|token_hash 패턴 추가
 # ---------------------------------------------------------------------------
-if git diff --cached --diff-filter=ACM | grep -iE '(api_key|secret|password|token)\s*=\s*["\x27][^"\x27]+["\x27]' > /dev/null 2>&1; then
+if git diff --cached --diff-filter=ACM | grep -iE '(api_key|secret|password|token|salt|hmac|token_hash)\s*=\s*["\x27][^"\x27]+["\x27]' > /dev/null 2>&1; then
     echo "[ERROR] 민감 정보가 포함된 파일이 감지되었습니다!"
     echo "  → .env 파일을 .gitignore에 추가하고, 환경 변수를 사용하세요."
+    echo "  → ADR-018 §8 금지 4: salt 평문은 어디에도 저장 금지."
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Layer 3-a2: WORM 회귀 방지 (ADR-018 §8 금지 1) — answer_history UPDATE 차단
+# test 파일 / hook 자체 / ADR 문서는 스캔 제외 (패턴을 참조하는 정당한 소스)
+# ---------------------------------------------------------------------------
+if git diff --cached --diff-filter=ACM \
+    -- ':(exclude)**/*.test.ts' ':(exclude)**/*.spec.ts' \
+       ':(exclude).githooks/**' ':(exclude)docs/**' \
+    | grep -iE 'UPDATE\s+answer_history\s+SET\s+user_token_hash' > /dev/null 2>&1; then
+    echo "[ERROR] answer_history.user_token_hash UPDATE migration 감지됨!"
+    echo "  → ADR-018 §8 금지 1: 재계산 migration 영구 금지."
+    echo "  → 감사 목적은 user_token_hash_salt_epochs 원장 조회로 대체하세요."
     exit 1
 fi
 

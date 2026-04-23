@@ -216,4 +216,40 @@ describe('langfuse-masker — pure functions', () => {
       expect(result.generations).toEqual([]);
     });
   });
+
+  /**
+   * ADR-018 §4 D3 Hybrid + §8 금지 6 — user_token_hash 방어 계층.
+   *
+   * LlmJudgeGrader / 호출자가 실수로 Langfuse payload 에 user_token_hash 를 섞어
+   * 넣어도 Langfuse cloud 로 평문이 나가지 않도록 masker 최후 보루 차단.
+   */
+  describe('D3 Hybrid — user_token_hash 방어 계층', () => {
+    it('user_token_hash snake_case + 16 hex 감지 → REDACTED', () => {
+      const input = 'verdict PASS. user_token_hash=1234567890abcdef more';
+      const masked = maskStudentAnswerInText(input);
+      expect(masked).toContain('[USER_TOKEN_HASH_REDACTED]');
+      expect(masked).not.toContain('1234567890abcdef');
+    });
+
+    it('userTokenHash camelCase + 16 hex 감지 → REDACTED', () => {
+      const input = 'Result { userTokenHash: "abcdef1234567890", verdict: "PASS" }';
+      const masked = maskStudentAnswerInText(input);
+      expect(masked).toContain('[USER_TOKEN_HASH_REDACTED]');
+      expect(masked).not.toContain('abcdef1234567890');
+    });
+
+    it('USER-TOKEN-HASH 대소문자 변형 감지', () => {
+      const input = 'USER-TOKEN-HASH: deadbeefcafe1234';
+      const masked = maskStudentAnswerInText(input);
+      expect(masked).toContain('[USER_TOKEN_HASH_REDACTED]');
+      expect(masked).not.toContain('deadbeefcafe1234');
+    });
+
+    it('관련없는 16자 hex 는 보존 (grader_digest 의 model digest 등)', () => {
+      const input = 'grader_digest=prompt:ev:v1|model:ca06e9e4|parser:sov1|temp:0|seed:42|topk:1';
+      const masked = maskStudentAnswerInText(input);
+      expect(masked).toContain('ca06e9e4'); // model fingerprint 유지
+      expect(masked).not.toContain('[USER_TOKEN_HASH_REDACTED]');
+    });
+  });
 });

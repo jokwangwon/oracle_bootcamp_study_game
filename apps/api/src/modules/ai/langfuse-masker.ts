@@ -43,6 +43,22 @@ export const BOUNDARY_ESCAPE_SENTINEL = '[BOUNDARY_ESCAPE_DETECTED]';
 export const RATIONALE_MAX_LENGTH = 500;
 export const RATIONALE_TRUNCATE_MARK = '…';
 
+/**
+ * ADR-018 §4 D3 Hybrid + §8 금지 6 — Langfuse trace 에 `user_token_hash` 관련
+ * 정보가 절대 실리지 않도록 하는 방어 계층.
+ *
+ * 정책: Langfuse 로 나가는 텍스트에 `user_token_hash` 키워드 (snake/camel 변형 포함) +
+ * 근접한 16자 hex 가 감지되면 `[USER_TOKEN_HASH_REDACTED]` 로 치환.
+ *
+ * 근본 방어는 **LlmJudgeGrader / 호출자가 prompt 에 `user_token_hash` 를 주입하지 않는 것**
+ * 이지만, 회귀 시 최후 보루로 masker 가 차단.
+ */
+const USER_TOKEN_HASH_PATTERNS: readonly RegExp[] = [
+  /user[_-]?token[_-]?hash["\s:=]+[a-f0-9]{16}/gi,
+  /userTokenHash["\s:=]+[a-f0-9]{16}/g,
+];
+export const USER_TOKEN_HASH_SENTINEL = '[USER_TOKEN_HASH_REDACTED]';
+
 export function hashPii(text: string, len = 16): string {
   return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, len);
 }
@@ -62,7 +78,7 @@ export function extractSqlKeywordsTop3(text: string): string[] {
 }
 
 export function maskStudentAnswerInText(text: string): string {
-  const replaced = text.replace(
+  let replaced = text.replace(
     STUDENT_ANSWER_TAG_PATTERN,
     (_full, _nonce, inner: string) => {
       const hash = hashPii(inner);
@@ -77,6 +93,12 @@ export function maskStudentAnswerInText(text: string): string {
     // 평문 일부 유지로 인한 부분 노출 위험 제거.
     return BOUNDARY_ESCAPE_SENTINEL;
   }
+
+  // ADR-018 §4 D3 Hybrid + §8 금지 6 — user_token_hash 패턴 방어 계층
+  for (const pattern of USER_TOKEN_HASH_PATTERNS) {
+    replaced = replaced.replace(pattern, USER_TOKEN_HASH_SENTINEL);
+  }
+
   return replaced;
 }
 

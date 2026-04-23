@@ -6,6 +6,28 @@ import { z } from 'zod';
  * 헌법 제8-2조: 모든 환경별 값은 .env에 정의. 코드 시작 시 검증하여
  * 잘못된 설정으로 인한 런타임 오류를 사전 차단한다.
  */
+
+/**
+ * ADR-018 §7 refinement 4 — Shannon entropy 근사.
+ * 유일 문자 수 / 길이. 0.5 미만은 반복 문자열로 간주하여 거부.
+ * 운영 salt (openssl rand -base64 32) 는 보통 0.8+ 이므로 안전 마진.
+ */
+export function uniqueCharRatio(s: string): number {
+  if (s.length === 0) return 0;
+  return new Set(s).size / s.length;
+}
+
+/**
+ * ADR-018 §7 refinement 1 — production 모드에서 placeholder 거부.
+ */
+const PLACEHOLDER_PATTERNS: readonly RegExp[] = [
+  // prefix 기반 — 실제 사용자가 16자 padding 한 경우도 탐지
+  /^changeme/i,
+  /^test[-_]?only/i,
+  /^dev[-_]?salt/i,
+  /^placeholder/i,
+  /^<.*>$/, // <YOUR_SALT> 등
+];
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z
@@ -51,11 +73,65 @@ const envSchema = z.object({
   NOTION_SYNC_CRON: z.string().default('0 0 * * 1'), // 매주 월요일 00:00
   // ADR-016 §7 + consensus-005 §커밋2 — userId hash 용 HMAC salt (fail-closed).
   // 환경별로 다른 값 강제 (dev/staging/prod 트레이스 교차 추적 방지).
-  // 최소 16자. rotation 정책은 ADR-018 (별도 세션에서 작성 예정).
+  // 최소 16자. rotation 정책 ADR-018.
   USER_TOKEN_HASH_SALT: z
     .string()
     .min(16, 'USER_TOKEN_HASH_SALT 은 최소 16자 (ADR-016 §7)'),
-});
+  // ADR-018 §4 — dual-salt overlap window 용 (현재는 유보, env 는 optional).
+  USER_TOKEN_HASH_SALT_PREV: z.string().min(16).optional(),
+  // Langfuse self-host encryption salt — USER_TOKEN_HASH_SALT 과 재사용 금지 (§7 refinement 3).
+  LANGFUSE_SALT: z.string().optional(),
+})
+  // ADR-018 §7 refinement 1 — production 모드에서 placeholder salt 거부
+  .refine(
+    (cfg) => {
+      if (cfg.NODE_ENV !== 'production') return true;
+      return !PLACEHOLDER_PATTERNS.some((re) => re.test(cfg.USER_TOKEN_HASH_SALT));
+    },
+    {
+      message:
+        'USER_TOKEN_HASH_SALT 이 placeholder 값입니다 (production 차단, ADR-018 §7 refinement 1)',
+      path: ['USER_TOKEN_HASH_SALT'],
+    },
+  )
+  // ADR-018 §7 refinement 2 — PREV 와 동일값 거부 (dual-salt 활성 시)
+  .refine(
+    (cfg) =>
+      !cfg.USER_TOKEN_HASH_SALT_PREV ||
+      cfg.USER_TOKEN_HASH_SALT_PREV !== cfg.USER_TOKEN_HASH_SALT,
+    {
+      message:
+        'USER_TOKEN_HASH_SALT_PREV 가 USER_TOKEN_HASH_SALT 과 동일 — 의미 없는 rotation (ADR-018 §7 refinement 2)',
+      path: ['USER_TOKEN_HASH_SALT_PREV'],
+    },
+  )
+  // ADR-018 §7 refinement 3 — 다른 secret 과 재사용 거부
+  .refine(
+    (cfg) => !cfg.LANGFUSE_SALT || cfg.LANGFUSE_SALT !== cfg.USER_TOKEN_HASH_SALT,
+    {
+      message:
+        'USER_TOKEN_HASH_SALT 이 LANGFUSE_SALT 와 동일 — secret 재사용 금지 (ADR-018 §7 refinement 3, §8 금지 5)',
+      path: ['USER_TOKEN_HASH_SALT'],
+    },
+  )
+  .refine((cfg) => cfg.JWT_SECRET !== cfg.USER_TOKEN_HASH_SALT, {
+    message:
+      'USER_TOKEN_HASH_SALT 이 JWT_SECRET 과 동일 — secret 재사용 금지 (ADR-018 §8 금지 5)',
+    path: ['USER_TOKEN_HASH_SALT'],
+  })
+  // ADR-018 §7 refinement 4 — Shannon entropy 근사 하한
+  .refine(
+    (cfg) => {
+      // production 에서만 엄격 검사 (dev/test 는 편의 보전)
+      if (cfg.NODE_ENV !== 'production') return true;
+      return uniqueCharRatio(cfg.USER_TOKEN_HASH_SALT) >= 0.5;
+    },
+    {
+      message:
+        'USER_TOKEN_HASH_SALT 엔트로피 부족 — 반복 문자열 의심 (unique chars / length < 0.5). openssl rand -base64 32 권장 (ADR-018 §7 refinement 4)',
+      path: ['USER_TOKEN_HASH_SALT'],
+    },
+  );
 
 export type AppEnv = z.infer<typeof envSchema>;
 
