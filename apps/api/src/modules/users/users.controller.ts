@@ -16,8 +16,15 @@ import {
 } from '@oracle-game/shared';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { UserMistakesService } from './user-mistakes.service';
+import {
+  UserMistakesService,
+  type MistakeSortOption,
+  type MistakeStatus,
+} from './user-mistakes.service';
 import { UsersService } from './users.service';
+
+const MISTAKE_SORT_OPTIONS: MistakeSortOption[] = ['recent', 'wrongCount', 'week', 'topic'];
+const MISTAKE_STATUS_OPTIONS: MistakeStatus[] = ['all', 'unresolved', 'resolved'];
 
 interface JwtUser {
   sub: string;
@@ -40,6 +47,21 @@ class MistakeQueryDto {
   @IsString()
   @IsEnum(GAME_MODE_IDS)
   gameMode?: GameModeId;
+
+  /** 블로그 사이드바 검색 — content/explanation/scenario/rationale/answer ILIKE */
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsEnum(MISTAKE_SORT_OPTIONS)
+  sort?: MistakeSortOption;
+
+  @IsOptional()
+  @IsString()
+  @IsEnum(MISTAKE_STATUS_OPTIONS)
+  status?: MistakeStatus;
 
   @IsOptional()
   @Type(() => Number)
@@ -86,6 +108,9 @@ export class UsersController {
       topic: query.topic,
       week: query.week,
       gameMode: query.gameMode,
+      search: query.search,
+      sort: query.sort,
+      status: query.status,
       limit: query.limit,
       offset: query.offset,
     });

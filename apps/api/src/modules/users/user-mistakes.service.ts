@@ -12,27 +12,45 @@ import { QuestionEntity } from '../content/entities/question.entity';
 import { AnswerHistoryEntity } from './entities/answer-history.entity';
 
 /**
- * 사용자 오답 노트 (사용자 Q1~Q3, 2026-04-24).
+ * 사용자 오답 노트 (사용자 Q1~Q3 + UX 확장, 2026-04-24).
  *
+ * ## 결정
  *  - Q1=b: 문제당 1 row 로 집계 (`wrongCount` + `totalAttempts`).
- *  - Q2=a: SR due 뱃지와 완전 분리 — `answer_history` 만 읽고 `review_queue` 미참조.
+ *  - Q2=a: SR due 뱃지와 완전 분리 — `answer_history` 만 사용.
  *  - Q3=b: 최종 시도가 정답이어도 이력 보존 + `currentlyCorrect` 플래그.
  *
- * 3-step 쿼리:
- *  1. answer_history GROUP BY question_id (wrongCount > 0 HAVING) + JOIN questions
- *     (topic/week/gameMode/status=active 필터).
- *  2. question_id 들로 questions 상세 조회 (content/explanation/scenario/rationale).
- *  3. question 당 최신 시도 (DISTINCT ON question_id ORDER created_at DESC).
+ * ## UX v2 (2026-04-24 저녁): 블로그 사이드바 검색
+ *  - `search`: question content/explanation/scenario/rationale/answer ILIKE 검색.
+ *  - `sort`: 'recent' (default) | 'wrongCount' | 'week' | 'topic'.
+ *  - `status`: 'all' (default) | 'unresolved' | 'resolved'.
+ *  - `summary`: 필터 무관 전체 인벤토리 → 좌측 사이드바 카운트 뱃지 자동 생성.
  *
- * 페이지네이션: limit 기본 20 / 상한 100 / offset, overfetch+1 로 hasMore 판정.
+ * ## 쿼리 전략
+ *  1. summary (필터 무관) — 3 차원 독립 COUNT(DISTINCT question_id).
+ *  2. stats (topic/week/gameMode/search 적용, 정렬 lastAnsweredAt DESC, **하드캡 500**).
+ *  3. questions + latest attempts (DISTINCT ON question_id).
+ *  4. 조립 → status 필터 → sort 재정렬 → 페이지네이션 (TS).
+ *
+ * status 필터를 TS 로 둔 이유: `currentlyCorrect` 는 "최신 시도" 파생값 (answer_history
+ * 에 별도 컬럼 없음). DB 서브쿼리로도 가능하나 MVP 규모에서 TS 필터가 단순·안전.
+ * MVP 학습자 ~20명 × 평균 오답 ~50건 = 1000 행 이내로 하드캡 500 내 수렴.
  */
 export interface MistakeFilters {
   topic?: Topic;
   week?: number;
   gameMode?: GameModeId;
+  /** 질문 본문·해설·시나리오·rationale·정답 ILIKE 검색 (부분 일치, 대소문자 무시). */
+  search?: string;
+  /** 정렬. 기본 'recent' (최근 답변순). */
+  sort?: MistakeSortOption;
+  /** 상태 필터. 기본 'all'. */
+  status?: MistakeStatus;
   limit?: number;
   offset?: number;
 }
+
+export type MistakeSortOption = 'recent' | 'wrongCount' | 'week' | 'topic';
+export type MistakeStatus = 'all' | 'unresolved' | 'resolved';
 
 export interface MistakeItem {
   questionId: string;
@@ -49,9 +67,6 @@ export interface MistakeItem {
   };
   wrongCount: number;
   totalAttempts: number;
-  /**
-   * Q3=b 뱃지 — 최신 시도가 정답이면 `true` (이력은 보존, UI 에서 "정답 처리됨" 뱃지).
-   */
   currentlyCorrect: boolean;
   lastAttempt: {
     answer: string;
@@ -61,18 +76,11 @@ export interface MistakeItem {
   } | null;
 }
 
-/**
- * 학습 범위(주차) / topic / gameMode 가 늘어나도 UI 가 하드코딩 없이 동적 대응하도록
- * 서버가 "내 오답 전체 인벤토리" 를 차원별 집계해서 같이 내려준다.
- *
- * summary 는 **필터와 무관한 전체** 집계 — 필터 드롭다운 옵션을 생성하고 "다른
- * 주차/토픽도 오답이 있다" 를 가시화. 필터를 통해 좁혀지는 건 mistakes 배열과
- * total 만.
- */
 export interface MistakeSummary {
   byWeek: Array<{ week: number; count: number }>;
   byTopic: Array<{ topic: Topic; count: number }>;
   byGameMode: Array<{ gameMode: GameModeId; count: number }>;
+  byStatus: { unresolved: number; resolved: number };
 }
 
 export interface MistakesResponse {
@@ -84,6 +92,7 @@ export interface MistakesResponse {
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const STATS_HARD_CAP = 500;
 
 @Injectable()
 export class UserMistakesService {
@@ -105,82 +114,51 @@ export class UserMistakesService {
         mistakes: [],
         total: 0,
         hasMore: false,
-        summary: { byWeek: [], byTopic: [], byGameMode: [] },
+        summary: {
+          byWeek: [],
+          byTopic: [],
+          byGameMode: [],
+          byStatus: { unresolved: 0, resolved: 0 },
+        },
       };
     }
 
     const limit = Math.min(filters.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
     const offset = Math.max(filters.offset ?? 0, 0);
+    const status: MistakeStatus = filters.status ?? 'all';
+    const sort: MistakeSortOption = filters.sort ?? 'recent';
 
-    // Summary 는 필터 무관 전체 인벤토리 — UI 드롭다운 생성 + 주차·토픽 확장 자동 대응.
-    const summary = await this.computeSummary(userId);
+    // Step 1: summary (필터 무관 전체 인벤토리 — 좌측 사이드바 네비게이션)
+    const [dimensions, statusSummary] = await Promise.all([
+      this.computeDimensionSummary(userId),
+      this.computeStatusSummary(userId),
+    ]);
 
-    const statsQb = this.historyRepo
-      .createQueryBuilder('ah')
-      .innerJoin(QuestionEntity, 'q', 'q.id = ah.question_id')
-      .select('ah.question_id', 'questionId')
-      .addSelect(
-        'COUNT(*) FILTER (WHERE ah.is_correct = false)::int',
-        'wrongCount',
-      )
-      .addSelect('COUNT(*)::int', 'totalAttempts')
-      .addSelect('MAX(ah.created_at)', 'lastAnsweredAt')
-      .where('ah.user_id = :userId', { userId })
-      .andWhere('q.status = :status', { status: 'active' })
-      .groupBy('ah.question_id')
-      // q.* 컬럼들은 본 group by 에 포함되지 않았으므로 별도 SELECT 불필요 — summary
-      // 는 별도 쿼리에서 계산.
-      .having('COUNT(*) FILTER (WHERE ah.is_correct = false) > 0');
+    const summary: MistakeSummary = { ...dimensions, byStatus: statusSummary };
 
-    if (filters.topic) {
-      statsQb.andWhere('q.topic = :topic', { topic: filters.topic });
-    }
-    if (filters.week !== undefined) {
-      statsQb.andWhere('q.week = :week', { week: filters.week });
-    }
-    if (filters.gameMode) {
-      statsQb.andWhere('q.game_mode = :gameMode', {
-        gameMode: filters.gameMode,
-      });
+    // Step 2: stats (topic/week/gameMode/search 필터 DB 에서, 하드캡 500)
+    const statsRows = await this.fetchStats(userId, filters);
+    if (statsRows.length === 0) {
+      return { mistakes: [], total: 0, hasMore: false, summary };
     }
 
-    // total (filter 조건 만족 전체 count, 정렬/페이지 무관).
-    const totalRows = await statsQb.clone().getRawMany();
-    const total = totalRows.length;
+    const ids = statsRows.map((r) => r.questionId);
+    const [questions, latestAttempts] = await Promise.all([
+      this.questionRepo.findBy({ id: In(ids) }),
+      this.fetchLatestAttempts(userId, ids),
+    ]);
 
-    const pageRows = await statsQb
-      .orderBy('MAX(ah.created_at)', 'DESC')
-      .limit(limit + 1)
-      .offset(offset)
-      .getRawMany();
-
-    const hasMore = pageRows.length > limit;
-    const paged = pageRows.slice(0, limit);
-    if (paged.length === 0) {
-      return { mistakes: [], total, hasMore: false, summary };
-    }
-
-    const ids = paged.map((r) => r.questionId as string);
-    const questions = await this.questionRepo.findBy({ id: In(ids) });
     const questionMap = new Map(questions.map((q) => [q.id, q]));
-
-    const latestAttempts = await this.historyRepo
-      .createQueryBuilder('ah')
-      .distinctOn(['ah.question_id'])
-      .where('ah.user_id = :userId', { userId })
-      .andWhere('ah.question_id IN (:...ids)', { ids })
-      .orderBy('ah.question_id', 'ASC')
-      .addOrderBy('ah.created_at', 'DESC')
-      .getMany();
     const latestMap = new Map(latestAttempts.map((a) => [a.questionId, a]));
 
-    const mistakes: MistakeItem[] = paged
+    // Step 3: 조립
+    const allItems = statsRows
       .map((row): MistakeItem | null => {
-        const question = questionMap.get(row.questionId as string);
+        const question = questionMap.get(row.questionId);
         if (!question) return null;
-        const latest = latestMap.get(row.questionId as string);
+        const latest = latestMap.get(row.questionId);
         return {
-          questionId: row.questionId as string,
+          questionId: row.questionId,
           question: {
             content: question.content,
             explanation: question.explanation ?? null,
@@ -207,17 +185,28 @@ export class UserMistakesService {
       })
       .filter((m): m is MistakeItem => m !== null);
 
-    return { mistakes, total, hasMore, summary };
+    // Step 4: status 필터
+    const statusFiltered = this.applyStatusFilter(allItems, status);
+
+    // Step 5: sort (기본 recent 은 DB 정렬 그대로 유지)
+    const sorted = this.applySort(statusFiltered, sort);
+
+    // Step 6: pagination
+    const total = sorted.length;
+    const paged = sorted.slice(offset, offset + limit);
+    const hasMore = offset + limit < total;
+
+    return { mistakes: paged, total, hasMore, summary };
   }
 
   /**
-   * 필터 무관 전체 오답 인벤토리를 차원별로 집계. 주차 / topic / gameMode 확장 시
-   * UI 드롭다운 옵션을 하드코딩 없이 자동 생성 (사용자 지적: 학습 범위 확장 대응).
-   *
-   * 3 쿼리 (각 차원 독립 GROUP BY) — Postgres `COUNT(DISTINCT)` 로 문제 단위 집계.
-   * 각 차원의 `count` 는 "user 가 해당 dim 에서 1회 이상 틀린 **문제 수**" (답변 수 아님).
+   * 좌측 사이드바 "주제/주차/게임모드별 오답 수" 뱃지 생성용. 필터 무관 전체 인벤토리.
    */
-  private async computeSummary(userId: string): Promise<MistakeSummary> {
+  private async computeDimensionSummary(userId: string): Promise<{
+    byWeek: MistakeSummary['byWeek'];
+    byTopic: MistakeSummary['byTopic'];
+    byGameMode: MistakeSummary['byGameMode'];
+  }> {
     const baseQb = () =>
       this.historyRepo
         .createQueryBuilder('ah')
@@ -262,4 +251,152 @@ export class UserMistakesService {
       })),
     };
   }
+
+  /**
+   * "미해결 / 정답 처리" 뱃지 카운트. 필터 무관.
+   *
+   *  - unresolved = 최신 시도가 오답(false/null) 인 문제 수
+   *  - resolved = 최신 시도가 정답(true) 이나 과거 오답 이력이 있는 문제 수
+   */
+  private async computeStatusSummary(
+    userId: string,
+  ): Promise<{ unresolved: number; resolved: number }> {
+    // 문제별 최신 시도 is_correct 조회
+    const wrongQuestions = await this.historyRepo
+      .createQueryBuilder('ah')
+      .innerJoin(QuestionEntity, 'q', 'q.id = ah.question_id')
+      .select('DISTINCT ah.question_id', 'questionId')
+      .where('ah.user_id = :userId', { userId })
+      .andWhere('q.status = :status', { status: 'active' })
+      .andWhere('ah.is_correct = false')
+      .getRawMany();
+
+    if (wrongQuestions.length === 0) return { unresolved: 0, resolved: 0 };
+
+    const ids = wrongQuestions.map((r) => r.questionId);
+    const latest = await this.fetchLatestAttempts(userId, ids);
+    let unresolved = 0;
+    let resolved = 0;
+    for (const attempt of latest) {
+      if (attempt.isCorrect) resolved += 1;
+      else unresolved += 1;
+    }
+    return { unresolved, resolved };
+  }
+
+  /**
+   * 오답 집계 쿼리 — topic/week/gameMode/search 필터 + lastAnsweredAt DESC 정렬.
+   * 하드캡 STATS_HARD_CAP(500) 으로 대량 폭주 방어.
+   */
+  private async fetchStats(
+    userId: string,
+    filters: MistakeFilters,
+  ): Promise<
+    Array<{ questionId: string; wrongCount: number; totalAttempts: number; lastAnsweredAt: Date }>
+  > {
+    const qb = this.historyRepo
+      .createQueryBuilder('ah')
+      .innerJoin(QuestionEntity, 'q', 'q.id = ah.question_id')
+      .select('ah.question_id', 'questionId')
+      .addSelect('COUNT(*) FILTER (WHERE ah.is_correct = false)::int', 'wrongCount')
+      .addSelect('COUNT(*)::int', 'totalAttempts')
+      .addSelect('MAX(ah.created_at)', 'lastAnsweredAt')
+      .where('ah.user_id = :userId', { userId })
+      .andWhere('q.status = :status', { status: 'active' })
+      .groupBy('ah.question_id')
+      .having('COUNT(*) FILTER (WHERE ah.is_correct = false) > 0')
+      .orderBy('MAX(ah.created_at)', 'DESC')
+      .limit(STATS_HARD_CAP);
+
+    if (filters.topic) {
+      qb.andWhere('q.topic = :topic', { topic: filters.topic });
+    }
+    if (filters.week !== undefined) {
+      qb.andWhere('q.week = :week', { week: filters.week });
+    }
+    if (filters.gameMode) {
+      qb.andWhere('q.game_mode = :gameMode', { gameMode: filters.gameMode });
+    }
+    if (filters.search && filters.search.trim().length > 0) {
+      const pattern = `%${filters.search.trim()}%`;
+      qb.andWhere(
+        '(q.content::text ILIKE :pattern OR q.explanation ILIKE :pattern OR q.scenario ILIKE :pattern OR q.rationale ILIKE :pattern OR q.answer::text ILIKE :pattern)',
+        { pattern },
+      );
+    }
+
+    const rows = await qb.getRawMany();
+    return rows.map((r) => ({
+      questionId: r.questionId as string,
+      wrongCount: Number(r.wrongCount),
+      totalAttempts: Number(r.totalAttempts),
+      lastAnsweredAt: new Date(r.lastAnsweredAt),
+    }));
+  }
+
+  private async fetchLatestAttempts(
+    userId: string,
+    questionIds: string[],
+  ): Promise<AnswerHistoryEntity[]> {
+    if (questionIds.length === 0) return [];
+    return this.historyRepo
+      .createQueryBuilder('ah')
+      .distinctOn(['ah.question_id'])
+      .where('ah.user_id = :userId', { userId })
+      .andWhere('ah.question_id IN (:...ids)', { ids: questionIds })
+      .orderBy('ah.question_id', 'ASC')
+      .addOrderBy('ah.created_at', 'DESC')
+      .getMany();
+  }
+
+  private applyStatusFilter(items: MistakeItem[], status: MistakeStatus): MistakeItem[] {
+    if (status === 'unresolved') return items.filter((m) => !m.currentlyCorrect);
+    if (status === 'resolved') return items.filter((m) => m.currentlyCorrect);
+    return items;
+  }
+
+  private applySort(items: MistakeItem[], sort: MistakeSortOption): MistakeItem[] {
+    const copy = [...items];
+    switch (sort) {
+      case 'wrongCount':
+        // wrongCount DESC, tie → lastAnsweredAt DESC
+        copy.sort((a, b) => {
+          if (b.wrongCount !== a.wrongCount) return b.wrongCount - a.wrongCount;
+          return compareLastAnsweredDesc(a, b);
+        });
+        return copy;
+      case 'week':
+        // week ASC, tie → wrongCount DESC
+        copy.sort((a, b) => {
+          if (a.question.week !== b.question.week) {
+            return a.question.week - b.question.week;
+          }
+          return b.wrongCount - a.wrongCount;
+        });
+        return copy;
+      case 'topic':
+        // topic ASC, tie → week ASC → wrongCount DESC
+        copy.sort((a, b) => {
+          if (a.question.topic !== b.question.topic) {
+            return a.question.topic.localeCompare(b.question.topic);
+          }
+          if (a.question.week !== b.question.week) {
+            return a.question.week - b.question.week;
+          }
+          return b.wrongCount - a.wrongCount;
+        });
+        return copy;
+      case 'recent':
+      default:
+        // DB 이미 lastAnsweredAt DESC. 안정성 위해 재정렬.
+        copy.sort(compareLastAnsweredDesc);
+        return copy;
+    }
+  }
+}
+
+function compareLastAnsweredDesc(a: MistakeItem, b: MistakeItem): number {
+  const aTs = a.lastAttempt?.answeredAt.getTime() ?? 0;
+  const bTs = b.lastAttempt?.answeredAt.getTime() ?? 0;
+  return bTs - aTs;
 }

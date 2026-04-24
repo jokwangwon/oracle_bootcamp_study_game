@@ -14,7 +14,7 @@ function makeReq(userSub: string): Request {
 }
 
 describe('UsersController.getMyMistakes', () => {
-  it('req.user.sub 와 쿼리 필터를 서비스에 전달', async () => {
+  it('req.user.sub 와 쿼리 필터 (search/sort/status 포함) 서비스에 전달', async () => {
     const usersService = {} as unknown as UsersService;
     const mistakesService = {
       getMistakes: vi
@@ -23,7 +23,12 @@ describe('UsersController.getMyMistakes', () => {
           mistakes: [],
           total: 0,
           hasMore: false,
-          summary: { byWeek: [], byTopic: [], byGameMode: [] },
+          summary: {
+            byWeek: [],
+            byTopic: [],
+            byGameMode: [],
+            byStatus: { unresolved: 0, resolved: 0 },
+          },
         }),
     } as unknown as UserMistakesService;
     const controller = new UsersController(usersService, mistakesService);
@@ -32,6 +37,9 @@ describe('UsersController.getMyMistakes', () => {
       topic: 'sql-basics',
       week: 2,
       gameMode: 'blank-typing',
+      search: 'SELECT',
+      sort: 'wrongCount',
+      status: 'unresolved',
       limit: 20,
       offset: 0,
     });
@@ -43,12 +51,15 @@ describe('UsersController.getMyMistakes', () => {
       topic: 'sql-basics',
       week: 2,
       gameMode: 'blank-typing',
+      search: 'SELECT',
+      sort: 'wrongCount',
+      status: 'unresolved',
       limit: 20,
       offset: 0,
     });
   });
 
-  it('빈 쿼리 → 빈 필터 객체 (필드 모두 undefined)', async () => {
+  it('빈 쿼리 → 필드 모두 undefined', async () => {
     const usersService = {} as unknown as UsersService;
     const mistakesService = {
       getMistakes: vi
@@ -57,7 +68,12 @@ describe('UsersController.getMyMistakes', () => {
           mistakes: [],
           total: 0,
           hasMore: false,
-          summary: { byWeek: [], byTopic: [], byGameMode: [] },
+          summary: {
+            byWeek: [],
+            byTopic: [],
+            byGameMode: [],
+            byStatus: { unresolved: 0, resolved: 0 },
+          },
         }),
     } as unknown as UserMistakesService;
     const controller = new UsersController(usersService, mistakesService);
@@ -71,6 +87,9 @@ describe('UsersController.getMyMistakes', () => {
       topic: undefined,
       week: undefined,
       gameMode: undefined,
+      search: undefined,
+      sort: undefined,
+      status: undefined,
       limit: undefined,
       offset: undefined,
     });
@@ -86,6 +105,7 @@ describe('UsersController.getMyMistakes', () => {
         byWeek: [{ week: 1, count: 1 }],
         byTopic: [{ topic: 'sql-basics', count: 1 }],
         byGameMode: [{ gameMode: 'blank-typing', count: 1 }],
+        byStatus: { unresolved: 1, resolved: 0 },
       },
     };
     const mistakesService = {

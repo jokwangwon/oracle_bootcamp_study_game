@@ -59,10 +59,14 @@ export interface MistakeItem {
   } | null;
 }
 
+export type MistakeSortOption = 'recent' | 'wrongCount' | 'week' | 'topic';
+export type MistakeStatus = 'all' | 'unresolved' | 'resolved';
+
 export interface MistakeSummary {
   byWeek: Array<{ week: number; count: number }>;
   byTopic: Array<{ topic: Topic; count: number }>;
   byGameMode: Array<{ gameMode: GameModeId; count: number }>;
+  byStatus: { unresolved: number; resolved: number };
 }
 
 export interface MistakesResponse {
@@ -158,6 +162,9 @@ export const apiClient = {
         topic?: Topic;
         week?: number;
         gameMode?: GameModeId;
+        search?: string;
+        sort?: MistakeSortOption;
+        status?: MistakeStatus;
         limit?: number;
         offset?: number;
       } = {},
@@ -166,6 +173,9 @@ export const apiClient = {
       if (opts.topic) params.set('topic', opts.topic);
       if (opts.week !== undefined) params.set('week', String(opts.week));
       if (opts.gameMode) params.set('gameMode', opts.gameMode);
+      if (opts.search) params.set('search', opts.search);
+      if (opts.sort) params.set('sort', opts.sort);
+      if (opts.status) params.set('status', opts.status);
       if (opts.limit !== undefined) params.set('limit', String(opts.limit));
       if (opts.offset !== undefined) params.set('offset', String(opts.offset));
       const q = params.toString();
