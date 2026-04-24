@@ -31,6 +31,47 @@ export interface ReviewQueueSummary {
   dueCount: number;
 }
 
+/**
+ * 오답 노트 응답 (사용자 Q1~Q3, 2026-04-24).
+ * 학습 범위 확장 대응 — summary 는 필터 무관 전체 인벤토리로 드롭다운 옵션 생성용.
+ */
+export interface MistakeItem {
+  questionId: string;
+  question: {
+    content: unknown; // QuestionContent discriminated union — UI 에서 narrow
+    explanation: string | null;
+    scenario: string | null;
+    rationale: string | null;
+    answer: string[];
+    topic: Topic;
+    week: number;
+    gameMode: GameModeId;
+    difficulty: Difficulty;
+  };
+  wrongCount: number;
+  totalAttempts: number;
+  currentlyCorrect: boolean;
+  lastAttempt: {
+    answer: string;
+    isCorrect: boolean;
+    answeredAt: string; // ISO string
+    hintsUsed: number;
+  } | null;
+}
+
+export interface MistakeSummary {
+  byWeek: Array<{ week: number; count: number }>;
+  byTopic: Array<{ topic: Topic; count: number }>;
+  byGameMode: Array<{ gameMode: GameModeId; count: number }>;
+}
+
+export interface MistakesResponse {
+  mistakes: MistakeItem[];
+  total: number;
+  hasMore: boolean;
+  summary: MistakeSummary;
+}
+
 async function request<T>(
   method: 'GET' | 'POST',
   path: string,
@@ -105,5 +146,34 @@ export const apiClient = {
      */
     reviewQueue: (token: string) =>
       request<ReviewQueueSummary>('GET', '/games/solo/review-queue', { token }),
+  },
+  users: {
+    /**
+     * 오답 노트 (사용자 Q1~Q3, 2026-04-24). 계정별 persistent.
+     * Q1=b 집계 / Q2=a SR 분리 / Q3=b 정답 처리 뱃지.
+     */
+    mistakes: (
+      token: string,
+      opts: {
+        topic?: Topic;
+        week?: number;
+        gameMode?: GameModeId;
+        limit?: number;
+        offset?: number;
+      } = {},
+    ) => {
+      const params = new URLSearchParams();
+      if (opts.topic) params.set('topic', opts.topic);
+      if (opts.week !== undefined) params.set('week', String(opts.week));
+      if (opts.gameMode) params.set('gameMode', opts.gameMode);
+      if (opts.limit !== undefined) params.set('limit', String(opts.limit));
+      if (opts.offset !== undefined) params.set('offset', String(opts.offset));
+      const q = params.toString();
+      return request<MistakesResponse>(
+        'GET',
+        `/users/me/mistakes${q ? `?${q}` : ''}`,
+        { token },
+      );
+    },
   },
 };

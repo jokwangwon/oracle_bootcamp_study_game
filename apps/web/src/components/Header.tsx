@@ -73,23 +73,31 @@ export function Header() {
           Oracle DBA 학습 게임
         </Link>
 
-        <div style={{ display: 'flex', gap: '0.75rem', minHeight: 32 }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', minHeight: 32 }}>
           {!mounted ? null : authed ? (
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={{
-                padding: '0.45rem 0.9rem',
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                color: 'var(--fg)',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-              }}
-            >
-              로그아웃
-            </button>
+            <>
+              <Link href="/play/solo" style={linkBtnStyle}>
+                플레이
+              </Link>
+              <Link href="/review/mistakes" style={linkBtnStyle}>
+                오답 노트
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  padding: '0.45rem 0.9rem',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  color: 'var(--fg)',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                }}
+              >
+                로그아웃
+              </button>
+            </>
           ) : (
             <>
               <Link href="/login" style={linkBtnStyle}>
