@@ -10,6 +10,7 @@ import { ContentModule } from './modules/content/content.module';
 import { AiModule } from './modules/ai/ai.module';
 import { EvalModule } from './modules/ai/eval/eval.module';
 import { OpsModule } from './modules/ops/ops.module';
+import { GradingModule } from './modules/grading/grading.module';
 import { GradingAppealsModule } from './modules/grading/appeal/grading-appeals.module';
 import { NotionModule } from './modules/notion/notion.module';
 import { typeOrmConfig } from './config/typeorm.config';
@@ -31,6 +32,9 @@ import { configValidationSchema } from './config/env.validation';
     ContentModule,
     AiModule,
     OpsModule,
+    // consensus-007 S6-C2-3 — GradingModule 격리 해제. free-form 채점 배선은
+    // C2-4 GameSessionService.gradeFreeForm + ENABLE_FREE_FORM_GRADING kill-switch.
+    GradingModule,
     GradingAppealsModule,
     NotionModule,
     EvalModule,
