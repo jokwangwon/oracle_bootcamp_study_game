@@ -1,7 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { hashUserToken } from '../grading/user-token-hash';
+import { ActiveEpochLookup } from './active-epoch.lookup';
 import {
   OpsEventLogEntity,
   type GradingMeasuredPayload,
@@ -34,18 +37,56 @@ export class GradingMeasurementService {
   constructor(
     @InjectRepository(OpsEventLogEntity)
     private readonly eventRepo: Repository<OpsEventLogEntity>,
+    // PR #16 — ADR-018 §4 D3 Hybrid 대칭성 확보. 두 의존성 모두 OpsModule 내부에
+    // 존재하나 일부 단위 테스트에서 주입 없이 사용되므로 Optional.
+    @Optional() private readonly config?: ConfigService,
+    @Optional() private readonly activeEpoch?: ActiveEpochLookup,
   ) {}
+
+  /**
+   * PR #16 — userId 로부터 user_token_hash + 활성 epoch_id 를 도출. 실패 시 null
+   * 반환 (fail-safe) — 이벤트 저장 자체를 막지 않는다. salt/epoch 미주입
+   * (단위 테스트) 환경에서도 이벤트는 기록되고 hash 컬럼만 비어 있다.
+   *
+   * answer_history 와 달리 본 테이블은 WORM 이 아니므로 hash 미기록 행은 운영
+   * 관측에서 "기록 경로 health check 실패" 로 감지 가능 (`WHERE user_token_hash IS NULL`).
+   */
+  private async resolveHashAndEpoch(
+    userId: string | null,
+  ): Promise<{ userTokenHash: string | null; userTokenHashEpoch: number | null }> {
+    if (!userId) return { userTokenHash: null, userTokenHashEpoch: null };
+    if (!this.config || !this.activeEpoch) {
+      return { userTokenHash: null, userTokenHashEpoch: null };
+    }
+    try {
+      const salt = this.config.get<string>('USER_TOKEN_HASH_SALT');
+      if (!salt) return { userTokenHash: null, userTokenHashEpoch: null };
+      const [epochId] = await Promise.all([this.activeEpoch.getActiveEpochId()]);
+      return {
+        userTokenHash: hashUserToken(userId, salt),
+        userTokenHashEpoch: epochId,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `user_token_hash resolve 실패 (fail-safe): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return { userTokenHash: null, userTokenHashEpoch: null };
+    }
+  }
 
   async measureGrading(input: {
     questionId: string;
     userId: string;
     payload: GradingMeasuredPayload;
   }): Promise<void> {
+    const hashMeta = await this.resolveHashAndEpoch(input.userId);
     try {
       await this.eventRepo.save({
         kind: 'grading_measured',
         questionId: input.questionId,
         userId: input.userId,
+        userTokenHash: hashMeta.userTokenHash,
+        userTokenHashEpoch: hashMeta.userTokenHashEpoch,
         payload: input.payload as unknown as Record<string, unknown>,
         resolvedAt: null,
       } as OpsEventLogEntity);
@@ -68,11 +109,14 @@ export class GradingMeasurementService {
     userId: string;
     payload: LlmTimeoutPayload;
   }): Promise<void> {
+    const hashMeta = await this.resolveHashAndEpoch(input.userId);
     try {
       await this.eventRepo.save({
         kind: 'llm_timeout',
         questionId: input.questionId,
         userId: input.userId,
+        userTokenHash: hashMeta.userTokenHash,
+        userTokenHashEpoch: hashMeta.userTokenHashEpoch,
         payload: input.payload as unknown as Record<string, unknown>,
         resolvedAt: null,
       } as OpsEventLogEntity);
@@ -103,11 +147,14 @@ export class GradingMeasurementService {
       stage: 'other',
       cause: 'held_persist_fail',
     };
+    const hashMeta = await this.resolveHashAndEpoch(input.userId);
     try {
       await this.eventRepo.save({
         kind: 'measurement_fail',
         questionId: input.questionId,
         userId: input.userId,
+        userTokenHash: hashMeta.userTokenHash,
+        userTokenHashEpoch: hashMeta.userTokenHashEpoch,
         payload: payload as unknown as Record<string, unknown>,
         resolvedAt: null,
       } as OpsEventLogEntity);

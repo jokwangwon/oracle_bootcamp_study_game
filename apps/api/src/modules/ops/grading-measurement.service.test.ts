@@ -253,3 +253,208 @@ describe('GradingMeasurementService.recordLlmTimeout (S6-C2-5)', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+/**
+ * PR #16 (consensus-007 사후 검증 Q2=b 이행) — user_token_hash + epoch 자동 채움.
+ *
+ * D3 Hybrid 대칭성 확보. answer_history 와 ops_event_log 가 같은 salted hash +
+ * 같은 epoch 원장을 공유하도록 GradingMeasurementService 가 resolve 책임을 가진다.
+ */
+describe('GradingMeasurementService — user_token_hash + epoch (PR #16)', () => {
+  const SALT = 'salt-of-at-least-sixteen-chars!!';
+
+  let eventRepo: { save: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    eventRepo = { save: vi.fn().mockResolvedValue({}) };
+  });
+
+  function makeConfig(opts: { salt?: string } = { salt: SALT }) {
+    return {
+      get: (key: string) => (key === 'USER_TOKEN_HASH_SALT' ? opts.salt : undefined),
+    } as never;
+  }
+
+  function makeActiveEpoch(epochId: number | Error = 3) {
+    return {
+      getActiveEpochId:
+        epochId instanceof Error
+          ? vi.fn().mockRejectedValue(epochId)
+          : vi.fn().mockResolvedValue(epochId),
+    } as never;
+  }
+
+  it('measureGrading: config + activeEpoch 주입 시 userTokenHash(16 hex) + epoch 저장', async () => {
+    const service = new GradingMeasurementService(
+      eventRepo as never,
+      makeConfig(),
+      makeActiveEpoch(7),
+    );
+    await service.measureGrading({
+      questionId: 'q-1',
+      userId: 'user-1',
+      payload: makePayload(),
+    });
+
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.userId).toBe('user-1');
+    expect(saved.userTokenHash).toMatch(/^[a-f0-9]{16}$/);
+    expect(saved.userTokenHashEpoch).toBe(7);
+  });
+
+  it('recordLlmTimeout: config + activeEpoch 주입 시 userTokenHash + epoch 저장', async () => {
+    const service = new GradingMeasurementService(
+      eventRepo as never,
+      makeConfig(),
+      makeActiveEpoch(2),
+    );
+    const payload: LlmTimeoutPayload = {
+      timeoutMs: 8000,
+      layerAttempted: 3,
+      retriable: true,
+    };
+    await service.recordLlmTimeout({
+      questionId: 'q-1',
+      userId: 'user-1',
+      payload,
+    });
+
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.userTokenHash).toMatch(/^[a-f0-9]{16}$/);
+    expect(saved.userTokenHashEpoch).toBe(2);
+  });
+
+  it('recordHeldPersistFail: config + activeEpoch 주입 시 userTokenHash + epoch 저장', async () => {
+    const service = new GradingMeasurementService(
+      eventRepo as never,
+      makeConfig(),
+      makeActiveEpoch(1),
+    );
+    await service.recordHeldPersistFail({
+      questionId: 'q-1',
+      userId: 'user-1',
+      error: new Error('DB error'),
+    });
+
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.userTokenHash).toMatch(/^[a-f0-9]{16}$/);
+    expect(saved.userTokenHashEpoch).toBe(1);
+  });
+
+  it('동일 userId + salt → 결정성 있는 hash (회귀 방지)', async () => {
+    const svc1 = new GradingMeasurementService(
+      eventRepo as never,
+      makeConfig(),
+      makeActiveEpoch(1),
+    );
+    await svc1.measureGrading({
+      questionId: 'q-1',
+      userId: 'user-abc',
+      payload: makePayload(),
+    });
+    const hash1 = (eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity).userTokenHash;
+
+    const eventRepo2 = { save: vi.fn().mockResolvedValue({}) };
+    const svc2 = new GradingMeasurementService(
+      eventRepo2 as never,
+      makeConfig(),
+      makeActiveEpoch(99),
+    );
+    await svc2.measureGrading({
+      questionId: 'q-1',
+      userId: 'user-abc',
+      payload: makePayload(),
+    });
+    const hash2 = (eventRepo2.save.mock.calls[0]![0] as OpsEventLogEntity).userTokenHash;
+
+    expect(hash1).toBe(hash2); // same userId + salt → same hash (epoch 독립)
+  });
+
+  it('config 미주입 시 fail-safe — userTokenHash/Epoch null, 이벤트는 저장됨', async () => {
+    const service = new GradingMeasurementService(
+      eventRepo as never,
+      undefined,
+      makeActiveEpoch(1),
+    );
+    await service.measureGrading({
+      questionId: 'q-1',
+      userId: 'user-1',
+      payload: makePayload(),
+    });
+
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.userTokenHash).toBeNull();
+    expect(saved.userTokenHashEpoch).toBeNull();
+  });
+
+  it('activeEpoch 미주입 시 fail-safe — null, 이벤트는 저장됨', async () => {
+    const service = new GradingMeasurementService(
+      eventRepo as never,
+      makeConfig(),
+      undefined,
+    );
+    await service.measureGrading({
+      questionId: 'q-1',
+      userId: 'user-1',
+      payload: makePayload(),
+    });
+
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.userTokenHash).toBeNull();
+    expect(saved.userTokenHashEpoch).toBeNull();
+  });
+
+  it('salt env 값이 비어있으면 null + 이벤트는 저장됨', async () => {
+    const service = new GradingMeasurementService(
+      eventRepo as never,
+      makeConfig({ salt: undefined }),
+      makeActiveEpoch(1),
+    );
+    await service.measureGrading({
+      questionId: 'q-1',
+      userId: 'user-1',
+      payload: makePayload(),
+    });
+
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.userTokenHash).toBeNull();
+    expect(saved.userTokenHashEpoch).toBeNull();
+  });
+
+  it('activeEpoch.getActiveEpochId throw → fail-safe null + 이벤트 저장', async () => {
+    const service = new GradingMeasurementService(
+      eventRepo as never,
+      makeConfig(),
+      makeActiveEpoch(new Error('no active epoch')),
+    );
+    await expect(
+      service.measureGrading({
+        questionId: 'q-1',
+        userId: 'user-1',
+        payload: makePayload(),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(eventRepo.save).toHaveBeenCalledOnce();
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.userTokenHash).toBeNull();
+    expect(saved.userTokenHashEpoch).toBeNull();
+  });
+
+  it('userId 가 빈 문자열이면 hash/epoch 모두 null (fail-safe)', async () => {
+    const service = new GradingMeasurementService(
+      eventRepo as never,
+      makeConfig(),
+      makeActiveEpoch(1),
+    );
+    await service.measureGrading({
+      questionId: 'q-1',
+      userId: '',
+      payload: makePayload(),
+    });
+
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.userTokenHash).toBeNull();
+    expect(saved.userTokenHashEpoch).toBeNull();
+  });
+});

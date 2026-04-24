@@ -151,6 +151,24 @@ export class OpsEventLogEntity {
   @Column({ type: 'uuid', name: 'user_id', nullable: true })
   userId!: string | null;
 
+  /**
+   * PR #16 (consensus-007 사후 검증 Agent B HIGH / Q2=b 이행) —
+   * answer_history.user_token_hash 와 대칭. ADR-018 §4 D3 Hybrid 정신에 따라
+   * **분석 집계 쿼리는 본 컬럼을 사용**하고 `userId` 컬럼은 관리자 직접 조회용
+   * FK 로만 유지 (remove 하지 않음 — 호환성).
+   *
+   * 계산: `hashUserToken(userId, env.USER_TOKEN_HASH_SALT)` (16 hex chars).
+   * `userTokenHashEpoch` 는 해당 시점 활성 epoch_id.
+   *
+   * nullable 인 이유: salt/epoch 미주입 환경 (단위 테스트, 일부 legacy 경로)
+   * 에서 저장 실패가 이벤트 기록 자체를 막지 않아야 함 (fail-safe).
+   */
+  @Column({ type: 'varchar', length: 32, name: 'user_token_hash', nullable: true })
+  userTokenHash!: string | null;
+
+  @Column({ type: 'smallint', name: 'user_token_hash_epoch', nullable: true })
+  userTokenHashEpoch!: number | null;
+
   @Column({ type: 'jsonb', default: () => `'{}'::jsonb` })
   payload!: Record<string, unknown>;
 
