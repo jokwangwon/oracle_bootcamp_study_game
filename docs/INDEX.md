@@ -106,7 +106,10 @@ docs/
     ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
     ├── exaone-license-extract.md                  # EXAONE LICENSE 사본 + 유료 부트캠프 적용 분석
     ├── oss-eval-failure-analysis-2026-04-14.md    # R1 전원 FAIL 원인 분석 + 3+1 합의 원문
-    └── oss-primary-model-selection-2026-04-15.md  # R2 결과 + M3 primary 확정 3+1 합의 원문
+    ├── oss-primary-model-selection-2026-04-15.md  # R2 결과 + M3 primary 확정 3+1 합의 원문
+    ├── notion-mcp-permission-policy.md            # Notion MCP 권한 3단 정책 + 판단 근거
+    ├── ux-redesign-brief-v1.md                    # UX 재설계 브리프 v1 (Phase 0 입력)
+    └── sm2-spaced-repetition-brief-v1.md          # SM-2 SR 도입 Phase 0 브리프 (2026-04-24)
 ```
 
 ---
