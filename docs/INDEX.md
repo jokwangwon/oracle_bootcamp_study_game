@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-22 (MVP-B Session 4 본 PR merge 완료 + ADR-018 분리 세션 + 사용자 결정 Q1~Q4 반영)
+**최종 업데이트**: 2026-04-24 (Session 6 PR #2 완주 + 3+1 사후 검증 hotfix + Session 7 SM-2 Phase 0/1 + ADR-019 + PR-1 머지, 4 PR 누적 / 695 → 779+1s)
 
 ---
 
@@ -90,7 +90,8 @@ docs/
 │   ├── ADR-015-realtime-prebuilt-pool.md        # 실시간 사전 풀 매칭 (v2.9)
 │   ├── ADR-016-llm-judge-safety.md              # LLM-judge 안전 프로토콜 (v2.9, D3 Hybrid 반영 2026-04-22)
 │   ├── ADR-017-mt6-mt7-mt8-metrics.md           # 운영 지표 MT6/MT7/MT8 (v2.9)
-│   └── ADR-018-user-token-hash-salt-rotation.md # USER_TOKEN_HASH_SALT rotation 정책 (2026-04-22)
+│   ├── ADR-018-user-token-hash-salt-rotation.md # USER_TOKEN_HASH_SALT rotation 정책 (2026-04-22)
+│   └── ADR-019-sm2-spaced-repetition.md         # SM-2 Spaced Repetition 도입 (2026-04-24)
 │
 ├── sessions/                             # 세션 로그
 │   └── ...
@@ -100,7 +101,9 @@ docs/
 │   ├── consensus-002-oss-model-evaluation.md                   # OSS 모델 평가 SDD 합의 (REQUEST_CHANGES)
 │   ├── consensus-004-problem-format-redesign.md                # 문제 형태 재설계 합의 (v2.9, 2026-04-16)
 │   ├── consensus-005-llm-judge-safety-architecture.md          # MVP-B Session 4 LLM-judge 안전 합의 (2026-04-17)
-│   └── consensus-006-adr-018-salt-rotation.md                  # ADR-018 salt rotation 합의 (2026-04-22)
+│   ├── consensus-006-adr-018-salt-rotation.md                  # ADR-018 salt rotation 합의 (2026-04-22)
+│   ├── consensus-007-session-6-grading-wiring.md               # Session 6 PR#1/#2 grading 배선 합의 (2026-04-23)
+│   └── consensus-008-sm2-spaced-repetition.md                  # SM-2 SR 합의 (2026-04-24)
 │
 └── rationale/                            # 판단 근거 (의사결정 narrative)
     ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
