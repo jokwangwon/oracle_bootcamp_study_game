@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-24 (Session 6 PR #2 완주 + 3+1 사후 검증 hotfix + Session 7 SM-2 Phase 0/1 + ADR-019 + PR-1 머지, 4 PR 누적 / 695 → 779+1s)
+**최종 업데이트**: 2026-04-24 저녁 (UX 재설계 Phase 1 완결 — consensus-009 + ADR-020 초안 작성 / 합의율 63% / CRITICAL 5건 전원 채택 / Q10~Q15 사용자 확정)
 
 ---
 
@@ -91,7 +91,8 @@ docs/
 │   ├── ADR-016-llm-judge-safety.md              # LLM-judge 안전 프로토콜 (v2.9, D3 Hybrid 반영 2026-04-22)
 │   ├── ADR-017-mt6-mt7-mt8-metrics.md           # 운영 지표 MT6/MT7/MT8 (v2.9)
 │   ├── ADR-018-user-token-hash-salt-rotation.md # USER_TOKEN_HASH_SALT rotation 정책 (2026-04-22)
-│   └── ADR-019-sm2-spaced-repetition.md         # SM-2 Spaced Repetition 도입 (2026-04-24)
+│   ├── ADR-019-sm2-spaced-repetition.md         # SM-2 Spaced Repetition 도입 (2026-04-24)
+│   └── ADR-020-ux-redesign.md                   # UX 재설계: Tailwind + shadcn/ui + R4 토론 + R6 voting (2026-04-24)
 │
 ├── sessions/                             # 세션 로그
 │   └── ...
@@ -103,7 +104,8 @@ docs/
 │   ├── consensus-005-llm-judge-safety-architecture.md          # MVP-B Session 4 LLM-judge 안전 합의 (2026-04-17)
 │   ├── consensus-006-adr-018-salt-rotation.md                  # ADR-018 salt rotation 합의 (2026-04-22)
 │   ├── consensus-007-session-6-grading-wiring.md               # Session 6 PR#1/#2 grading 배선 합의 (2026-04-23)
-│   └── consensus-008-sm2-spaced-repetition.md                  # SM-2 SR 합의 (2026-04-24)
+│   ├── consensus-008-sm2-spaced-repetition.md                  # SM-2 SR 합의 (2026-04-24)
+│   └── consensus-009-ux-redesign.md                            # UX 재설계 합의 (2026-04-24, CRITICAL 5건 Session 4 룰)
 │
 └── rationale/                            # 판단 근거 (의사결정 narrative)
     ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
@@ -192,6 +194,7 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-23 오후 | **tailscale 외부 접속 지원 + CORS origin 버그 수정 (1 커밋)** — 사용자가 tailscale (100.102.41.122) 로 첫 실플레이 시도. `main.ts:18` 의 CORS origin 이 api 자신의 URL(`NEXT_PUBLIC_API_URL`) 을 쓰던 **의미 역전 버그** 수정 — `CORS_ORIGIN` 전용 env 신설 (comma 구분 복수 origin). Next.js 는 `NEXT_PUBLIC_*` 을 빌드 타임 replacement 하므로 Dockerfile `ARG` + docker-compose `build.args` 경로 신설 → 외부 호스트 URL 브라우저 번들 주입 가능. `apps/web/public/.gitkeep` 추가 (빌드 선결 조건). | PR #10, 커밋 `7b6a86b` |
 | 2026-04-23 오후 | **UX 재설계 브리프 v1 docs (docs-only)** — 실플레이 피드백 + 디자인 방향성 정리. 레퍼런스 4종 링크·요약 (programmers 가볍게 / Discord+Reddit 하이브리드 / 끄투온라인 라이트) + 현재 UX 문제 2건(즉시 피드백 부재 / 문맥 결여) + 요구사항 후보 R1~R7 + Phase 0 질문지 시드 6개. **결정 아님** — 다음 세션 Phase 0 입력 자료. | PR #11, 커밋 `a245819`, `ux-redesign-brief-v1.md` |
 | 2026-04-23 오후 | **UX #1 즉시 피드백 + 헤더 로그인 반영 + UX #2 scenario/rationale (3 커밋, 695 GREEN 유지)** — (1) `aa79dec` UX #1 (brief §2.1): RoundPlayer `lastResult` state + FeedbackCard (정/오 뱃지 + 내 답 + 정답 + 해설) + "다음 라운드" 버튼 (Enter 가능) — EvaluationResult.correctAnswer/explanation 가 이미 응답에 있었는데 UI 가 버리던 문제. (2) `dee664f` 헤더 로그인 상태 즉시 반영: Header mount-only 체크 → `usePathname()` deps + 커스텀 이벤트 `AUTH_CHANGED_EVENT` + storage 이벤트 3계층 감지. (3) `bd328cb` UX #2 (brief §2.2): `Question`/`QuestionEntity` 에 `scenario`/`rationale` optional 필드 + `SeedService.insertQuestion()` 필드 전달 누락 버그 수정 + 1·2주차 seed 60건 전수 재작성 (blank 15+15 + term 15+15) + `ContextPanel`(📋 상황 — 풀이 중) / `FeedbackCard` 확장(💡 왜? — 제출 후) **스포일러 방지** (사용자 2차 피드백). 재시드 절차: `TRUNCATE weekly_scope CASCADE; TRUNCATE questions CASCADE;` + SEED_ON_BOOT=true. | PR #12, 커밋 `aa79dec`/`dee664f`/`bd328cb` |
+| 2026-04-24 저녁 | **UX 재설계 Phase 1 완결 — ADR-020 초안 + consensus-009** (docs-only, 실구현은 12 PR 로 별도). 3+1 합의 (Agent A 구현 + B 품질 + C 대안 독립 병렬) → Reviewer 교차 비교 / CRITICAL 5건 Session 4 룰 전원 채택 (축자 검증 완료) / 합의율 63%. 사용자 Q10~Q15 확정: R5 완전형 / R4+httpOnly 쿠키 동일 PR / desktop only / 공개 가입 / 디자인 자신감 4 / light 기본. 스택 = Tailwind v3.4 + shadcn/ui + Radix + next-themes. R4 = 3-테이블 (threads/posts/votes) + 1-level nested + hot 공식. 보안 = helmet+CSP+sanitize-html / httpOnly+refresh+CSRF / `@nestjs/throttler` + `RedisRateLimiter` 일반화 / vote UNIQUE+DB CHECK / pre-commit Layer 3-a3 재귀. 12 PR 로드맵 (약 13일). | `consensus-009-ux-redesign.md`, `ADR-020-ux-redesign.md` |
 
 ---
 
