@@ -55,6 +55,16 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  /**
+   * ADR-013 + consensus-007 S6-C2-4 — free-form 3단 채점 경로 kill-switch.
+   * 기본 false (프로덕션 보수). 'true' 설정 시 answerFormat='free-form' 문제는
+   * GradingOrchestrator (AST → Keyword → LLM-judge) 로 채점.
+   * false 시 기존 mode.evaluateAnswer 경로 유지 (회귀 0).
+   */
+  ENABLE_FREE_FORM_GRADING: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   // OSS 모델 평가 (단계 7) — 운영자 화이트리스트 + 결과 디렉토리 + config 경로.
   // EVAL_ADMIN_USERNAMES는 fail-closed (미설정 시 모든 eval 트리거 거부).
   EVAL_ADMIN_USERNAMES: z.string().optional(),
