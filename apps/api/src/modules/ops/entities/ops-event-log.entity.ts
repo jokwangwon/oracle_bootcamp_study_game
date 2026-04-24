@@ -17,7 +17,8 @@ export type OpsEventKind =
   | 'grading_appeal' // ADR-016 §추가 이의제기 / S5-C3
   | 'salt_rotation' // ADR-018 §6 salt rotation / S5-C4
   | 'pii_masker_triggered' // ADR-016 §7 metadata 화이트리스트 위반 / S6-C1-4
-  | 'grading_measured'; // ADR-013 Layer 결과 차원 기록 / S6-C2-2
+  | 'grading_measured' // ADR-013 Layer 결과 차원 기록 / S6-C2-2
+  | 'llm_timeout'; // ADR-016 §추가 Layer 3 timeout / S6-C2-5
 
 export type StudentReportReason = 'incorrect_answer' | 'sql_error' | 'other';
 
@@ -83,6 +84,22 @@ export interface PiiMaskerTriggeredPayload {
  * `userTokenHash` 는 answer_history 와 동일 salt 로 계산된 식별자 (D3 Hybrid).
  * Langfuse 로는 전송되지 않는다 (ADR-018 §8 금지 6).
  */
+/**
+ * ADR-016 §추가 + consensus-007 S6-C2-5 — Layer 3 LLM-judge timeout 관측.
+ *
+ * 발생 경로: LlmJudgeGrader.grade 내부 `Promise.race(invoke, timer)` 에서 timer 가
+ * 먼저 resolve → LlmJudgeTimeoutError throw → GameSessionService 가 catch 하여
+ * answer_history(gradingMethod='held') persist + 본 이벤트 기록 + HTTP 503.
+ *
+ * 학생 답안 원문 저장 금지. 시간/layer/재시도 가능 여부만.
+ */
+export interface LlmTimeoutPayload {
+  timeoutMs: number; // 적용된 타임아웃 값 (LLM_JUDGE_TIMEOUT_MS)
+  layerAttempted: 3;
+  elapsedMs?: number; // 실제 경과 (timer 기준). 계측 실패 시 미포함.
+  retriable: boolean; // 학생이 재제출 가능한지 (MVP: true)
+}
+
 export interface GradingMeasuredPayload {
   gradingMethod: 'ast' | 'keyword' | 'llm' | 'held' | 'admin-override';
   gradingLayersUsed: number[]; // [1] | [1,2] | [1,2,3]

@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { ServiceUnavailableException } from '@nestjs/common';
 import type { Question, Round } from '@oracle-game/shared';
 
 import { GameSessionService } from './game-session.service';
@@ -9,7 +10,9 @@ import { TermMatchMode } from '../modes/term-match.mode';
 import { QuestionPoolService } from '../../content/services/question-pool.service';
 import type { ScopeValidatorService } from '../../content/services/scope-validator.service';
 import type { GradingOrchestrator } from '../../grading/grading.orchestrator';
+import { LlmJudgeTimeoutError } from '../../grading/graders/llm-judge.grader';
 import type { GradingResult } from '../../grading/grading.types';
+import type { GradingMeasurementService } from '../../ops/grading-measurement.service';
 import { AnswerHistoryEntity } from '../../users/entities/answer-history.entity';
 import type { ConfigService } from '@nestjs/config';
 
@@ -96,6 +99,7 @@ interface ServiceDeps {
   config?: ConfigService;
   orchestrator?: GradingOrchestrator;
   scopeValidator?: ScopeValidatorService;
+  gradingMeasurement?: GradingMeasurementService;
 }
 
 function makeService(deps: ServiceDeps = {}) {
@@ -117,6 +121,7 @@ function makeService(deps: ServiceDeps = {}) {
     deps.config,
     deps.orchestrator,
     deps.scopeValidator,
+    deps.gradingMeasurement,
   );
 
   return { service, registry, blankTyping, usersService, historyRepo };
@@ -529,6 +534,107 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
       }),
     ).resolves.toBeDefined();
     expect(built.historyRepo.records).toHaveLength(1);
+  });
+
+  it('Layer 3 timeout → ServiceUnavailableException + held 감사 row + llm_timeout 이벤트', async () => {
+    const orchestrator = {
+      grade: vi.fn().mockRejectedValue(new LlmJudgeTimeoutError(8000, 8050)),
+    } as unknown as GradingOrchestrator;
+    const recordSpy = vi.fn().mockResolvedValue(undefined);
+    const gradingMeasurement = {
+      measureGrading: vi.fn(),
+      recordLlmTimeout: recordSpy,
+    } as unknown as GradingMeasurementService;
+
+    const built = makeService({
+      config: makeConfig(true),
+      orchestrator,
+      scopeValidator: makeScopeValidator(),
+      gradingMeasurement,
+    });
+    const question = makeFreeFormQuestion();
+    const round = built.blankTyping.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    // HTTP 503 (Q3=B)
+    await expect(
+      built.service.submitAnswer({
+        roundId: round.id,
+        playerId: 'user-1',
+        answer: 'SELECT',
+        submittedAt: 1_000,
+        hintsUsed: 0,
+      }),
+    ).rejects.toThrow(ServiceUnavailableException);
+
+    // held 감사 row (gradingMethod='held', isCorrect=false, score=0)
+    expect(built.historyRepo.records).toHaveLength(1);
+    expect(built.historyRepo.records[0]).toMatchObject({
+      userId: 'user-1',
+      isCorrect: false,
+      score: 0,
+      gradingMethod: 'held',
+    });
+
+    // ops_event_log(llm_timeout) 호출
+    expect(recordSpy).toHaveBeenCalledOnce();
+    const call = recordSpy.mock.calls[0]![0] as {
+      questionId: string;
+      userId: string;
+      payload: { timeoutMs: number; layerAttempted: 3; elapsedMs?: number; retriable: boolean };
+    };
+    expect(call.questionId).toBe(round.question.id);
+    expect(call.userId).toBe('user-1');
+    expect(call.payload.timeoutMs).toBe(8000);
+    expect(call.payload.layerAttempted).toBe(3);
+    expect(call.payload.elapsedMs).toBe(8050);
+    expect(call.payload.retriable).toBe(true);
+  });
+
+  it('timeout 후 active round 는 제거된다 (재사용 방지)', async () => {
+    const orchestrator = {
+      grade: vi.fn().mockRejectedValue(new LlmJudgeTimeoutError(8000)),
+    } as unknown as GradingOrchestrator;
+
+    const built = makeService({
+      config: makeConfig(true),
+      orchestrator,
+      scopeValidator: makeScopeValidator(),
+    });
+    const question = makeFreeFormQuestion();
+    const round = built.blankTyping.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    await built.service
+      .submitAnswer({
+        roundId: round.id,
+        playerId: 'user-1',
+        answer: 'SELECT',
+        submittedAt: 1_000,
+        hintsUsed: 0,
+      })
+      .catch(() => undefined);
+
+    // 두 번째 submit → Round not found (이미 제거)
+    await expect(
+      built.service.submitAnswer({
+        roundId: round.id,
+        playerId: 'user-1',
+        answer: 'SELECT',
+        submittedAt: 2_000,
+        hintsUsed: 0,
+      }),
+    ).rejects.toThrow();
   });
 
   it('MEDIUM 난이도 max score 150 × partialScore 반영', async () => {

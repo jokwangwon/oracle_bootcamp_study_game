@@ -4,6 +4,7 @@ import type { Repository } from 'typeorm';
 import { GradingMeasurementService } from './grading-measurement.service';
 import type {
   GradingMeasuredPayload,
+  LlmTimeoutPayload,
   OpsEventLogEntity,
 } from './entities/ops-event-log.entity';
 
@@ -195,5 +196,60 @@ describe('GradingMeasurementService.measureGrading', () => {
     const p = saved.payload as unknown as GradingMeasuredPayload;
     expect(p.latencyMs).toBe(8421);
     expect(p.graderDigest).toBe('ast-v1');
+  });
+});
+
+describe('GradingMeasurementService.recordLlmTimeout (S6-C2-5)', () => {
+  let eventRepo: { save: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    eventRepo = { save: vi.fn().mockResolvedValue({}) };
+  });
+
+  it("kind='llm_timeout' 이벤트로 저장 + payload 4필드 전달", async () => {
+    const service = new GradingMeasurementService(eventRepo as never);
+    const payload: LlmTimeoutPayload = {
+      timeoutMs: 8000,
+      layerAttempted: 3,
+      elapsedMs: 8050,
+      retriable: true,
+    };
+    await service.recordLlmTimeout({
+      questionId: 'q-1',
+      userId: 'user-1',
+      payload,
+    });
+
+    expect(eventRepo.save).toHaveBeenCalledOnce();
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    expect(saved.kind).toBe('llm_timeout');
+    expect(saved.questionId).toBe('q-1');
+    expect(saved.userId).toBe('user-1');
+    expect(saved.payload).toEqual(payload);
+  });
+
+  it('elapsedMs 미전달 시 payload 에 키 없음 (optional)', async () => {
+    const service = new GradingMeasurementService(eventRepo as never);
+    await service.recordLlmTimeout({
+      questionId: 'q-1',
+      userId: 'user-1',
+      payload: { timeoutMs: 8000, layerAttempted: 3, retriable: true },
+    });
+
+    const saved = eventRepo.save.mock.calls[0]![0] as OpsEventLogEntity;
+    const p = saved.payload as unknown as LlmTimeoutPayload;
+    expect(p.elapsedMs).toBeUndefined();
+  });
+
+  it('Fail-safe — eventRepo.save 실패해도 예외 전파 금지', async () => {
+    eventRepo.save.mockRejectedValueOnce(new Error('DB unreachable'));
+    const service = new GradingMeasurementService(eventRepo as never);
+    await expect(
+      service.recordLlmTimeout({
+        questionId: 'q-1',
+        userId: 'user-1',
+        payload: { timeoutMs: 8000, layerAttempted: 3, retriable: true },
+      }),
+    ).resolves.toBeUndefined();
   });
 });

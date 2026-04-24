@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import {
   OpsEventLogEntity,
   type GradingMeasuredPayload,
+  type LlmTimeoutPayload,
 } from './entities/ops-event-log.entity';
 
 /**
@@ -50,6 +51,33 @@ export class GradingMeasurementService {
     } catch (err) {
       this.logger.warn(
         `grading_measured 이벤트 기록 실패 (fail-safe) question=${input.questionId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * ADR-016 §추가 + consensus-007 S6-C2-5 — Layer 3 LLM-judge timeout 이벤트.
+   *
+   * LlmJudgeTimeoutError 가 상위 GameSessionService 로 surface 될 때 호출.
+   * Fail-safe (warn 만, 학생 경로 보호).
+   * 학생 답안 원문 저장 금지.
+   */
+  async recordLlmTimeout(input: {
+    questionId: string;
+    userId: string;
+    payload: LlmTimeoutPayload;
+  }): Promise<void> {
+    try {
+      await this.eventRepo.save({
+        kind: 'llm_timeout',
+        questionId: input.questionId,
+        userId: input.userId,
+        payload: input.payload as unknown as Record<string, unknown>,
+        resolvedAt: null,
+      } as OpsEventLogEntity);
+    } catch (err) {
+      this.logger.warn(
+        `llm_timeout 이벤트 기록 실패 (fail-safe) question=${input.questionId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

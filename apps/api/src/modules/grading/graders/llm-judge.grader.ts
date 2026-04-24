@@ -48,6 +48,42 @@ export const LLM_JUDGE_TOP_K = 1;
 export const LLM_JUDGE_TEMPERATURE = 0;
 export const RATIONALE_MAX_LENGTH = 500;
 
+/**
+ * ADR-016 §추가 + consensus-007 Q1/S6-C2-5 — Layer 3 호출 기본 timeout.
+ * env LLM_JUDGE_TIMEOUT_MS 로 override. 초과 시 LlmJudgeTimeoutError throw.
+ */
+export const LLM_JUDGE_DEFAULT_TIMEOUT_MS = 8000;
+
+export class LlmJudgeTimeoutError extends Error {
+  constructor(
+    public readonly timeoutMs: number,
+    public readonly elapsedMs?: number,
+  ) {
+    super(`LLM judge timeout after ${timeoutMs}ms`);
+    this.name = 'LlmJudgeTimeoutError';
+  }
+}
+
+/** Layer 3 invoke 를 timeout Promise.race 로 감싼다. */
+export async function withLlmJudgeTimeout<T>(
+  p: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const start = Date.now();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new LlmJudgeTimeoutError(timeoutMs, Date.now() - start)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([p, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export const JUDGE_OUTPUT_SCHEMA = z.object({
   verdict: z.enum(['PASS', 'FAIL', 'UNKNOWN']),
   rationale: z.string().max(RATIONALE_MAX_LENGTH),
@@ -101,6 +137,7 @@ export class LlmJudgeGrader implements Layer3Grader {
   // StructuredOutputParser 제네릭은 never 로 두고 parse 결과만 JudgeOutput 로 시그니처화.
   private readonly parser: BaseOutputParser<JudgeOutput>;
   private readonly fixingParser: OutputFixingParser<JudgeOutput>;
+  private readonly timeoutMs: number;
 
   constructor(
     config: ConfigService,
@@ -112,6 +149,18 @@ export class LlmJudgeGrader implements Layer3Grader {
     const model = config.get<string>('LLM_MODEL') ?? '';
     const baseUrl = config.get<string>('OLLAMA_BASE_URL');
     const apiKey = config.get<string>('LLM_API_KEY');
+    // consensus-007 Q1/S6-C2-5 — env 우선, 미설정 시 기본 8000ms.
+    // env.validation 이 transform 후 number 를 반환하지만 외부 설정/테스트 mock 이
+    // string 으로 전달할 가능성 방어 (parseInt 한 번 더).
+    const rawTimeout = config.get<number | string>('LLM_JUDGE_TIMEOUT_MS');
+    const normalizedTimeout =
+      typeof rawTimeout === 'string' ? Number.parseInt(rawTimeout, 10) : rawTimeout;
+    this.timeoutMs =
+      typeof normalizedTimeout === 'number' &&
+      Number.isFinite(normalizedTimeout) &&
+      normalizedTimeout > 0
+        ? normalizedTimeout
+        : LLM_JUDGE_DEFAULT_TIMEOUT_MS;
 
     // Judge LLM — 결정성 옵션 고정.
     this.judgeLlm = factory.createFor({
@@ -195,17 +244,30 @@ export class LlmJudgeGrader implements Layer3Grader {
     // 4. LLM 호출.
     // consensus-007 C2-1: sessionId 가 주어지면 Langfuse trace metadata 로 전파.
     // ADR-016 §7 화이트리스트 4종 중 session_id 만 사용 — userId 파생정보 불가.
+    // consensus-007 C2-5: LLM_JUDGE_TIMEOUT_MS (기본 8000ms) 초과 시 LlmJudgeTimeoutError.
+    // timeout 에러는 surface (unknownFallback 안 함) — 상위 GameSessionService 가
+    // gradingMethod='held' persist + ops_event_log(llm_timeout) + HTTP 503 처리.
     const invokeOpts = input.sessionId
       ? { metadata: { session_id: input.sessionId } }
       : undefined;
     let responseText: string;
     try {
-      const response = await this.judgeLlm.invoke(messages, invokeOpts);
+      const response = await withLlmJudgeTimeout(
+        this.judgeLlm.invoke(messages, invokeOpts),
+        this.timeoutMs,
+      );
       responseText =
         typeof response.content === 'string'
           ? response.content
           : JSON.stringify(response.content);
     } catch (err) {
+      if (err instanceof LlmJudgeTimeoutError) {
+        // 상위 경로가 감사 체인·HTTP 응답 책임. 여기선 로깅만.
+        this.logger.warn(
+          `Layer 3 LLM timeout after ${err.timeoutMs}ms (elapsed=${err.elapsedMs ?? '?'}ms)`,
+        );
+        throw err;
+      }
       this.logger.warn(
         `Layer 3 LLM invocation failed: ${redactErrorMessage(err)}`,
       );

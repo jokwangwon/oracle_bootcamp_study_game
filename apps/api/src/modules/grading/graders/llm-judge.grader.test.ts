@@ -13,11 +13,14 @@ import { EVALUATION_FREE_FORM_SQL_PROMPT } from '../../ai/prompts';
 import {
   ERROR_MESSAGE_MAX_LENGTH,
   GRADER_DIGEST_REGEX,
+  LLM_JUDGE_DEFAULT_TIMEOUT_MS,
   LLM_JUDGE_PROMPT_NAME,
   LLM_JUDGE_PROMPT_VERSION,
   LlmJudgeGrader,
+  LlmJudgeTimeoutError,
   RATIONALE_MAX_LENGTH,
   redactErrorMessage,
+  withLlmJudgeTimeout,
 } from './llm-judge.grader';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 
@@ -645,5 +648,109 @@ describe('LlmJudgeGrader — sessionId → Langfuse metadata (consensus-007 C2-1
     const [, opts] = getFirstInvokeCall(created);
     const meta = (opts as { metadata: Record<string, unknown> }).metadata;
     expect(Object.keys(meta)).toEqual(['session_id']);
+  });
+});
+
+/**
+ * consensus-007 Q1 / S6-C2-5 — withLlmJudgeTimeout pure helper.
+ */
+describe('withLlmJudgeTimeout', () => {
+  it('timeout 이내에 resolve 되면 그대로 통과', async () => {
+    const result = await withLlmJudgeTimeout(Promise.resolve('ok'), 100);
+    expect(result).toBe('ok');
+  });
+
+  it('timeout 초과 시 LlmJudgeTimeoutError throw (timeoutMs + elapsedMs 포함)', async () => {
+    const slow = new Promise<string>((resolve) => setTimeout(() => resolve('late'), 200));
+    await expect(withLlmJudgeTimeout(slow, 30)).rejects.toThrow(LlmJudgeTimeoutError);
+    try {
+      await withLlmJudgeTimeout(
+        new Promise<string>((resolve) => setTimeout(() => resolve('late'), 200)),
+        30,
+      );
+    } catch (e) {
+      expect(e).toBeInstanceOf(LlmJudgeTimeoutError);
+      const err = e as LlmJudgeTimeoutError;
+      expect(err.timeoutMs).toBe(30);
+      expect(err.elapsedMs).toBeGreaterThanOrEqual(30);
+    }
+  });
+
+  it('LLM_JUDGE_DEFAULT_TIMEOUT_MS = 8000 (consensus-007 Q1)', () => {
+    expect(LLM_JUDGE_DEFAULT_TIMEOUT_MS).toBe(8000);
+  });
+});
+
+/**
+ * consensus-007 S6-C2-5 — LlmJudgeGrader 내부 timeout 적용.
+ */
+describe('LlmJudgeGrader — Layer 3 timeout (consensus-007 S6-C2-5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function makeSlowLlmClient(delayMs: number): LlmClient {
+    const invokeSpy = vi.fn(
+      (_msgs: BaseMessage[]) =>
+        new Promise((resolve) => setTimeout(() => resolve({ content: '{}' }), delayMs)),
+    );
+    return {
+      invoke: invokeSpy,
+      getModel: () => ({
+        _modelType: () => 'fake',
+        _llmType: () => 'fake',
+        lc_serializable: true,
+        lc_aliases: {},
+        lc_kwargs: {},
+        lc_namespace: ['test'],
+        lc_runnable: true,
+        getName: () => 'FakeChat',
+        invoke: () => Promise.resolve({}),
+      }) as never,
+      getCallbacks: () => [],
+      isLangfuseEnabled: () => false,
+      __invokeSpy: invokeSpy,
+    } as unknown as LlmClient;
+  }
+
+  it('config.LLM_JUDGE_TIMEOUT_MS 초과 LLM 응답 → LlmJudgeTimeoutError throw', async () => {
+    // factory 는 매번 slow client 를 반환. judge 생성 = 첫 createFor.
+    const factory = {
+      createDefault: () => makeSlowLlmClient(200),
+      createFor: () => makeSlowLlmClient(200),
+    } as unknown as LlmClientFactory;
+
+    const grader = new LlmJudgeGrader(
+      makeConfig({ LLM_JUDGE_TIMEOUT_MS: 20 as unknown as string }) as ConfigService,
+      factory,
+      makePromptManager(makeLangfuseResolved()),
+      makeDigestProvider(),
+    );
+
+    await expect(
+      grader.grade({
+        studentAnswer: 'SELECT 1',
+        expected: ['SELECT 1'],
+        sanitizationFlags: [],
+        sessionId: 's',
+      }),
+    ).rejects.toThrow(LlmJudgeTimeoutError);
+  });
+
+  it('timeout 미설정 시 기본 LLM_JUDGE_DEFAULT_TIMEOUT_MS (8000) 적용', async () => {
+    // 빠른 응답 → timeout 미발생 (정상 JSON 파싱). 기본값 경로 smoke.
+    const grader = new LlmJudgeGrader(
+      makeConfig() as ConfigService,
+      makeFactory(VALID_RESPONSE_JSON),
+      makePromptManager(makeLangfuseResolved()),
+      makeDigestProvider(),
+    );
+    const result = await grader.grade({
+      studentAnswer: 'SELECT 1',
+      expected: ['SELECT 1'],
+      sanitizationFlags: [],
+      sessionId: 's',
+    });
+    expect(result.verdict).toBe('PASS');
   });
 });

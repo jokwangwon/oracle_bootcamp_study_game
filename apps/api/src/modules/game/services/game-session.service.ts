@@ -1,20 +1,28 @@
-import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
-  type Difficulty,
   type EvaluationResult,
   type GameModeId,
   type PlayerAnswer,
   type Round,
   type Topic,
+  type Difficulty,
 } from '@oracle-game/shared';
 
 import { QuestionPoolService } from '../../content/services/question-pool.service';
 import { ScopeValidatorService } from '../../content/services/scope-validator.service';
+import { LlmJudgeTimeoutError } from '../../grading/graders/llm-judge.grader';
 import { GradingOrchestrator } from '../../grading/grading.orchestrator';
 import type { GradingResult } from '../../grading/grading.types';
+import { GradingMeasurementService } from '../../ops/grading-measurement.service';
 import { AnswerHistoryEntity } from '../../users/entities/answer-history.entity';
 import { UsersService } from '../../users/users.service';
 import { GameModeRegistry } from '../modes/game-mode.registry';
@@ -61,6 +69,8 @@ export class GameSessionService {
     @Optional() private readonly config?: ConfigService,
     @Optional() private readonly gradingOrchestrator?: GradingOrchestrator,
     @Optional() private readonly scopeValidator?: ScopeValidatorService,
+    // consensus-007 S6-C2-5 — LLM-judge timeout / grading_measured 이벤트 기록.
+    @Optional() private readonly gradingMeasurement?: GradingMeasurementService,
   ) {}
 
   /**
@@ -136,7 +146,30 @@ export class GameSessionService {
       this.gradingOrchestrator &&
       this.scopeValidator
     ) {
-      result = await this.gradeFreeForm(round, answer, result);
+      try {
+        result = await this.gradeFreeForm(round, answer, result);
+      } catch (err) {
+        if (err instanceof LlmJudgeTimeoutError) {
+          // consensus-007 S6-C2-5 — held persist (감사 체인 보존) + ops event +
+          // HTTP 503 응답 (Q3=B, 학생 재시도 유도).
+          await this.persistHeldAnswer(answer, round, result);
+          await this.gradingMeasurement?.recordLlmTimeout({
+            questionId: round.question.id,
+            userId: answer.playerId,
+            payload: {
+              timeoutMs: err.timeoutMs,
+              layerAttempted: 3,
+              elapsedMs: err.elapsedMs,
+              retriable: true,
+            },
+          });
+          this.activeRounds.delete(answer.roundId);
+          throw new ServiceUnavailableException(
+            '채점 서비스 일시 지연. 잠시 후 다시 시도해 주세요.',
+          );
+        }
+        throw err;
+      }
     }
 
     // SDD §5.1 + §6.1: 모든 답변은 answer_history에 기록 (Spaced Repetition 전제).
@@ -155,6 +188,40 @@ export class GameSessionService {
 
     this.activeRounds.delete(answer.roundId);
     return result;
+  }
+
+  /**
+   * consensus-007 S6-C2-5 — Layer 3 LLM timeout 시 held 감사 레코드 저장.
+   *
+   * isCorrect=false / score=0 / gradingMethod='held'. 학생은 HTTP 503 을 받고
+   * 재시도 가능하지만, 본 행은 WORM 보존으로 timeout 발생 기록.
+   */
+  private async persistHeldAnswer(
+    answer: PlayerAnswer,
+    round: Round,
+    base: EvaluationResult,
+  ): Promise<void> {
+    try {
+      await this.historyRepo.save(
+        this.historyRepo.create({
+          userId: answer.playerId,
+          questionId: round.question.id,
+          answer: answer.answer,
+          isCorrect: false,
+          score: 0,
+          timeTakenMs: base.timeTakenMs,
+          hintsUsed: answer.hintsUsed,
+          gameMode: round.question.gameMode,
+          gradingMethod: 'held',
+        }),
+      );
+    } catch (err) {
+      // answer_history 저장 실패는 감사 손실이지만, 이미 throw 중인 상위 HTTP 에러를
+      // 막지 않기 위해 warn 만 남긴다. ops_event_log 경로가 별도 보완.
+      this.logger.warn(
+        `held answer_history persist 실패 (fail-safe) question=${round.question.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /**
