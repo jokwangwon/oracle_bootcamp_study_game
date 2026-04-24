@@ -14,6 +14,7 @@ import {
 } from '@oracle-game/shared';
 import { apiClient, type FinishSoloResponse } from '@/lib/api-client';
 import { getToken } from '@/lib/auth-storage';
+import { ReviewBadge } from '@/components/ReviewBadge';
 
 type Phase = 'config' | 'playing' | 'finished';
 
@@ -116,7 +117,20 @@ export default function SoloPlayPage() {
   if (phase === 'config') {
     return (
       <Container>
-        <h1 style={{ fontSize: '1.75rem', marginBottom: '1.5rem' }}>솔로 플레이 설정</h1>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '1.5rem',
+            gap: '1rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <h1 style={{ fontSize: '1.75rem', margin: 0 }}>솔로 플레이 설정</h1>
+          {/* ADR-019 §5.2 PR-5 — 오늘 복습 건수 뱃지. 토큰 없으면 렌더되지 않음. */}
+          {token ? <ReviewBadge token={token} /> : null}
+        </div>
 
         <Field label="주제">
           <select value={topic} onChange={(e) => setTopic(e.target.value as Topic)}>
