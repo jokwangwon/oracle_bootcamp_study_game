@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-24 (Session 6 PR #2 완주 + 3+1 사후 검증 hotfix + Session 7 SM-2 Phase 0/1 + ADR-019 + PR-1 머지, 4 PR 누적 / 695 → 779+1s)
+**최종 업데이트**: 2026-04-24 (Session 7 ADR-019 SM-2 Spaced Repetition 로드맵 완결 — PR #14~#23 전수 머지, 10 PR 누적 / 695 → 908+1s / +213 tests)
 
 ---
 
@@ -192,6 +192,8 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-23 오후 | **tailscale 외부 접속 지원 + CORS origin 버그 수정 (1 커밋)** — 사용자가 tailscale (100.102.41.122) 로 첫 실플레이 시도. `main.ts:18` 의 CORS origin 이 api 자신의 URL(`NEXT_PUBLIC_API_URL`) 을 쓰던 **의미 역전 버그** 수정 — `CORS_ORIGIN` 전용 env 신설 (comma 구분 복수 origin). Next.js 는 `NEXT_PUBLIC_*` 을 빌드 타임 replacement 하므로 Dockerfile `ARG` + docker-compose `build.args` 경로 신설 → 외부 호스트 URL 브라우저 번들 주입 가능. `apps/web/public/.gitkeep` 추가 (빌드 선결 조건). | PR #10, 커밋 `7b6a86b` |
 | 2026-04-23 오후 | **UX 재설계 브리프 v1 docs (docs-only)** — 실플레이 피드백 + 디자인 방향성 정리. 레퍼런스 4종 링크·요약 (programmers 가볍게 / Discord+Reddit 하이브리드 / 끄투온라인 라이트) + 현재 UX 문제 2건(즉시 피드백 부재 / 문맥 결여) + 요구사항 후보 R1~R7 + Phase 0 질문지 시드 6개. **결정 아님** — 다음 세션 Phase 0 입력 자료. | PR #11, 커밋 `a245819`, `ux-redesign-brief-v1.md` |
 | 2026-04-23 오후 | **UX #1 즉시 피드백 + 헤더 로그인 반영 + UX #2 scenario/rationale (3 커밋, 695 GREEN 유지)** — (1) `aa79dec` UX #1 (brief §2.1): RoundPlayer `lastResult` state + FeedbackCard (정/오 뱃지 + 내 답 + 정답 + 해설) + "다음 라운드" 버튼 (Enter 가능) — EvaluationResult.correctAnswer/explanation 가 이미 응답에 있었는데 UI 가 버리던 문제. (2) `dee664f` 헤더 로그인 상태 즉시 반영: Header mount-only 체크 → `usePathname()` deps + 커스텀 이벤트 `AUTH_CHANGED_EVENT` + storage 이벤트 3계층 감지. (3) `bd328cb` UX #2 (brief §2.2): `Question`/`QuestionEntity` 에 `scenario`/`rationale` optional 필드 + `SeedService.insertQuestion()` 필드 전달 누락 버그 수정 + 1·2주차 seed 60건 전수 재작성 (blank 15+15 + term 15+15) + `ContextPanel`(📋 상황 — 풀이 중) / `FeedbackCard` 확장(💡 왜? — 제출 후) **스포일러 방지** (사용자 2차 피드백). 재시드 절차: `TRUNCATE weekly_scope CASCADE; TRUNCATE questions CASCADE;` + SEED_ON_BOOT=true. | PR #12, 커밋 `aa79dec`/`dee664f`/`bd328cb` |
+| 2026-04-24 오전 | **Session 6 PR #2 (free-form 채점 배선, 7 커밋 C2-1~C2-7) + 3+1 사후 검증 hotfix (`persistHeldAnswer` 7항 누락 CRITICAL-1) + D3 Hybrid 대칭성 (`ops_event_log` user_token_hash/epoch)** — 4 PR 머지 (#14~#17). `ENABLE_FREE_FORM_GRADING=false` 프로덕션 기본. `multi-agent-system-design §7.3/7.4` 합의율 패턴 관찰 기록 신설. **695 → 779+1s (+84)**. | PR #14~#17, `SESSION_2026-04-24.md` §1~2 |
+| 2026-04-24 오후 | **ADR-019 SM-2 Spaced Repetition 로드맵 완결 (PR-1~PR-6, 6 PR 연속 머지)** — Phase 0 브리프 + Phase 1 consensus-008 (합의율 36.8% / B-C1~C4 + A-CRITICAL 3 전원 반영) + 사용자 Q1~Q5. (PR-1) review_queue entity + migration 1714000007000. (PR-2) `sm2Next` + `mapAnswerToQuality` pure function (SM-2-lite clamp [2.3,2.6] 항상 ON, timePenalty 제거). (PR-3) `ReviewQueueService.upsertAfterAnswer/overwriteAfterOverride` + submitAnswer Tx2 (fail-open). (PR-4) `findDue` JOIN questions + `pickQuestionsForSolo` srLimit=ceil(rounds*0.7) + `GET /games/solo/review-queue` + `QuestionPoolService.pickRandom(excludeIds)`. (PR-5) Next.js `ReviewBadge` + `apiClient.solo.reviewQueue`. (PR-6) `sr_metrics_daily` 테이블 + `SrMetricsService` + `@Cron(EVERY_DAY_AT_MIDNIGHT)` + `evaluateSrMetricBreaches` (retention/completion/guard). **779 → 908+1s (+129)**. | PR #17~#23, `ADR-019`, `consensus-008`, `SESSION_2026-04-24.md` §3.6~3.10 |
 
 ---
 
