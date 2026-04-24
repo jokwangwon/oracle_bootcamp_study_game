@@ -1,4 +1,4 @@
-import { MoreThanOrEqual } from 'typeorm';
+import { LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ReviewQueueEntity } from './entities/review-queue.entity';
@@ -20,6 +20,7 @@ type Repo = {
   findOne: ReturnType<typeof vi.fn>;
   count: ReturnType<typeof vi.fn>;
   upsert: ReturnType<typeof vi.fn>;
+  find: ReturnType<typeof vi.fn>;
 };
 
 function makeRepo(): Repo {
@@ -27,7 +28,34 @@ function makeRepo(): Repo {
     findOne: vi.fn().mockResolvedValue(null),
     count: vi.fn().mockResolvedValue(0),
     upsert: vi.fn().mockResolvedValue({}),
+    find: vi.fn().mockResolvedValue([]),
   };
+}
+
+type QbMock = {
+  where: ReturnType<typeof vi.fn>;
+  andWhere: ReturnType<typeof vi.fn>;
+  getMany: ReturnType<typeof vi.fn>;
+};
+
+function makeQb(returned: unknown[] = []): QbMock {
+  const qb: QbMock = {
+    where: vi.fn().mockReturnThis(),
+    andWhere: vi.fn().mockReturnThis(),
+    getMany: vi.fn().mockResolvedValue(returned),
+  };
+  return qb;
+}
+
+type QuestionRepo = { createQueryBuilder: ReturnType<typeof vi.fn> };
+
+function makeQuestionRepo(returned: unknown[] = []): {
+  repo: QuestionRepo;
+  qb: QbMock;
+} {
+  const qb = makeQb(returned);
+  const repo: QuestionRepo = { createQueryBuilder: vi.fn().mockReturnValue(qb) };
+  return { repo, qb };
 }
 
 function makeConfig(cap: number | undefined = 100, salt = 'salt-of-at-least-sixteen-chars!!') {
@@ -67,6 +95,7 @@ describe('ReviewQueueService.upsertAfterAnswer — 정상 답변 경로', () => 
   it('existing=null → 신규 편입: cap 미초과 시 sm2Next 결과 upsert', async () => {
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(1),
     );
@@ -103,6 +132,7 @@ describe('ReviewQueueService.upsertAfterAnswer — 정상 답변 경로', () => 
     } as ReviewQueueEntity);
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(1),
     );
@@ -121,6 +151,7 @@ describe('ReviewQueueService.upsertAfterAnswer — 정상 답변 경로', () => 
     const gm = makeGradingMeasurement();
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(1),
       gm,
@@ -140,6 +171,7 @@ describe('ReviewQueueService.upsertAfterAnswer — 정상 답변 경로', () => 
     const gm = makeGradingMeasurement();
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(1),
       gm,
@@ -153,7 +185,7 @@ describe('ReviewQueueService.upsertAfterAnswer — 정상 답변 경로', () => 
   it('cap 미설정 (config 없음) → 기본 100', async () => {
     repo.count.mockResolvedValueOnce(100);
     const gm = makeGradingMeasurement();
-    const service = new ReviewQueueService(repo as never, undefined, undefined, gm);
+    const service = new ReviewQueueService(repo as never, {} as never, undefined, undefined, gm);
     await service.upsertAfterAnswer('user-1', 'q-1', 5, anchor);
 
     expect(repo.upsert).not.toHaveBeenCalled();
@@ -167,6 +199,7 @@ describe('ReviewQueueService.upsertAfterAnswer — 정상 답변 경로', () => 
   it('count where 절: userId + createdAt >= today UTC 0시', async () => {
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(1),
     );
@@ -190,6 +223,7 @@ describe('ReviewQueueService.upsertAfterAnswer — D3 Hybrid userTokenHash/epoch
   it('config + activeEpoch 주입 시 userTokenHash(16 hex) + epoch 저장', async () => {
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(7),
     );
@@ -203,6 +237,7 @@ describe('ReviewQueueService.upsertAfterAnswer — D3 Hybrid userTokenHash/epoch
   it('salt 누락 → null, upsert 는 정상 진행 (fail-safe)', async () => {
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100, ''),
       makeActiveEpoch(1),
     );
@@ -215,7 +250,7 @@ describe('ReviewQueueService.upsertAfterAnswer — D3 Hybrid userTokenHash/epoch
   });
 
   it('activeEpoch 미주입 → null, upsert 진행 (fail-safe)', async () => {
-    const service = new ReviewQueueService(repo as never, makeConfig(100), undefined);
+    const service = new ReviewQueueService(repo as never, {} as never, makeConfig(100), undefined);
     await service.upsertAfterAnswer('user-1', 'q-1', 5, anchor);
 
     expect(repo.upsert).toHaveBeenCalledOnce();
@@ -227,6 +262,7 @@ describe('ReviewQueueService.upsertAfterAnswer — D3 Hybrid userTokenHash/epoch
   it('activeEpoch.getActiveEpochId throw → null, upsert 진행 (fail-safe)', async () => {
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(new Error('no active epoch')),
     );
@@ -243,7 +279,7 @@ describe('ReviewQueueService.upsertAfterAnswer — 오류 전파 (fail-open 은 
   it('repo.upsert throw → caller 로 전파 (서비스에서 삼키지 않음)', async () => {
     const repo = makeRepo();
     repo.upsert.mockRejectedValueOnce(new Error('db conflict'));
-    const service = new ReviewQueueService(repo as never, makeConfig(100), makeActiveEpoch(1));
+    const service = new ReviewQueueService(repo as never, {} as never, makeConfig(100), makeActiveEpoch(1));
     await expect(service.upsertAfterAnswer('user-1', 'q-1', 5, anchor)).rejects.toThrow(
       'db conflict',
     );
@@ -252,7 +288,7 @@ describe('ReviewQueueService.upsertAfterAnswer — 오류 전파 (fail-open 은 
   it('repo.findOne throw → caller 로 전파', async () => {
     const repo = makeRepo();
     repo.findOne.mockRejectedValueOnce(new Error('db unreachable'));
-    const service = new ReviewQueueService(repo as never, makeConfig(100), makeActiveEpoch(1));
+    const service = new ReviewQueueService(repo as never, {} as never, makeConfig(100), makeActiveEpoch(1));
     await expect(service.upsertAfterAnswer('user-1', 'q-1', 5, anchor)).rejects.toThrow(
       'db unreachable',
     );
@@ -269,6 +305,7 @@ describe('ReviewQueueService.overwriteAfterOverride — admin-override 경로', 
     const gm = makeGradingMeasurement();
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(1),
       gm,
@@ -290,6 +327,7 @@ describe('ReviewQueueService.overwriteAfterOverride — admin-override 경로', 
     } as ReviewQueueEntity);
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(1),
     );
@@ -306,6 +344,7 @@ describe('ReviewQueueService.overwriteAfterOverride — admin-override 경로', 
     const gm = makeGradingMeasurement();
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(1),
       gm,
@@ -319,6 +358,7 @@ describe('ReviewQueueService.overwriteAfterOverride — admin-override 경로', 
   it('userTokenHash + epoch 를 함께 저장', async () => {
     const service = new ReviewQueueService(
       repo as never,
+      {} as never,
       makeConfig(100),
       makeActiveEpoch(4),
     );
@@ -332,7 +372,7 @@ describe('ReviewQueueService.overwriteAfterOverride — admin-override 경로', 
   it('repo.upsert throw → caller 로 전파', async () => {
     const repo = makeRepo();
     repo.upsert.mockRejectedValueOnce(new Error('boom'));
-    const service = new ReviewQueueService(repo as never, makeConfig(100), makeActiveEpoch(1));
+    const service = new ReviewQueueService(repo as never, {} as never, makeConfig(100), makeActiveEpoch(1));
     await expect(
       service.overwriteAfterOverride('user-1', 'q-1', 5, anchor),
     ).rejects.toThrow('boom');
@@ -342,10 +382,175 @@ describe('ReviewQueueService.overwriteAfterOverride — admin-override 경로', 
 describe('ReviewQueueService — easeFactor numeric(4,3) 문자열 저장', () => {
   it('easeFactor 는 toFixed(3) 3자리 소수점 문자열', async () => {
     const repo = makeRepo();
-    const service = new ReviewQueueService(repo as never, makeConfig(100), makeActiveEpoch(1));
+    const service = new ReviewQueueService(repo as never, {} as never, makeConfig(100), makeActiveEpoch(1));
     await service.upsertAfterAnswer('user-1', 'q-1', 4, anchor);
     const [row] = repo.upsert.mock.calls[0]!;
     // q=4, prev.ease=2.5 → 2.5 (중간), clamp 내부 → "2.500"
     expect(row.easeFactor).toBe('2.500');
+  });
+});
+
+/**
+ * ADR-019 §5.2 PR-4 — findDue + countDueForUser.
+ */
+describe('ReviewQueueService.findDue — due rows JOIN questions', () => {
+  const now = new Date('2026-04-24T12:00:00.000Z');
+  const criteria = {
+    topic: 'sql-basics' as const,
+    week: 2,
+    gameMode: 'blank-typing' as const,
+  };
+
+  it('limit<=0 → [] (repo 호출 없음)', async () => {
+    const repo = makeRepo();
+    const { repo: qRepo } = makeQuestionRepo();
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    const result = await service.findDue('user-1', criteria, 0, now);
+    expect(result).toEqual([]);
+    expect(repo.find).not.toHaveBeenCalled();
+  });
+
+  it('userId 빈 문자열 → [] (호출 없음)', async () => {
+    const repo = makeRepo();
+    const { repo: qRepo } = makeQuestionRepo();
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    const result = await service.findDue('', criteria, 10, now);
+    expect(result).toEqual([]);
+    expect(repo.find).not.toHaveBeenCalled();
+  });
+
+  it('review_queue 에 due 행 없음 → [] (questions 조회 스킵)', async () => {
+    const repo = makeRepo();
+    repo.find.mockResolvedValueOnce([]);
+    const { repo: qRepo } = makeQuestionRepo();
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    const result = await service.findDue('user-1', criteria, 10, now);
+    expect(result).toEqual([]);
+    expect(qRepo.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('repo.find: where userId + dueAt LessThanOrEqual(now), order due_at ASC, take limit', async () => {
+    const repo = makeRepo();
+    repo.find.mockResolvedValueOnce([]);
+    const { repo: qRepo } = makeQuestionRepo();
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    await service.findDue('user-1', criteria, 7, now);
+
+    expect(repo.find).toHaveBeenCalledOnce();
+    const arg = repo.find.mock.calls[0]![0];
+    expect(arg.where.userId).toBe('user-1');
+    expect(arg.where.dueAt).toEqual(LessThanOrEqual(now));
+    expect(arg.order).toEqual({ dueAt: 'ASC' });
+    expect(arg.take).toBe(7);
+  });
+
+  it('questions 필터: IN ids + status=active + topic/gameMode/week', async () => {
+    const repo = makeRepo();
+    repo.find.mockResolvedValueOnce([
+      { questionId: 'q-a' },
+      { questionId: 'q-b' },
+    ] as ReviewQueueEntity[]);
+    const { repo: qRepo, qb } = makeQuestionRepo([
+      { id: 'q-a' },
+      { id: 'q-b' },
+    ]);
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    await service.findDue('user-1', criteria, 7, now);
+
+    expect(qb.where).toHaveBeenCalledWith('q.id IN (:...ids)', {
+      ids: ['q-a', 'q-b'],
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('q.status = :status', {
+      status: 'active',
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('q.topic = :topic', {
+      topic: 'sql-basics',
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('q.gameMode = :gameMode', {
+      gameMode: 'blank-typing',
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('q.week <= :week', { week: 2 });
+  });
+
+  it('criteria.difficulty 지정 시 andWhere 추가', async () => {
+    const repo = makeRepo();
+    repo.find.mockResolvedValueOnce([{ questionId: 'q-a' }] as ReviewQueueEntity[]);
+    const { repo: qRepo, qb } = makeQuestionRepo([{ id: 'q-a' }]);
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    await service.findDue('user-1', { ...criteria, difficulty: 'HARD' }, 7, now);
+
+    expect(qb.andWhere).toHaveBeenCalledWith('q.difficulty = :difficulty', {
+      difficulty: 'HARD',
+    });
+  });
+
+  it('difficulty 미지정 시 difficulty andWhere 호출 없음', async () => {
+    const repo = makeRepo();
+    repo.find.mockResolvedValueOnce([{ questionId: 'q-a' }] as ReviewQueueEntity[]);
+    const { repo: qRepo, qb } = makeQuestionRepo([{ id: 'q-a' }]);
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    await service.findDue('user-1', criteria, 7, now);
+
+    const calls = qb.andWhere.mock.calls.map((c: unknown[]) => c[0] as string);
+    expect(calls.some((s) => s.includes('difficulty'))).toBe(false);
+  });
+
+  it('반환 순서: due_at ASC (repo.find 반환 순서 보존)', async () => {
+    const repo = makeRepo();
+    repo.find.mockResolvedValueOnce([
+      { questionId: 'q-earlier' }, // due_at 먼저
+      { questionId: 'q-later' },
+    ] as ReviewQueueEntity[]);
+    // questions repo 는 순서가 뒤바뀌어 반환될 수 있음 (IN 쿼리 특성)
+    const { repo: qRepo } = makeQuestionRepo([
+      { id: 'q-later' },
+      { id: 'q-earlier' },
+    ]);
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+
+    const result = await service.findDue('user-1', criteria, 7, now);
+    expect(result.map((q) => q.id)).toEqual(['q-earlier', 'q-later']);
+  });
+
+  it('criteria 불일치 (questions 반환에서 누락된 id) → 해당 문제 제외', async () => {
+    const repo = makeRepo();
+    repo.find.mockResolvedValueOnce([
+      { questionId: 'q-match' },
+      { questionId: 'q-mismatch' },
+    ] as ReviewQueueEntity[]);
+    // questions 테이블에서 criteria 로 걸러져 1건만 반환
+    const { repo: qRepo } = makeQuestionRepo([{ id: 'q-match' }]);
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+
+    const result = await service.findDue('user-1', criteria, 7, now);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('q-match');
+  });
+});
+
+describe('ReviewQueueService.countDueForUser', () => {
+  const now = new Date('2026-04-24T12:00:00.000Z');
+
+  it('repo.count: userId + dueAt LessThanOrEqual(now)', async () => {
+    const repo = makeRepo();
+    repo.count.mockResolvedValueOnce(3);
+    const { repo: qRepo } = makeQuestionRepo();
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    const count = await service.countDueForUser('user-1', now);
+
+    expect(count).toBe(3);
+    expect(repo.count).toHaveBeenCalledOnce();
+    const arg = repo.count.mock.calls[0]![0];
+    expect(arg.where.userId).toBe('user-1');
+    expect(arg.where.dueAt).toEqual(LessThanOrEqual(now));
+  });
+
+  it('userId 빈 문자열 → 0 (repo 호출 없음)', async () => {
+    const repo = makeRepo();
+    const { repo: qRepo } = makeQuestionRepo();
+    const service = new ReviewQueueService(repo as never, qRepo as never);
+    const count = await service.countDueForUser('', now);
+    expect(count).toBe(0);
+    expect(repo.count).not.toHaveBeenCalled();
   });
 });

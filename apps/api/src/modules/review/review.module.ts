@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { QuestionEntity } from '../content/entities/question.entity';
 import { OpsModule } from '../ops/ops.module';
 import { ReviewQueueEntity } from './entities/review-queue.entity';
 import { ReviewQueueService } from './review-queue.service';
@@ -19,7 +20,9 @@ import { ReviewQueueService } from './review-queue.service';
  * (`sr_queue_overflow` / `sr_upsert_failed` 이벤트 기록용, @Optional).
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([ReviewQueueEntity]), OpsModule],
+  // PR-4: QuestionEntity 도 registerFeature 에 포함 (findDue 의 JOIN 쿼리용).
+  // 동일 entity 를 여러 모듈이 register 해도 TypeORM 은 단일 repo 로 해석 (충돌 없음).
+  imports: [TypeOrmModule.forFeature([ReviewQueueEntity, QuestionEntity]), OpsModule],
   providers: [ReviewQueueService],
   exports: [TypeOrmModule, ReviewQueueService],
 })

@@ -21,6 +21,15 @@ export interface QuestionQuery {
 }
 
 /**
+ * ADR-019 §5.2 PR-4 — `pickQuestions(..., { srRatio: 0.7 })` 가 SR due 문제를
+ * 먼저 뽑은 뒤 random 보충을 요청할 때, 이미 포함된 id 를 제외하기 위한 옵션.
+ * 미사용 시 (빈 배열 또는 undefined) 기존 동작 유지 (회귀 0).
+ */
+export interface PickRandomOpts {
+  excludeIds?: string[];
+}
+
+/**
  * 새 문제 저장 입력. Partial<QuestionEntity>나 QuestionContent
  * (discriminated union 5개)를 그대로 노출하면 TypeORM의 DeepPartial
  * generic 추론과 결합하여 TS2589 (excessively deep) 가 발생한다.
@@ -53,8 +62,15 @@ export class QuestionPoolService {
    * 주어진 조건에 맞는 활성 문제를 무작위로 N개 조회한다.
    * 학습 범위 누적: 1주차 사용자도 1주차까지의 모든 문제를 풀 수 있도록
    * `week <= request.week` 로 누적 조회한다.
+   *
+   * ADR-019 §5.2 PR-4 — `opts.excludeIds` 로 특정 문제 제외 가능.
+   * SR due 문제 먼저 편성 후 random 보충 시 중복 방지에 사용.
    */
-  async pickRandom(query: QuestionQuery, count: number): Promise<QuestionEntity[]> {
+  async pickRandom(
+    query: QuestionQuery,
+    count: number,
+    opts?: PickRandomOpts,
+  ): Promise<QuestionEntity[]> {
     const qb = this.questionRepo
       .createQueryBuilder('q')
       .where('q.status = :status', { status: 'active' })
@@ -64,6 +80,12 @@ export class QuestionPoolService {
 
     if (query.difficulty) {
       qb.andWhere('q.difficulty = :difficulty', { difficulty: query.difficulty });
+    }
+
+    if (opts?.excludeIds && opts.excludeIds.length > 0) {
+      qb.andWhere('q.id NOT IN (:...excludeIds)', {
+        excludeIds: opts.excludeIds,
+      });
     }
 
     qb.orderBy('RANDOM()').limit(count);

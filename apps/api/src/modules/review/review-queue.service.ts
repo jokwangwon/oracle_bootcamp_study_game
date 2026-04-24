@@ -1,13 +1,22 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThanOrEqual, Repository } from 'typeorm';
+import { LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import type { Difficulty, GameModeId, Topic } from '@oracle-game/shared';
 
+import { QuestionEntity } from '../content/entities/question.entity';
 import { hashUserToken } from '../grading/user-token-hash';
 import { ActiveEpochLookup } from '../ops/active-epoch.lookup';
 import { GradingMeasurementService } from '../ops/grading-measurement.service';
 import { ReviewQueueEntity } from './entities/review-queue.entity';
 import { sm2Next, type Sm2PrevState, type Sm2Result } from './sm2';
+
+export interface FindDueCriteria {
+  topic: Topic;
+  week: number;
+  gameMode: GameModeId;
+  difficulty?: Difficulty;
+}
 
 /**
  * ADR-019 §5 PR-3 — SM-2 review_queue 서비스.
@@ -37,6 +46,8 @@ export class ReviewQueueService {
   constructor(
     @InjectRepository(ReviewQueueEntity)
     private readonly repo: Repository<ReviewQueueEntity>,
+    @InjectRepository(QuestionEntity)
+    private readonly questionRepo: Repository<QuestionEntity>,
     @Optional() private readonly config?: ConfigService,
     @Optional() private readonly activeEpoch?: ActiveEpochLookup,
     @Optional() private readonly gradingMeasurement?: GradingMeasurementService,
@@ -123,6 +134,63 @@ export class ReviewQueueService {
         }
       : { easeFactor: 2.5, intervalDays: 0, repetition: 0 };
     return sm2Next(prev, quality, anchor);
+  }
+
+  /**
+   * ADR-019 §5.2 PR-4 — 사용자에게 오늘(또는 지정 시각 기준) due 인 문제를 조회.
+   *
+   * 2-step:
+   *  1. `review_queue` 에서 user-scoped + `due_at <= now` 행을 due_at ASC 로 take limit
+   *     (NULL 은 `LessThanOrEqual` 비교에서 자동 제외 — `NULL <= now` 는 NULL 이므로 매치 X).
+   *  2. 해당 question_id 들을 questions 테이블에서 topic/week/gameMode/difficulty 로 필터.
+   *  3. 원래 due_at ASC 순서 보존 (byId 리오더).
+   *
+   * criteria 불일치로 filter 후 length < limit 이어도 caller 가 random 으로 보충 (§5.2).
+   */
+  async findDue(
+    userId: string,
+    criteria: FindDueCriteria,
+    limit: number,
+    now: Date = new Date(),
+  ): Promise<QuestionEntity[]> {
+    if (!userId || limit <= 0) return [];
+
+    const dueRows = await this.repo.find({
+      where: { userId, dueAt: LessThanOrEqual(now) },
+      order: { dueAt: 'ASC' },
+      take: limit,
+    });
+    if (dueRows.length === 0) return [];
+
+    const ids = dueRows.map((r) => r.questionId);
+    const qb = this.questionRepo
+      .createQueryBuilder('q')
+      .where('q.id IN (:...ids)', { ids })
+      .andWhere('q.status = :status', { status: 'active' })
+      .andWhere('q.topic = :topic', { topic: criteria.topic })
+      .andWhere('q.gameMode = :gameMode', { gameMode: criteria.gameMode })
+      .andWhere('q.week <= :week', { week: criteria.week });
+    if (criteria.difficulty) {
+      qb.andWhere('q.difficulty = :difficulty', { difficulty: criteria.difficulty });
+    }
+    const matched = await qb.getMany();
+
+    const byId = new Map(matched.map((q) => [q.id, q]));
+    return ids
+      .map((id) => byId.get(id))
+      .filter((q): q is QuestionEntity => q !== undefined);
+  }
+
+  /**
+   * ADR-019 §5.2 PR-4 — 세션 헤더 "오늘 복습 N" 뱃지 (PR-5) 입력.
+   *
+   * 전체 topic/gameMode 범위에서 user 가 오늘 due 인 문제 수. 필터 X (UI 집계용).
+   */
+  async countDueForUser(userId: string, now: Date = new Date()): Promise<number> {
+    if (!userId) return 0;
+    return this.repo.count({
+      where: { userId, dueAt: LessThanOrEqual(now) },
+    });
   }
 
   private async persist(

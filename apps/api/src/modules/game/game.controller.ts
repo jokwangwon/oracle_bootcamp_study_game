@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import {
   IsEnum,
   IsInt,
@@ -95,8 +95,21 @@ export class GameController {
   constructor(private readonly sessionService: GameSessionService) {}
 
   @Post('start')
-  async start(@Body() dto: StartSoloDto) {
-    return this.sessionService.startSolo(dto);
+  async start(@Body() dto: StartSoloDto, @Req() req: Request) {
+    const user = req.user as JwtUser;
+    // ADR-019 §5.2 PR-4 — JWT user.sub 를 서비스로 전파. 있으면 SR 혼합 경로,
+    // 없으면 기존 random 경로 (이 라우터는 JwtAuthGuard 후이므로 항상 존재).
+    return this.sessionService.startSolo({ ...dto, userId: user.sub });
+  }
+
+  /**
+   * ADR-019 §5.2 PR-4 — 세션 헤더 "오늘 복습 N" 뱃지 (PR-5 UI 소비).
+   * 전체 topic/gameMode 범위에서 오늘 due 인 review_queue 행 수.
+   */
+  @Get('review-queue')
+  async reviewQueue(@Req() req: Request) {
+    const user = req.user as JwtUser;
+    return this.sessionService.getReviewQueueSummary(user.sub);
   }
 
   @Post('answer')
