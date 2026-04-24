@@ -20,7 +20,8 @@ export type OpsEventKind =
   | 'grading_measured' // ADR-013 Layer 결과 차원 기록 / S6-C2-2
   | 'llm_timeout' // ADR-016 §추가 Layer 3 timeout / S6-C2-5
   | 'sr_queue_overflow' // ADR-019 §5.3 일일 신규 편입 상한 초과 drop / PR-3
-  | 'sr_upsert_failed'; // ADR-019 §5.1 review_queue UPSERT 실패 (Tx2 fail-open)
+  | 'sr_upsert_failed' // ADR-019 §5.1 review_queue UPSERT 실패 (Tx2 fail-open)
+  | 'sr_metric_breach'; // ADR-019 §6 PR-6 retention/completion/guard 기준 위반
 
 export type StudentReportReason = 'incorrect_answer' | 'sql_error' | 'other';
 
@@ -117,6 +118,25 @@ export interface LlmTimeoutPayload {
 export interface SrQueueOverflowPayload {
   cap: number; // 적용된 SR_DAILY_NEW_CAP
   observed: number; // 오늘 기존 신규 insert 수 (drop 직전)
+}
+
+/**
+ * ADR-019 §6 PR-6 — SM-2 일별 집계 지표 breach 알림.
+ *
+ * 3종:
+ *  - `retention_avg_quality`: 7일 평균 last_quality < 3.5
+ *  - `completion_rate`: completed / scheduled < 0.7
+ *  - `guard_low_rate`: last_quality ≤ 1 비율 ≥ 0.2
+ *
+ * payload 에 학생 식별자 금지 — 집계 스냅샷 지표만.
+ */
+export interface SrMetricBreachPayload {
+  metric: 'retention_avg_quality' | 'completion_rate' | 'guard_low_rate';
+  observed: number;
+  threshold: number;
+  sampleSize: number;
+  /** 스냅샷 기준 UTC 날짜 (YYYY-MM-DD) */
+  metricDate: string;
 }
 
 /**
