@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-24 (**Session 6 PR #2 전체 머지 + 3+1 사후 검증 hotfix + Session 7 SM-2 Phase 0/1 + ADR-019 + PR-1 머지**): 오늘 4 PR 누적 머지. PR #14 (`6b8ee7f`, consensus-007 §5 free-form 채점 배선 7 커밋 C2-1~C2-7) → 3+1 사후 검증 (합의율 25%, Agent B CRITICAL-1 단독 격상 `persistHeldAnswer` 7항 누락 확인) → PR #15 (`d24b0aa`, hotfix: persistHeldAnswer 재설계 + 16 hex 탐지 + privacy helper ai/ 이동 + multi-agent §7.3/7.4 합의율 패턴 관찰 기록) → PR #16 (`fda3ba9`, Q2=b 이행 ops_event_log D3 Hybrid 대칭 user_token_hash/epoch 컬럼) → PR #17 (`254cd45`, Session 7 SM-2 Phase 0 브리프 + Phase 1 합의 consensus-008 + ADR-019 + PR-1 review_queue entity/migration 1714000007000). **695 → 779 + 1 skipped (+84 tests)** / typecheck clean / pre-commit 전 커밋 자동 통과. `ENABLE_FREE_FORM_GRADING=false` 프로덕션 기본 유지 (Q2, 실 활성은 수동 전환). **다음: Session 7 PR-2~6 순차 (`sm2Next` + `mapAnswerToQuality` pure fn → submitAnswer Tx 분리 → pickQuestions 70% 상한 + API → UI 뱃지 → 집계)**. 전면 UI 재설계 (brief R4~R7, ADR-020 가칭) 는 별도 세션 대기 유지.
+**최종 업데이트**: 2026-04-24 저녁 (**Session 7 완결 — 13 PR 누적 / 3+1 합의 2회 / ADR-019 구현 완결 + ADR-020 초안 확정**): 오전 (PR #14~#17) Session 6 free-form 배선 + hotfix + D3 대칭. 오후 (PR #18~#23) ADR-019 SM-2 Spaced Repetition PR-1~6 순차 완결 + PR #24 docs 갱신. 저녁 (PR #25, #26) 오답 노트 + UX v2 좌측 사이드바 블로그 스타일 + ADR-020 UX 재설계 초안 (consensus-009 합의율 63% / Agent B 단독 CRITICAL 5건 Session 4 룰 전원 채택 / Reviewer 축자 검증 / 사용자 Q10~Q15 확정). **695 → 936 + 1 skipped (+241 tests)**. `ENABLE_FREE_FORM_GRADING=false` 프로덕션 기본 유지. **다음 세션**: ADR-020 12 PR 로드맵 착수 — 권장 시작 PR-6 (`@nestjs/throttler` auth rate limit) 또는 PR-7 (pre-commit Layer 3-a3 재귀) — 독립 병렬 + 보안 즉시 이득. 또는 PR-1 (Tailwind 인프라) 순차.
 
 ---
 
@@ -153,7 +153,13 @@ Phase 4: 통합 테스트 + 배포
   - `8049ed4` C2-1 LlmClient.invoke opts + sessionId 전파 / `3dc5b6d` C2-2 GradingMeasurementService + grading_measured event / `b3c7532` C2-3 GradingModule AppModule 등록 / `548cbd2` C2-4 gradeFreeForm + ENABLE_FREE_FORM_GRADING kill-switch / `3c5ff2f` C2-5 LLM_JUDGE_TIMEOUT_MS=8000 + held fallback + HTTP 503 / `e60a857` C2-6 answer_history 7항 persist + user_token_hash_epoch (migration 1714000005000) / `3a56c6e` C2-7 langfuse-payload-privacy helper + E2E gate.
 - ✅ **PR #15 hotfix (`d24b0aa`)** — PR #14 사후 3+1 검증 (합의율 25% / 1인 CRITICAL 격상 1건). `b8334e9` : `persistHeldAnswer` 재설계 (buildAnswerHistoryInput 재사용) + `LlmJudgeTimeoutError.sanitizationFlags` 첨부 + recordHeldPersistFail 최후 방어선 + langfuse-payload-privacy ai/ 이동 + 16 hex boundary lookaround + multi-agent-system-design §7.3/7.4 합의율 패턴 관찰 기록. 751 → 754+1s (+3).
 - ✅ **PR #16 (`fda3ba9`)** — Q2=b 이행. ops_event_log 에 user_token_hash/epoch 대칭 컬럼 (migration 1714000006000). GradingMeasurementService.resolveHashAndEpoch 자동 채움. 754 → 764+1s (+10).
-- 🟡 **Session 7 진행 중 (PR-1/6 머지, 2026-04-24)** — SM-2 Spaced Repetition. Phase 0 브리프 + Phase 1 3+1 합의 (consensus-008, 36.8% / B-C1~C4 격상 전원 반영 + A-CRITICAL 3 반영) + 사용자 Q1~Q5 (복합지표/70%상한/clamp 항상 ON/cap=100/timePenalty 제거) + ADR-019 + PR #17 `254cd45`. review_queue entity + migration 1714000007000 + ReviewModule 스켈레톤 (764 → 779+1s / +15). consensus-004 "ADR-018 SM-2" → ADR-019 정정. **PR-2~6 대기**.
+- ✅ **Session 7 — ADR-019 SM-2 Spaced Repetition 완결 (6 PR, 2026-04-24)** — Phase 0 브리프 + Phase 1 3+1 합의 (consensus-008, 36.8% / B-C1~C4 격상 전원 반영 + A-CRITICAL 3 반영) + 사용자 Q1~Q5 (복합지표/70%상한/clamp 항상 ON/cap=100/timePenalty 제거) + ADR-019. consensus-004 "ADR-018 SM-2" → ADR-019 정정.
+  - PR-1 (`254cd45`, PR #17) — review_queue entity + migration 1714000007000 + ReviewModule 스켈레톤. 764 → 779+1s (+15).
+  - PR-2 (`3bb71a4`, PR #19) — `sm2Next` + `mapAnswerToQuality` pure function (sm2.ts 55 LOC, 외부 의존 0). 779 → 821+1s (+42).
+  - PR-3 (`2151f7b`, PR #20) — `ReviewQueueService.upsertAfterAnswer` (일일 상한 100 + `sr_queue_overflow`) / `overwriteAfterOverride` (admin-override) + `submitAnswer` Tx2 배선 (held/guest/미주입 스킵, fail-open → `sr_upsert_failed`). D3 Hybrid hash/epoch fail-safe resolve. `SR_DAILY_NEW_CAP` env. 821 → 855+1s (+34).
+  - PR-4 (`0996536`, PR #21) — `findDue` (review_queue JOIN questions) + `countDueForUser` + `pickQuestionsForSolo` `srLimit=ceil(rounds*0.7)` + `QuestionPoolService.pickRandom` excludeIds 옵션 + `GET /games/solo/review-queue`. 855 → 880+1s (+25).
+  - PR-5 (`49ec20a`, PR #22) — Next.js `ReviewBadge` 컴포넌트 + `apiClient.solo.reviewQueue` + `/play/solo` config 단계 상단 배치. 로딩/에러 silent, 0건도 표시, aria-label 접근성.
+  - PR-6 (`d7a2ac8`, PR #23) — `sr_metrics_daily` 테이블 + migration 1714000008000 + `SrMetricsService.computeMetrics` / `snapshotDaily` + `@Cron(EVERY_DAY_AT_MIDNIGHT)` + `evaluateSrMetricBreaches` pure fn + `sr_metric_breach` 이벤트. Primary retention / Secondary completion / Guard low_rate 3지표. 880 → 908+1s (+28).
 - 🔴 MVP-C (3주) — 주차별 미니 캡스톤 + 3-entity + 주제 팩 4종 + MT7. ADR-014
 - 🔴 MVP-C' (2주) — 최종 캡스톤 2트랙(SQL/PL-SQL). ADR-014
 - 🔴 MVP-D (2주) — 주간 릴리스 cron + grading_appeals UI + mc-distractor assertion. ADR-015/016/017
@@ -182,48 +188,47 @@ Phase 4: 통합 테스트 + 배포
 | 9.6 | Phase 0 Claude 베이스라인 (Anthropic 크레딧 충전 후) | 🔴 후순위 |
 | **10** | **운영 모델 교체 — `ChatAnthropic` → `ChatOllama` (M3)** | 🔴 다음 세션 (ADR-011 채택 조건 3건 선행) |
 
-### 다음 세션 우선순위 (2 트랙 병행)
+### 다음 세션 우선순위
 
-**트랙 X — 전면 UI 재설계 (별도 세션 권장)** — PR #11 `ux-redesign-brief-v1.md` 기반.
+**0순위 — PR #25 (오답 노트) + PR #26 (ADR-020 docs) 머지 확인**
+- 사용자 리뷰 대기 중. 머지되면 main 동기화 후 다음 착수.
 
-- **Phase 0 검토 질문지 작성** (ADR-001) — 브리프 §5 시드 6개 활용:
-  1. 레퍼런스 4종 중 가장 가까운 하나 / 피해야 할 것
-  2. R1~R7 중 MVP-C 이전 반드시 필요한 것
-  3. 커뮤니티 심도: (a) 질문/답변만 (b) + upvote (c) + 댓글 (d) + 실시간 반응
-  4. 학습 진지함 vs 끄투온라인 캐주얼 톤 트레이드오프
-  5. Mobile-first 여부
-  6. 다크모드 선호도
-- **Phase 1 3+1 합의** → ADR-020 (가칭) UX 재설계 + SDD UI 섹션 + Tailwind CSS + shadcn/ui 도입 결정
-- **구현 순서 제안** (ADR 통과 후): 홈 재설계 → 솔로 랜덤 진입 (R3) → 문제당 토론 쓰레드 entity/API/UI → Discord 스타일 반응 → Mobile 대응
+**1순위 — ADR-020 UX 재설계 12 PR 로드맵 착수**
 
-**트랙 Y — MVP-B Session 6 PR #2 (PR #1 관측 1일 후, Q5=B)**
+권장 시작 (독립 병렬 가능, 보안 즉시 이득):
+- **PR-6**: `@nestjs/throttler` + auth rate limit + `RedisRateLimiter` 일반화 (CRITICAL-B3 해소)
+- **PR-7**: pre-commit Layer 3-a3 재귀 glob + pii-regression 확장 (CRITICAL-B5 해소)
 
-**0순위 — PR #1 (PR #8) 프로덕션 배포 + 관측 (사용자 Q5=B)**
-- **staging 부팅 smoke** — migration 1714000004000 자동 실행 → `user_token_hash_salt_epochs` active row 1건 자동 시드 확인 + `ops_event_log(kind='salt_rotation', payload={bootstrap:true})` 1건 기록 확인.
-- **프로덕션 배포 1일 관측**:
-  - `pii_masker_triggered` 이벤트 기대값 = 0 (호출자 코드 정합 확인용). 발생 시 즉시 원인 조사.
-  - `answer_history` INSERT 경로 회귀 없음 (MC/BlankTyping/TermMatch 게임 모드 동작 유지).
-  - pre-commit Layer 3-a3 (prompt template PII grep) 실사용 중 false positive 확인.
-- 이상 없으면 **PR #2 세션 개시**. 이상 발견 시 hotfix PR 선행.
+순차 시작 대안:
+- **PR-1**: Tailwind v3.4 + postcss + utils 설치 (인프라 선행)
+- **PR-2**: CSS 변수 → Tailwind theme 브리지 + light 팔레트
 
-**최우선 — MVP-B Session 6/10 PR #2 (free-form 채점 배선, 7 커밋 / consensus-007 §5)**
-1. **C2-1**: `LlmClient.invoke(messages, opts?: { metadata?: WhitelistedMetadata })` + `sessionId` 전파. `PlayerAnswer.sessionId` 축 신설 → `GameSessionService` → `GradingOrchestrator` → `LlmJudgeGrader`. 기존 호출자 회귀 0 (optional).
-2. **C2-2**: `GradingMeasurementService.measureGrading()` 신규 — `OpsMeasurementService.measureSync` 와 시맨틱 분리. `ast_failure_reason` / `judge_invocation_count` / `llm_timeout` 등 채점 차원 일관 기록.
-3. **C2-3**: `GradingModule` AppModule 등록 (격리 해제). wiring smoke test (DI 해결 확인, Ollama lazy 연결로 부팅 영향 0).
-4. **C2-4**: `GameSessionService.gradeFreeForm()` private 추출 + `answerFormat==='free-form'` 분기 + `ENABLE_FREE_FORM_GRADING` env kill-switch (Q2=false 프로덕션 기본). MC/single-token 회귀 없음.
-5. **C2-5**: `LLM_JUDGE_TIMEOUT_MS=8000` env (Q1) + held fallback + **HTTP 에러 응답 (Q3=B)**. `answer_history.gradingMethod='held'` persist 유지로 감사 체인 보존. `ops_event_log(kind='llm_timeout')` 기록.
-6. **C2-6**: `GradingResult → EvaluationResult` 변환 + 7항 persist (gradingMethod/graderDigest/gradingLayersUsed/partialScore/rationale/sanitizationFlags/astFailureReason) + `user_token_hash_epoch` 채움 (PR #1 C1-6 `ActiveEpochLookup` 재사용).
-7. **C2-7**: E2E `OLLAMA_INTEGRATION` env gate (nightly). Langfuse mock 송신 payload 전수 캡처 → userId 파생정보 0건 assert.
+**전체 12 PR 로드맵** (ADR-020 §6 참조):
+1. Tailwind 인프라
+2. theme token 브리지 + light 팔레트
+3. helmet + CSP (CRITICAL-B1)
+4. next-themes + Header 토글
+5. shadcn/ui 초기화 + Button/Card/Dialog/Input
+6. auth rate limit (CRITICAL-B3)
+7. pre-commit 재귀 (CRITICAL-B5)
+8. Header + `/`, `/login`, `/register` Tailwind
+9. `/play/solo` Tailwind 이전
+10. **(Q11=a 통합)** httpOnly 쿠키 + refresh + CSRF + R4 discussion + sanitize-html (CRITICAL-B2 + C-B4 부분)
+11. R6 vote UNIQUE + self-vote CHECK + race (CRITICAL-B4)
+12. discussion 페이지 + VoteButton + rehype-sanitize (CRITICAL-B1)
 
-**최우선 — 합의 산출물 백로그 (Session 3/4 에서 연기)**
-- **Session 6+**: 에러 타입 행동 분기 (`truly_invalid_syntax` → 즉시 FAIL). 현재 기록만, 행동 분기는 Rewriter 와 함께.
-- **Session 6+**: 전처리 Rewriter (`(+)` → ANSI JOIN, `NVL` → `COALESCE`). `grader_digest` 재현성 재설계 선행 필요.
+**2순위 — ADR-019 24h 관측 (자동)**
+- 24h 후 `@Cron(EVERY_DAY_AT_MIDNIGHT)` 자동 실행 확인: `sr_metrics_daily` 1행 INSERT.
+- SR 혼합 편성 실사용 피드백 (2회차 이후 due 우선 편성).
 
-**Session 7~10**
-- Session 7: SM-2 복습 간격 시스템
-- Session 8: dry-run 채점 모드 (개발 편의)
-- Session 9: 작성형 gold set 15+건 (Mode 1 variants 준비)
-- Session 10: Mode 1 variants 실제 도입 + free-form seed 가동
+**3순위 — Session 8+ 기술 부채 해소 (ADR-019 §8.1)**
+- `Round.startedAt: number` 필드 + `timeTakenMs = answer.submittedAt - round.startedAt` + 프론트 epoch ms 전송.
+- 해소 후 quality 공식에 `timePenalty` 재도입 평가 (현재 Q5=a 로 제거됨).
+
+**3순위 — 합의 산출물 백로그 (이월)**
+- 에러 타입 행동 분기 (`truly_invalid_syntax` → 즉시 FAIL) + 전처리 Rewriter (`(+)` → ANSI JOIN, `NVL` → `COALESCE`). `grader_digest` 재현성 재설계 선행 필요.
+- Session 9: 작성형 gold set 15+건 (Mode 1 variants 준비).
+- Session 10: Mode 1 variants 실제 도입 + free-form seed 가동 (`ENABLE_FREE_FORM_GRADING=true` 전환).
 
 **Session 8+ 유보 (ADR-018 §10 트리거 조건)**
 - R2 dual-salt overlap — salt rotation 후 24h 동안 구 salt 병행 수용. 현재는 없음.
@@ -250,7 +255,8 @@ Phase 4: 통합 테스트 + 배포
 - **2주차+ 시드 확장** — IMPLEMENTATION_STATUS §4.3 line 163~164 미작성 주차 채우기.
 - **(P4 후순위)** M5 Llama 3.3 num_ctx 튜닝, Ollama schema-constrained decoding 파일럿.
 - **(후순위)** Anthropic 크레딧 충전 후 Phase 0 Claude 베이스라인.
-- **(조건부)** ADR-019 채점 모델 분리 — MT8 breach 3회/월 또는 `grading_appeals` ≥ 10건/주 시 트리거.
+- **(후순위)** 채점 모델 분리 — MT8 breach 3회/월 또는 `grading_appeals` ≥ 10건/주 시 트리거 (별도 ADR 필요).
+- **(후순위)** ADR-019 §7 제외/연기 항목: FSRS 전환 (SM-2 3개월+ 데이터 확보 후) / Grafana 대시보드 UI + Slack·email 알림 / SR_EASE_CLAMP off 재검토 (6개월+) / advisory lock 재검토 (peak rps ≥ 50).
 
 ### 환경/운영 메모
 
