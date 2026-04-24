@@ -13,6 +13,7 @@ import { OpsModule } from './modules/ops/ops.module';
 import { GradingModule } from './modules/grading/grading.module';
 import { GradingAppealsModule } from './modules/grading/appeal/grading-appeals.module';
 import { NotionModule } from './modules/notion/notion.module';
+import { ReviewModule } from './modules/review/review.module';
 import { typeOrmConfig } from './config/typeorm.config';
 import { configValidationSchema } from './config/env.validation';
 
@@ -37,6 +38,8 @@ import { configValidationSchema } from './config/env.validation';
     GradingModule,
     GradingAppealsModule,
     NotionModule,
+    // ADR-019 — SM-2 SR. PR-1 은 entity 등록만, 실 통합은 PR-3 이후.
+    ReviewModule,
     EvalModule,
   ],
 })
