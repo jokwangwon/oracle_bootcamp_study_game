@@ -1323,6 +1323,243 @@ describe('GameSessionService.submitAnswer — SR Tx2 배선 (ADR-019 §5.1)', ()
     expect(recordMock.mock.calls[0]![0].stage).toBe('overwrite');
   });
 
+  it('startSolo: userId + reviewQueueService 주입 → SR 혼합 (srLimit=ceil(rounds*0.7))', async () => {
+    const dueQuestion = { ...makeFakeBlankTypingQuestion(), id: 'q-due-1' };
+    const randomQuestion = { ...makeFakeBlankTypingQuestion(), id: 'q-random-1' };
+    const rq = {
+      findDue: vi.fn().mockResolvedValue([dueQuestion]),
+      upsertAfterAnswer: vi.fn().mockResolvedValue(undefined),
+      overwriteAfterOverride: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ReviewQueueService;
+    // Pool 모킹: pickRandom 은 remaining 개수만큼 반환
+    const pool = {
+      pickRandom: vi.fn().mockResolvedValue(
+        Array.from({ length: 9 }, (_, i) => ({
+          ...makeFakeBlankTypingQuestion(),
+          id: `q-random-${i + 1}`,
+        })),
+      ),
+    };
+
+    const blankTyping = new BlankTypingMode();
+    const termMatch = new TermMatchMode();
+    const multipleChoice = new MultipleChoiceMode();
+    const registry = new GameModeRegistry(blankTyping, termMatch, multipleChoice);
+    const usersService = new FakeUsersService();
+    const historyRepo = new FakeHistoryRepo();
+    const service = new GameSessionService(
+      registry,
+      pool as never,
+      usersService as never,
+      historyRepo as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      rq,
+    );
+
+    const rounds = await service.startSolo({
+      topic: 'sql-basics',
+      week: 1,
+      gameMode: 'blank-typing',
+      difficulty: 'EASY',
+      rounds: 10,
+      userId: 'user-1',
+    });
+
+    // findDue(user-1, criteria, ceil(10 * 0.7) = 7)
+    const findDueMock = (rq as unknown as { findDue: ReturnType<typeof vi.fn> }).findDue;
+    expect(findDueMock).toHaveBeenCalledOnce();
+    expect(findDueMock.mock.calls[0]![0]).toBe('user-1');
+    expect(findDueMock.mock.calls[0]![2]).toBe(7); // srLimit
+
+    // pickRandom(criteria, remaining=9, { excludeIds: ['q-due-1'] })
+    expect(pool.pickRandom).toHaveBeenCalledOnce();
+    const [, randomCount, randomOpts] = pool.pickRandom.mock.calls[0]!;
+    expect(randomCount).toBe(9); // 10 - 1 due
+    expect(randomOpts).toEqual({ excludeIds: ['q-due-1'] });
+
+    // due + random = 10 rounds
+    expect(rounds).toHaveLength(10);
+    expect(rounds[0]!.question.id).toBe('q-due-1');
+  });
+
+  it('startSolo: userId 미지정 → SR 경로 스킵 (pickRandom only, 회귀 0)', async () => {
+    const rq = {
+      findDue: vi.fn(),
+      upsertAfterAnswer: vi.fn(),
+      overwriteAfterOverride: vi.fn(),
+    } as unknown as ReviewQueueService;
+    const pool = {
+      pickRandom: vi.fn().mockResolvedValue([makeFakeBlankTypingQuestion()]),
+    };
+
+    const blankTyping = new BlankTypingMode();
+    const termMatch = new TermMatchMode();
+    const multipleChoice = new MultipleChoiceMode();
+    const registry = new GameModeRegistry(blankTyping, termMatch, multipleChoice);
+    const service = new GameSessionService(
+      registry,
+      pool as never,
+      new FakeUsersService() as never,
+      new FakeHistoryRepo() as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      rq,
+    );
+
+    await service.startSolo({
+      topic: 'sql-basics',
+      week: 1,
+      gameMode: 'blank-typing',
+      difficulty: 'EASY',
+      rounds: 1,
+    });
+
+    expect((rq as unknown as { findDue: ReturnType<typeof vi.fn> }).findDue).not.toHaveBeenCalled();
+    expect(pool.pickRandom).toHaveBeenCalledWith(
+      {
+        topic: 'sql-basics',
+        week: 1,
+        gameMode: 'blank-typing',
+        difficulty: 'EASY',
+      },
+      1,
+    );
+  });
+
+  it('startSolo: due 충분 (due.length >= rounds) → pickRandom 호출 없음', async () => {
+    const dueQuestions = Array.from({ length: 7 }, (_, i) => ({
+      ...makeFakeBlankTypingQuestion(),
+      id: `q-due-${i + 1}`,
+    }));
+    const rq = {
+      findDue: vi.fn().mockResolvedValue(dueQuestions),
+      upsertAfterAnswer: vi.fn(),
+      overwriteAfterOverride: vi.fn(),
+    } as unknown as ReviewQueueService;
+    const pool = { pickRandom: vi.fn() };
+
+    const registry = new GameModeRegistry(
+      new BlankTypingMode(),
+      new TermMatchMode(),
+      new MultipleChoiceMode(),
+    );
+    const service = new GameSessionService(
+      registry,
+      pool as never,
+      new FakeUsersService() as never,
+      new FakeHistoryRepo() as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      rq,
+    );
+
+    const rounds = await service.startSolo({
+      topic: 'sql-basics',
+      week: 1,
+      gameMode: 'blank-typing',
+      difficulty: 'EASY',
+      rounds: 5, // srLimit = ceil(5*0.7) = 4. but findDue 가 7개 반환 가정 — 5개만 사용
+      userId: 'user-1',
+    });
+
+    expect(pool.pickRandom).not.toHaveBeenCalled();
+    expect(rounds).toHaveLength(5);
+  });
+
+  it('startSolo: srLimit 경계 — rounds=1 → srLimit=1 / rounds=3 → srLimit=3 / rounds=10 → srLimit=7', async () => {
+    const rq = {
+      findDue: vi.fn().mockResolvedValue([]),
+      upsertAfterAnswer: vi.fn(),
+      overwriteAfterOverride: vi.fn(),
+    } as unknown as ReviewQueueService;
+    const pool = {
+      pickRandom: vi.fn().mockImplementation(async (_q, n: number) =>
+        Array.from({ length: n }, (_, i) => ({
+          ...makeFakeBlankTypingQuestion(),
+          id: `q-r-${i + 1}`,
+        })),
+      ),
+    };
+
+    const registry = new GameModeRegistry(
+      new BlankTypingMode(),
+      new TermMatchMode(),
+      new MultipleChoiceMode(),
+    );
+    const service = new GameSessionService(
+      registry,
+      pool as never,
+      new FakeUsersService() as never,
+      new FakeHistoryRepo() as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      rq,
+    );
+
+    const findDueMock = (rq as unknown as { findDue: ReturnType<typeof vi.fn> }).findDue;
+
+    await service.startSolo({
+      topic: 'sql-basics',
+      week: 1,
+      gameMode: 'blank-typing',
+      difficulty: 'EASY',
+      rounds: 1,
+      userId: 'user-1',
+    });
+    expect(findDueMock.mock.calls[0]![2]).toBe(1); // ceil(1*0.7)=1
+
+    await service.startSolo({
+      topic: 'sql-basics',
+      week: 1,
+      gameMode: 'blank-typing',
+      difficulty: 'EASY',
+      rounds: 3,
+      userId: 'user-1',
+    });
+    expect(findDueMock.mock.calls[1]![2]).toBe(3); // ceil(3*0.7)=3
+
+    await service.startSolo({
+      topic: 'sql-basics',
+      week: 1,
+      gameMode: 'blank-typing',
+      difficulty: 'EASY',
+      rounds: 10,
+      userId: 'user-1',
+    });
+    expect(findDueMock.mock.calls[2]![2]).toBe(7); // ceil(10*0.7)=7
+  });
+
+  it('getReviewQueueSummary: reviewQueueService 주입 시 countDueForUser 결과 반환', async () => {
+    const rq = {
+      countDueForUser: vi.fn().mockResolvedValue(42),
+    } as unknown as ReviewQueueService;
+    const built = makeService({ reviewQueueService: rq });
+    const result = await built.service.getReviewQueueSummary('user-1');
+    expect(result).toEqual({ dueCount: 42 });
+    expect(
+      (rq as unknown as { countDueForUser: ReturnType<typeof vi.fn> }).countDueForUser,
+    ).toHaveBeenCalledWith('user-1');
+  });
+
+  it('getReviewQueueSummary: reviewQueueService 미주입 → dueCount=0 (fail-safe)', async () => {
+    const built = makeService(); // no reviewQueueService
+    const result = await built.service.getReviewQueueSummary('user-1');
+    expect(result).toEqual({ dueCount: 0 });
+  });
+
   it("gradingMethod='held' → SR 스킵 (B-C3) — routeToReviewQueue 직접 호출", async () => {
     const rq = makeReviewQueueService();
     const built = makeService({ reviewQueueService: rq });

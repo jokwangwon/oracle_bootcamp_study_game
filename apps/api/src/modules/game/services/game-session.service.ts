@@ -43,6 +43,12 @@ interface StartSoloInput {
   gameMode: GameModeId;
   difficulty: Difficulty;
   rounds: number;
+  /**
+   * ADR-019 §5.2 PR-4 — SR 혼합 경로 (70% 상한 due + 30% 보충 random).
+   * JWT 인증된 사용자 id 를 controller 가 전파. 미지정 시 기존 random-only 경로
+   * (레거시 테스트 호환 + 회귀 0).
+   */
+  userId?: string;
 }
 
 export interface FinishSoloInput {
@@ -96,15 +102,7 @@ export class GameSessionService {
     }
 
     const mode = this.registry.get(input.gameMode);
-    const questions = await this.pool.pickRandom(
-      {
-        topic: input.topic,
-        week: input.week,
-        gameMode: input.gameMode,
-        difficulty: input.difficulty,
-      },
-      input.rounds,
-    );
+    const questions = await this.pickQuestionsForSolo(input);
 
     if (questions.length === 0) {
       throw new BadRequestException(
@@ -128,6 +126,55 @@ export class GameSessionService {
     }
 
     return rounds;
+  }
+
+  /**
+   * ADR-019 §5.2 PR-4 — 솔로 시작 문제 편성. `srRatio=0.7` 상한.
+   *
+   * userId 와 ReviewQueueService 가 함께 주입된 경우만 SR 혼합.
+   * 그 외 (게스트/레거시 테스트/서비스 미주입) → 기존 random-only (회귀 0).
+   *
+   * 알고리즘:
+   *   srLimit = ceil(rounds * 0.7)
+   *   due = reviewQueueService.findDue(userId, criteria, srLimit)  # due_at ASC
+   *   remaining = rounds - due.length
+   *   random = remaining > 0 ? pool.pickRandom(criteria, remaining, { excludeIds: due ids }) : []
+   *   return [...due, ...random]
+   *
+   * `due.length < srLimit` 이면 criteria 불일치 / SR 큐 소진 → 부족분은 random 이 보충.
+   */
+  private async pickQuestionsForSolo(input: StartSoloInput) {
+    const query = {
+      topic: input.topic,
+      week: input.week,
+      gameMode: input.gameMode,
+      difficulty: input.difficulty,
+    };
+
+    if (!input.userId || !this.reviewQueueService) {
+      return this.pool.pickRandom(query, input.rounds);
+    }
+
+    const srLimit = Math.ceil(input.rounds * 0.7);
+    const due = await this.reviewQueueService.findDue(input.userId, query, srLimit);
+    const remaining = input.rounds - due.length;
+    if (remaining <= 0) return due.slice(0, input.rounds);
+
+    const random = await this.pool.pickRandom(query, remaining, {
+      excludeIds: due.map((q) => q.id),
+    });
+    return [...due, ...random];
+  }
+
+  /**
+   * ADR-019 §5.2 PR-4 — 세션 헤더 "오늘 복습 N" 뱃지 (PR-5) 입력.
+   *
+   * ReviewQueueService 미주입 환경 (단위 테스트) 에서도 0 을 반환한다.
+   */
+  async getReviewQueueSummary(userId: string): Promise<{ dueCount: number }> {
+    if (!this.reviewQueueService) return { dueCount: 0 };
+    const dueCount = await this.reviewQueueService.countDueForUser(userId);
+    return { dueCount };
   }
 
   async submitAnswer(answer: PlayerAnswer): Promise<EvaluationResult> {
