@@ -16,7 +16,8 @@ export type OpsEventKind =
   | 'mt8_breach'
   | 'grading_appeal' // ADR-016 §추가 이의제기 / S5-C3
   | 'salt_rotation' // ADR-018 §6 salt rotation / S5-C4
-  | 'pii_masker_triggered'; // ADR-016 §7 metadata 화이트리스트 위반 / S6-C1-4
+  | 'pii_masker_triggered' // ADR-016 §7 metadata 화이트리스트 위반 / S6-C1-4
+  | 'grading_measured'; // ADR-013 Layer 결과 차원 기록 / S6-C2-2
 
 export type StudentReportReason = 'incorrect_answer' | 'sql_error' | 'other';
 
@@ -70,6 +71,34 @@ export interface PiiMaskerTriggeredPayload {
   key: string; // drop 된 메타데이터 key 이름 (값은 저장 금지)
   handler: string; // handleChatModelStart / handleLLMStart / handleChainStart
   runId?: string; // LangChain run id (trace 연동)
+}
+
+/**
+ * ADR-013 3단 채점 결과 차원 이벤트 (consensus-007 S6-C2-2).
+ *
+ * `ops_question_measurements` 는 UNIQUE(question_id) 제약으로 1 문제 1 행이라
+ * 학생별 채점 이벤트는 여기에 로그된다. MT6/MT8 집계는 payload 필드에서 파생.
+ *
+ * payload 에 **학생 답안 원문 저장 금지** — 태그/해시된 식별자만.
+ * `userTokenHash` 는 answer_history 와 동일 salt 로 계산된 식별자 (D3 Hybrid).
+ * Langfuse 로는 전송되지 않는다 (ADR-018 §8 금지 6).
+ */
+export interface GradingMeasuredPayload {
+  gradingMethod: 'ast' | 'keyword' | 'llm' | 'held' | 'admin-override';
+  gradingLayersUsed: number[]; // [1] | [1,2] | [1,2,3]
+  astFailureReason?:
+    | 'dialect_unsupported'
+    | 'truly_invalid_syntax'
+    | 'empty_answer'
+    | 'non_sql_block';
+  partialScore: number; // 0.0 ~ 1.0
+  graderDigest: string;
+  layer1Resolved: boolean; // MT6 — Layer 1 에서 PASS/FAIL 확정
+  layer3Invoked: boolean; // MT8 — Layer 3 호출 여부
+  judgeInvocationCount: number; // 정상 1, fixer retry 발생 시 2
+  heldForReview: boolean; // Layer 1~3 모두 UNKNOWN → 관리자 큐
+  sanitizationFlagCount: number;
+  latencyMs: number;
 }
 
 /**
