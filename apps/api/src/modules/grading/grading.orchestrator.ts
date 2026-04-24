@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import { AnswerSanitizer } from './answer-sanitizer';
+import { LlmJudgeTimeoutError } from './graders/llm-judge.grader';
 import { KeywordCoverageGrader } from './graders/keyword-coverage.grader';
 import type {
   GradingLayerPath,
@@ -93,6 +94,27 @@ export class GradingOrchestrator {
     private readonly layer3: Layer3Grader = DEFAULT_LAYER_3_GRADER,
   ) {}
 
+  /**
+   * 채점 메인 진입점 — 역피라미드 3단.
+   *
+   * ## throw 계약 (PR #15 consensus-007 사후 검증 H3)
+   *
+   * **정상 경로는 항상 GradingResult 를 반환** (Layer 1/2/3 어떤 조합도
+   * `held` 까지 포함하여 resolve). 다음 경우에만 throw:
+   *
+   *  - `LlmJudgeTimeoutError` — Layer 3 `LLM_JUDGE_TIMEOUT_MS` 초과.
+   *    본 Orchestrator 가 `sanitizationFlags` 를 에러에 첨부하여 상위에서
+   *    held row 를 완전 감사 체인으로 기록할 수 있도록 한다.
+   *
+   * 호출자 (현재는 `GameSessionService.gradeFreeForm` 단일) 는 반드시
+   * `LlmJudgeTimeoutError` 를 catch 해서:
+   *  1. `answer_history` 에 `gradingMethod='held'` row 기록 (ADR-016 §6 WORM)
+   *  2. `ops_event_log(kind='llm_timeout')` 기록 (ADR-016 §추가)
+   *  3. HTTP 503 응답 (consensus-007 Q3=B)
+   *
+   * 그 외 모든 예외 (네트워크·파싱 실패 등) 는 grader 내부에서 UNKNOWN
+   * verdict 로 흡수되어 Layer 2/3 / held 로 자연스럽게 이관된다.
+   */
   async grade(input: GradeInput): Promise<GradingResult> {
     const sanitized = this.sanitizer.sanitize(input.studentAnswer);
     const clean = sanitized.clean;
@@ -119,12 +141,21 @@ export class GradingOrchestrator {
 
     // Layer 3 (LLM) — Layer 1/2가 UNKNOWN일 때만.
     // consensus-007 C2-1: sessionId 전파 — Langfuse metadata.session_id 로만 사용.
-    const l3 = await this.layer3.grade({
-      studentAnswer: clean,
-      expected: input.expected,
-      sanitizationFlags: flags,
-      sessionId: input.sessionId,
-    });
+    // PR #15 H3: LlmJudgeTimeoutError 는 flags 첨부 후 re-throw (감사 체인 유지).
+    let l3: LayerVerdict;
+    try {
+      l3 = await this.layer3.grade({
+        studentAnswer: clean,
+        expected: input.expected,
+        sanitizationFlags: flags,
+        sessionId: input.sessionId,
+      });
+    } catch (err) {
+      if (err instanceof LlmJudgeTimeoutError) {
+        err.sanitizationFlags = flags;
+      }
+      throw err;
+    }
     if (l3.verdict !== 'UNKNOWN') {
       return terminal(
         l3,

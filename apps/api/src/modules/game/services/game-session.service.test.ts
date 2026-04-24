@@ -552,20 +552,26 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
   });
 
   it('Layer 3 timeout → ServiceUnavailableException + held 감사 row + llm_timeout 이벤트', async () => {
+    // PR #15 CRITICAL-1: orchestrator 는 timeout 전에 sanitize 플래그를 첨부하여 re-throw
+    const timeoutErr = new LlmJudgeTimeoutError(8000, 8050);
+    timeoutErr.sanitizationFlags = ['SUSPICIOUS_INPUT'];
     const orchestrator = {
-      grade: vi.fn().mockRejectedValue(new LlmJudgeTimeoutError(8000, 8050)),
+      grade: vi.fn().mockRejectedValue(timeoutErr),
     } as unknown as GradingOrchestrator;
     const recordSpy = vi.fn().mockResolvedValue(undefined);
+    const heldFailSpy = vi.fn().mockResolvedValue(undefined);
     const gradingMeasurement = {
       measureGrading: vi.fn(),
       recordLlmTimeout: recordSpy,
+      recordHeldPersistFail: heldFailSpy,
     } as unknown as GradingMeasurementService;
 
     const built = makeService({
-      config: makeConfig(true),
+      config: makeConfig(true, 'salt-of-at-least-sixteen-chars!!'),
       orchestrator,
       scopeValidator: makeScopeValidator(),
       gradingMeasurement,
+      activeEpoch: makeActiveEpoch(5),
     });
     const question = makeFreeFormQuestion();
     const round = built.blankTyping.generateRound(question, {
@@ -583,18 +589,44 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
         playerId: 'user-1',
         answer: 'SELECT',
         submittedAt: 1_000,
-        hintsUsed: 0,
+        hintsUsed: 2,
       }),
     ).rejects.toThrow(ServiceUnavailableException);
 
-    // held 감사 row (gradingMethod='held', isCorrect=false, score=0)
+    // PR #15 CRITICAL-1: held row 는 7항 + user_token_hash + epoch 완전 포함
     expect(built.historyRepo.records).toHaveLength(1);
-    expect(built.historyRepo.records[0]).toMatchObject({
-      userId: 'user-1',
-      isCorrect: false,
-      score: 0,
-      gradingMethod: 'held',
-    });
+    const heldRow = built.historyRepo.records[0] as unknown as {
+      userId: string;
+      isCorrect: boolean;
+      score: number;
+      hintsUsed: number;
+      gradingMethod: string;
+      graderDigest: string;
+      gradingLayersUsed: number[];
+      partialScore: string;
+      rationale: string;
+      sanitizationFlags: string[] | null | undefined;
+      astFailureReason: string | null | undefined;
+      userTokenHash: string;
+      userTokenHashEpoch: number;
+    };
+    expect(heldRow.userId).toBe('user-1');
+    expect(heldRow.isCorrect).toBe(false);
+    expect(heldRow.score).toBe(0);
+    expect(heldRow.gradingMethod).toBe('held');
+    expect(heldRow.graderDigest).toBe('timeout@layer3');
+    expect(heldRow.gradingLayersUsed).toEqual([1, 2, 3]);
+    expect(heldRow.partialScore).toBe('0.000');
+    expect(heldRow.rationale).toMatch(/LLM timeout after 8000ms/);
+    // sanitizationFlags 는 orchestrator 가 timeout 에러에 첨부한 값
+    expect(heldRow.sanitizationFlags).toEqual(['SUSPICIOUS_INPUT']);
+    // Layer 3 timeout 이므로 Layer 1 astFailureReason 은 없음
+    expect(heldRow.astFailureReason).toBeNull();
+    // user_token_hash = 16 hex + epoch = 5
+    expect(heldRow.userTokenHash).toMatch(/^[a-f0-9]{16}$/);
+    expect(heldRow.userTokenHashEpoch).toBe(5);
+    // hintsUsed: answer.hintsUsed=2 가 result 에도 전파되어야 (출처 통일)
+    expect(heldRow.hintsUsed).toBe(2);
 
     // ops_event_log(llm_timeout) 호출
     expect(recordSpy).toHaveBeenCalledOnce();
@@ -609,6 +641,63 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
     expect(call.payload.layerAttempted).toBe(3);
     expect(call.payload.elapsedMs).toBe(8050);
     expect(call.payload.retriable).toBe(true);
+    // held persist 는 성공했으므로 recordHeldPersistFail 는 호출되지 않음
+    expect(heldFailSpy).not.toHaveBeenCalled();
+  });
+
+  it('PR #15 CRITICAL-1: held persist 실패 시 recordHeldPersistFail 강제 기록 (최후 방어선)', async () => {
+    const timeoutErr = new LlmJudgeTimeoutError(8000, 8050);
+    const orchestrator = {
+      grade: vi.fn().mockRejectedValue(timeoutErr),
+    } as unknown as GradingOrchestrator;
+    const heldFailSpy = vi.fn().mockResolvedValue(undefined);
+    const gradingMeasurement = {
+      measureGrading: vi.fn(),
+      recordLlmTimeout: vi.fn().mockResolvedValue(undefined),
+      recordHeldPersistFail: heldFailSpy,
+    } as unknown as GradingMeasurementService;
+
+    const built = makeService({
+      config: makeConfig(true),
+      orchestrator,
+      scopeValidator: makeScopeValidator(),
+      gradingMeasurement,
+      activeEpoch: makeActiveEpoch(1),
+    });
+    // historyRepo.save 를 강제 실패시킨다
+    built.historyRepo.save = vi
+      .fn()
+      .mockRejectedValue(new Error('DB unreachable during held persist'));
+
+    const round = built.blankTyping.generateRound(makeFreeFormQuestion(), {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    // 학생은 여전히 HTTP 503 을 받아야 함
+    await expect(
+      built.service.submitAnswer({
+        roundId: round.id,
+        playerId: 'user-1',
+        answer: 'SELECT',
+        submittedAt: 1_000,
+        hintsUsed: 0,
+      }),
+    ).rejects.toThrow(ServiceUnavailableException);
+
+    // held persist 가 실패했으므로 recordHeldPersistFail 로 최후 기록
+    expect(heldFailSpy).toHaveBeenCalledOnce();
+    const call = heldFailSpy.mock.calls[0]![0] as {
+      questionId: string;
+      userId: string;
+      error: unknown;
+    };
+    expect(call.questionId).toBe(round.question.id);
+    expect(call.userId).toBe('user-1');
+    expect(call.error).toBeInstanceOf(Error);
   });
 
   it('timeout 후 active round 는 제거된다 (재사용 방지)', async () => {

@@ -55,6 +55,13 @@ export const RATIONALE_MAX_LENGTH = 500;
 export const LLM_JUDGE_DEFAULT_TIMEOUT_MS = 8000;
 
 export class LlmJudgeTimeoutError extends Error {
+  /**
+   * PR #15 (consensus-007 사후 검증 CRITICAL-1) — 상위 GameSessionService 가
+   * held answer_history row 를 채울 때 sanitizer 플래그를 재현할 수 없으므로
+   * Orchestrator 가 catch 시점에 첨부한다.
+   */
+  sanitizationFlags?: readonly string[];
+
   constructor(
     public readonly timeoutMs: number,
     public readonly elapsedMs?: number,
