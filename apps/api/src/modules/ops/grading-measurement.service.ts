@@ -6,6 +6,7 @@ import {
   OpsEventLogEntity,
   type GradingMeasuredPayload,
   type LlmTimeoutPayload,
+  type MeasurementFailPayload,
 } from './entities/ops-event-log.entity';
 
 /**
@@ -78,6 +79,41 @@ export class GradingMeasurementService {
     } catch (err) {
       this.logger.warn(
         `llm_timeout 이벤트 기록 실패 (fail-safe) question=${input.questionId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * PR #15 (consensus-007 사후 검증 CRITICAL-1) — held 감사 row 저장 실패 기록.
+   *
+   * Layer 3 timeout 발생 후 answer_history held row 저장이 실패하면 학생은
+   * HTTP 503 을 받고 원장에 아무것도 안 남는 이중 실패 시나리오. 이 경로를
+   * `ops_event_log(kind='measurement_fail', stage='other', cause='held_persist_fail')`
+   * 로 강제 기록하여 운영자가 사후 복구 가능한 단서를 남긴다. 본 호출 자체도
+   * fail-safe.
+   */
+  async recordHeldPersistFail(input: {
+    questionId: string;
+    userId: string;
+    error: unknown;
+  }): Promise<void> {
+    const msg = input.error instanceof Error ? input.error.message : String(input.error);
+    const payload: MeasurementFailPayload = {
+      error: msg,
+      stage: 'other',
+      cause: 'held_persist_fail',
+    };
+    try {
+      await this.eventRepo.save({
+        kind: 'measurement_fail',
+        questionId: input.questionId,
+        userId: input.userId,
+        payload: payload as unknown as Record<string, unknown>,
+        resolvedAt: null,
+      } as OpsEventLogEntity);
+    } catch (err) {
+      this.logger.error(
+        `held_persist_fail 이벤트 기록 자체 실패 (최후 방어선) question=${input.questionId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

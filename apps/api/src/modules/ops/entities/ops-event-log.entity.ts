@@ -45,6 +45,12 @@ export interface GateBreachPayload {
 export interface MeasurementFailPayload {
   error: string;
   stage: 'mt3' | 'mt4' | 'other';
+  /**
+   * PR #15 (consensus-007 사후 검증 Agent B CRITICAL-1 보강) — held persist 실패
+   * 등 세부 원인 분류. 기존 호출자 영향 없음 (optional).
+   *   - 'held_persist_fail': Layer 3 timeout 후 held row 저장이 실패한 경우
+   */
+  cause?: string;
 }
 
 /** ADR-016 §추가 + S5-C3 — grading_appeals 제출 이벤트 payload */

@@ -158,9 +158,9 @@ export class GameSessionService {
         gradingResult = graded.gradingResult;
       } catch (err) {
         if (err instanceof LlmJudgeTimeoutError) {
-          // consensus-007 S6-C2-5 — held persist (감사 체인 보존) + ops event +
-          // HTTP 503 응답 (Q3=B, 학생 재시도 유도).
-          await this.persistHeldAnswer(answer, round, result);
+          // consensus-007 S6-C2-5 + PR #15 CRITICAL-1 — held persist (감사 체인
+          // 완전 보존) + ops event + HTTP 503 응답 (Q3=B, 학생 재시도 유도).
+          await this.persistHeldAnswer(answer, round, result, err);
           await this.gradingMeasurement?.recordLlmTimeout({
             questionId: round.question.id,
             userId: answer.playerId,
@@ -279,36 +279,61 @@ export class GameSessionService {
   }
 
   /**
-   * consensus-007 S6-C2-5 — Layer 3 LLM timeout 시 held 감사 레코드 저장.
+   * consensus-007 S6-C2-5 + PR #15 CRITICAL-1 — Layer 3 LLM timeout 시 held
+   * 감사 레코드 저장. **buildAnswerHistoryInput 를 재사용하여 WORM 감사 체인의
+   * 7항 (+ user_token_hash + epoch) 을 완전 기록**한다 (Agent B CRITICAL 격상
+   * 근거). 정상 채점 실패가 아니라 운영 이상(timeout) 상황이므로 감사는 오히려
+   * 더 강화되어야 한다 (ADR-016 §6 WORM, ADR-018 §4 D3 Hybrid 정신).
    *
-   * isCorrect=false / score=0 / gradingMethod='held'. 학생은 HTTP 503 을 받고
-   * 재시도 가능하지만, 본 행은 WORM 보존으로 timeout 발생 기록.
+   * save 실패 시 `ops_event_log(kind='measurement_fail', cause='held_persist_fail')`
+   * 강제 기록 → 학생은 HTTP 503 받지만 운영자 사후 복구용 단서 유지.
    */
   private async persistHeldAnswer(
     answer: PlayerAnswer,
     round: Round,
     base: EvaluationResult,
+    timeoutErr: LlmJudgeTimeoutError,
   ): Promise<void> {
+    const heldResult: GradingResult = {
+      isCorrect: false,
+      partialScore: 0,
+      gradingMethod: 'held',
+      graderDigest: 'timeout@layer3',
+      gradingLayersUsed: [1, 2, 3],
+      rationale: `LLM timeout after ${timeoutErr.timeoutMs}ms (Layer 3)`,
+      sanitizationFlags: timeoutErr.sanitizationFlags
+        ? [...timeoutErr.sanitizationFlags]
+        : undefined,
+      // Layer 1/2 통과 후 Layer 3 timeout 이므로 astFailureReason 은 없음.
+      astFailureReason: undefined,
+    };
+    // held row 의 base 는 isCorrect/score 가 0 이어야 한다 (buildAnswerHistoryInput
+    // 이 result 에서 꺼내므로 명시적으로 덮어쓴다).
+    const heldBase: EvaluationResult = {
+      ...base,
+      isCorrect: false,
+      score: 0,
+    };
+
     try {
-      await this.historyRepo.save(
-        this.historyRepo.create({
-          userId: answer.playerId,
-          questionId: round.question.id,
-          answer: answer.answer,
-          isCorrect: false,
-          score: 0,
-          timeTakenMs: base.timeTakenMs,
-          hintsUsed: answer.hintsUsed,
-          gameMode: round.question.gameMode,
-          gradingMethod: 'held',
-        }),
+      const historyInput = await this.buildAnswerHistoryInput(
+        answer,
+        round,
+        heldBase,
+        heldResult,
       );
+      await this.historyRepo.save(this.historyRepo.create(historyInput));
     } catch (err) {
-      // answer_history 저장 실패는 감사 손실이지만, 이미 throw 중인 상위 HTTP 에러를
-      // 막지 않기 위해 warn 만 남긴다. ops_event_log 경로가 별도 보완.
+      // WORM 감사 체인 보존을 위해 ops_event_log 에 강제 기록.
+      // 학생은 이미 HTTP 503 을 받을 예정이므로 여기서 throw 는 금물.
       this.logger.warn(
         `held answer_history persist 실패 (fail-safe) question=${round.question.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
+      await this.gradingMeasurement?.recordHeldPersistFail({
+        questionId: round.question.id,
+        userId: answer.playerId,
+        error: err,
+      });
     }
   }
 

@@ -49,14 +49,27 @@ describe('findUserIdentifierLeaks', () => {
     expect(out.some((v) => v.pattern === 'hex-32')).toBe(true);
   });
 
-  it('16 hex (hashUserToken 결과) 는 일반 텍스트 맥락에서 과탐지하지 않는다', () => {
-    // 16 hex 는 uuid 중간 블록 등 false positive 가 많아 32 hex 만 탐지.
-    // hashUserToken 결과는 DB 한정 — Langfuse 로 나가서는 안 됨. 본 helper 는
-    // 32 hex 기준이므로 16 hex 단독은 통과하지만 user_token_hash 키가 동반되면
-    // 그 키 패턴에서 잡힘.
-    const ambiguous = ['just 0123456789abcdef in text']; // 16 hex 단독
-    const out = findUserIdentifierLeaks(ambiguous);
-    expect(out.filter((v) => v.pattern === 'hex-32')).toEqual([]);
+  it('PR #15: 16 hex (hashUserToken 결과) 단독 탐지 (boundary lookaround)', () => {
+    // PR #15 CRITICAL-2 보강 — hashUserToken 출력 (16 hex) 을 Langfuse payload 에서
+    // 반드시 탐지. 주변이 hex 문자가 아니면 매칭되어야 함.
+    const leaky = ['just 0123456789abcdef in text'];
+    const out = findUserIdentifierLeaks(leaky);
+    expect(out.some((v) => v.pattern === 'hex-16')).toBe(true);
+  });
+
+  it('PR #15: uuid 의 12 hex 블록은 false positive 아님 (boundary 로 끊김)', () => {
+    const uuid = ['request id: 550e8400-e29b-41d4-a716-446655440000'];
+    const out = findUserIdentifierLeaks(uuid);
+    // 12 hex (a716446655440000 을 포함해도 하이픈 경계로 16 연속 없음)
+    expect(out.filter((v) => v.pattern === 'hex-16')).toEqual([]);
+  });
+
+  it('PR #15: hashUserToken 실제 출력이 반드시 탐지 (property test)', async () => {
+    const { hashUserToken } = await import('../grading/user-token-hash');
+    const hash = hashUserToken('user-xyz-987', 'salt-of-at-least-sixteen-chars!!');
+    expect(hash).toMatch(/^[a-f0-9]{16}$/);
+    const out = findUserIdentifierLeaks([`context: ${hash} leaked`]);
+    expect(out.some((v) => v.pattern === 'hex-16')).toBe(true);
   });
 
   it('email 패턴 탐지', () => {

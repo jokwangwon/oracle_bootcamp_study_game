@@ -20,9 +20,21 @@ const USER_IDENTIFIER_PATTERNS: ReadonlyArray<{ name: string; regex: RegExp }> =
   { name: 'userid-equals', regex: /\buserId\s*=/ },
   // 전형적 userId 토큰: user-{숫자/hex} 시퀀스
   { name: 'user-dash-token', regex: /\buser-[a-zA-Z0-9]{3,}\b/ },
-  // 32 hex chars 연속 — raw sha256 의 앞/뒤 절반. 16 hex (hashUserToken 결과) 도 포함 가능
-  // 하지만 일반 uuid 도 12 hex 블록이 있으므로 최소 32 만 탐지.
+  // 32 hex chars 연속 — raw sha256 전체.
   { name: 'hex-32', regex: /\b[a-f0-9]{32}\b/ },
+  /**
+   * PR #15 (consensus-007 사후 검증 Agent B HIGH) — 16 hex 연속 탐지.
+   *
+   * `hashUserToken(userId, salt)` 가 `createHmac('sha256', ...).digest('hex').slice(0,16)`
+   * 로 정확히 **16 hex chars** 를 반환 (user-token-hash.ts:23). 본 패턴이 없으면
+   * privacy helper 가 탐지 도구로서의 목적을 놓친다.
+   *
+   * uuid 의 12-hex / 8-hex 블록 등 false positive 를 피하기 위해 boundary lookaround:
+   *  - 앞뒤로 hex 문자가 인접하지 않을 때만 매칭 (정확히 16 연속).
+   *  - uuid (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`) 는 각 블록이 하이픈으로 끊겨 있어
+   *    hyphen 이 boundary 로 작동. 본 패턴은 **단독 16 hex 블록** 만 매칭.
+   */
+  { name: 'hex-16', regex: /(?<![a-f0-9])[a-f0-9]{16}(?![a-f0-9])/ },
   // email 패턴
   { name: 'email', regex: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/ },
 ];
