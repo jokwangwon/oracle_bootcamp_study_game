@@ -18,7 +18,9 @@ export type OpsEventKind =
   | 'salt_rotation' // ADR-018 §6 salt rotation / S5-C4
   | 'pii_masker_triggered' // ADR-016 §7 metadata 화이트리스트 위반 / S6-C1-4
   | 'grading_measured' // ADR-013 Layer 결과 차원 기록 / S6-C2-2
-  | 'llm_timeout'; // ADR-016 §추가 Layer 3 timeout / S6-C2-5
+  | 'llm_timeout' // ADR-016 §추가 Layer 3 timeout / S6-C2-5
+  | 'sr_queue_overflow' // ADR-019 §5.3 일일 신규 편입 상한 초과 drop / PR-3
+  | 'sr_upsert_failed'; // ADR-019 §5.1 review_queue UPSERT 실패 (Tx2 fail-open)
 
 export type StudentReportReason = 'incorrect_answer' | 'sql_error' | 'other';
 
@@ -104,6 +106,32 @@ export interface LlmTimeoutPayload {
   layerAttempted: 3;
   elapsedMs?: number; // 실제 경과 (timer 기준). 계측 실패 시 미포함.
   retriable: boolean; // 학생이 재제출 가능한지 (MVP: true)
+}
+
+/**
+ * ADR-019 §5.3 — 일일 신규 편입 상한 (SR_DAILY_NEW_CAP, 기본 100) 초과로
+ * `review_queue` 신규 행이 drop 된 관측. 학생은 영향 없음 (다음 날 재진입).
+ *
+ * payload 에 학생 답안·quality·이전 SR 상태 저장 금지 — 관측 축만.
+ */
+export interface SrQueueOverflowPayload {
+  cap: number; // 적용된 SR_DAILY_NEW_CAP
+  observed: number; // 오늘 기존 신규 insert 수 (drop 직전)
+}
+
+/**
+ * ADR-019 §5.1 — Tx2 (review_queue UPSERT 보조 경로) 실패 관측. fail-open 이므로
+ * 학생은 정상 응답 수신. 본 이벤트는 사후 복구용.
+ *
+ * payload 에 **학생 답안 원문 저장 금지**. error message 만 잘라 기록.
+ */
+export interface SrUpsertFailedPayload {
+  error: string;
+  /**
+   * 'upsert' — 정상 답변 경로 (upsertAfterAnswer)
+   * 'overwrite' — admin-override 경로 (overwriteAfterOverride)
+   */
+  stage: 'upsert' | 'overwrite';
 }
 
 export interface GradingMeasuredPayload {

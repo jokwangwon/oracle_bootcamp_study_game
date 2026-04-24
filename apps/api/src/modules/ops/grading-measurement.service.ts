@@ -10,6 +10,8 @@ import {
   type GradingMeasuredPayload,
   type LlmTimeoutPayload,
   type MeasurementFailPayload,
+  type SrQueueOverflowPayload,
+  type SrUpsertFailedPayload,
 } from './entities/ops-event-log.entity';
 
 /**
@@ -161,6 +163,65 @@ export class GradingMeasurementService {
     } catch (err) {
       this.logger.error(
         `held_persist_fail 이벤트 기록 자체 실패 (최후 방어선) question=${input.questionId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * ADR-019 §5.3 PR-3 — SM-2 일일 신규 편입 상한 (SR_DAILY_NEW_CAP) 초과 drop.
+   * 학생은 정상 응답 수신. 본 이벤트는 관측용.
+   * fail-safe (warn 만).
+   */
+  async recordSrQueueOverflow(input: {
+    questionId: string;
+    userId: string;
+    payload: SrQueueOverflowPayload;
+  }): Promise<void> {
+    const hashMeta = await this.resolveHashAndEpoch(input.userId);
+    try {
+      await this.eventRepo.save({
+        kind: 'sr_queue_overflow',
+        questionId: input.questionId,
+        userId: input.userId,
+        userTokenHash: hashMeta.userTokenHash,
+        userTokenHashEpoch: hashMeta.userTokenHashEpoch,
+        payload: input.payload as unknown as Record<string, unknown>,
+        resolvedAt: null,
+      } as OpsEventLogEntity);
+    } catch (err) {
+      this.logger.warn(
+        `sr_queue_overflow 기록 실패 (fail-safe) question=${input.questionId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * ADR-019 §5.1 PR-3 — Tx2 review_queue UPSERT/overwrite 경로 실패.
+   * fail-open 이므로 학생은 정상 응답 수신. 본 이벤트로 사후 복구 가능.
+   * fail-safe (warn 만 — 본 이벤트 기록 자체가 다시 실패해도 throw 금지).
+   */
+  async recordSrUpsertFail(input: {
+    questionId: string;
+    userId: string;
+    error: unknown;
+    stage: 'upsert' | 'overwrite';
+  }): Promise<void> {
+    const msg = input.error instanceof Error ? input.error.message : String(input.error);
+    const payload: SrUpsertFailedPayload = { error: msg, stage: input.stage };
+    const hashMeta = await this.resolveHashAndEpoch(input.userId);
+    try {
+      await this.eventRepo.save({
+        kind: 'sr_upsert_failed',
+        questionId: input.questionId,
+        userId: input.userId,
+        userTokenHash: hashMeta.userTokenHash,
+        userTokenHashEpoch: hashMeta.userTokenHashEpoch,
+        payload: payload as unknown as Record<string, unknown>,
+        resolvedAt: null,
+      } as OpsEventLogEntity);
+    } catch (err) {
+      this.logger.warn(
+        `sr_upsert_failed 기록 실패 (fail-safe) question=${input.questionId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

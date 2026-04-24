@@ -77,6 +77,18 @@ const envSchema = z.object({
     .refine((n) => Number.isFinite(n) && n > 0, {
       message: 'LLM_JUDGE_TIMEOUT_MS 는 양의 정수 (ms)',
     }),
+  /**
+   * ADR-019 §5.3 (Agent B-C4, 사용자 Q4=a) — SM-2 일일 신규 편입 상한.
+   * user × day 당 처음 편입되는 review_queue 행 수의 상한. 초과 시 drop +
+   * `ops_event_log(kind='sr_queue_overflow')` 기록. 기존 행 UPDATE 는 상한과 무관.
+   */
+  SR_DAILY_NEW_CAP: z
+    .string()
+    .default('100')
+    .transform((v) => Number.parseInt(v, 10))
+    .refine((n) => Number.isFinite(n) && n > 0, {
+      message: 'SR_DAILY_NEW_CAP 은 양의 정수',
+    }),
   // OSS 모델 평가 (단계 7) — 운영자 화이트리스트 + 결과 디렉토리 + config 경로.
   // EVAL_ADMIN_USERNAMES는 fail-closed (미설정 시 모든 eval 트리거 거부).
   EVAL_ADMIN_USERNAMES: z.string().optional(),

@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { ServiceUnavailableException } from '@nestjs/common';
-import type { Question, Round } from '@oracle-game/shared';
+import type { EvaluationResult, Question, Round } from '@oracle-game/shared';
 
 import { GameSessionService } from './game-session.service';
 import { GameModeRegistry } from '../modes/game-mode.registry';
@@ -14,6 +14,7 @@ import { LlmJudgeTimeoutError } from '../../grading/graders/llm-judge.grader';
 import type { GradingResult } from '../../grading/grading.types';
 import type { GradingMeasurementService } from '../../ops/grading-measurement.service';
 import type { ActiveEpochLookup } from '../../ops/active-epoch.lookup';
+import type { ReviewQueueService } from '../../review/review-queue.service';
 import { AnswerHistoryEntity } from '../../users/entities/answer-history.entity';
 import type { ConfigService } from '@nestjs/config';
 
@@ -102,6 +103,7 @@ interface ServiceDeps {
   scopeValidator?: ScopeValidatorService;
   gradingMeasurement?: GradingMeasurementService;
   activeEpoch?: ActiveEpochLookup;
+  reviewQueueService?: ReviewQueueService;
 }
 
 function makeService(deps: ServiceDeps = {}) {
@@ -125,6 +127,7 @@ function makeService(deps: ServiceDeps = {}) {
     deps.scopeValidator,
     deps.gradingMeasurement,
     deps.activeEpoch,
+    deps.reviewQueueService,
   );
 
   return { service, registry, blankTyping, usersService, historyRepo };
@@ -1040,5 +1043,316 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
 
     // 150 × 0.6 = 90
     expect(result.score).toBe(90);
+  });
+});
+
+/**
+ * ADR-019 §5.1 PR-3 — SM-2 SR Tx2 배선.
+ *
+ *  - reviewQueueService 주입 시 정답/오답/hints 조합으로 upsertAfterAnswer 호출
+ *  - 서비스 미주입 → SR 미호출 (회귀 0)
+ *  - playerId '' (게스트) → SR 스킵
+ *  - held → SR 스킵 (B-C3)
+ *  - admin-override → overwriteAfterOverride 호출
+ *  - 내부 예외 → recordSrUpsertFail + 학생 응답 정상 (fail-open)
+ */
+describe('GameSessionService.submitAnswer — SR Tx2 배선 (ADR-019 §5.1)', () => {
+  function makeMcQuestion(): Question {
+    return {
+      id: 'q-mc-1',
+      topic: 'sql-basics',
+      week: 1,
+      gameMode: 'multiple-choice',
+      answerFormat: 'all-or-nothing',
+      difficulty: 'EASY',
+      content: {
+        type: 'multiple-choice',
+        stem: 'SELECT 는 무엇?',
+        options: [
+          { id: 'A', text: '조회' },
+          { id: 'B', text: '삽입' },
+          { id: 'C', text: '갱신' },
+          { id: 'D', text: '삭제' },
+        ],
+      },
+      answer: ['A'],
+      explanation: 'SELECT 는 조회',
+      status: 'active',
+      source: 'pre-generated',
+      createdAt: new Date(),
+    } as Question;
+  }
+
+  function makeReviewQueueService(
+    overrides: Partial<{
+      upsertAfterAnswer: ReturnType<typeof vi.fn>;
+      overwriteAfterOverride: ReturnType<typeof vi.fn>;
+    }> = {},
+  ): ReviewQueueService {
+    return {
+      upsertAfterAnswer: overrides.upsertAfterAnswer ?? vi.fn().mockResolvedValue(undefined),
+      overwriteAfterOverride:
+        overrides.overwriteAfterOverride ?? vi.fn().mockResolvedValue(undefined),
+    } as unknown as ReviewQueueService;
+  }
+
+  function makeGradingMeasurement(): GradingMeasurementService {
+    return {
+      recordSrUpsertFail: vi.fn().mockResolvedValue(undefined),
+    } as unknown as GradingMeasurementService;
+  }
+
+  function injectActiveRound(service: GameSessionService, round: Round): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (service as any).activeRounds.set(round.id, round);
+  }
+
+  it('MC 정답 + reviewQueueService 주입 → upsertAfterAnswer(quality=5) 호출', async () => {
+    const rq = makeReviewQueueService();
+    const built = makeService({ reviewQueueService: rq });
+    const question = makeMcQuestion();
+    const mc = built.registry.get('multiple-choice');
+    const round = mc.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'A',
+      submittedAt: 1_000,
+      hintsUsed: 0,
+    });
+
+    expect((rq as unknown as { upsertAfterAnswer: ReturnType<typeof vi.fn> }).upsertAfterAnswer).toHaveBeenCalledOnce();
+    const args = (rq as unknown as { upsertAfterAnswer: ReturnType<typeof vi.fn> }).upsertAfterAnswer.mock.calls[0]!;
+    expect(args[0]).toBe('user-1');
+    expect(args[1]).toBe('q-mc-1');
+    expect(args[2]).toBe(5); // isCorrect=true, partialScore=null → fallback 1 → base 5
+  });
+
+  it('MC 오답 → upsertAfterAnswer(quality=0)', async () => {
+    const rq = makeReviewQueueService();
+    const built = makeService({ reviewQueueService: rq });
+    const question = makeMcQuestion();
+    const mc = built.registry.get('multiple-choice');
+    const round = mc.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'B',
+      submittedAt: 1_000,
+      hintsUsed: 0,
+    });
+
+    const args = (rq as unknown as { upsertAfterAnswer: ReturnType<typeof vi.fn> }).upsertAfterAnswer.mock.calls[0]!;
+    expect(args[2]).toBe(0); // isCorrect=false, partialScore=null → fallback 0 → base 0
+  });
+
+  it('BlankTyping 정답 + hints 2 → upsertAfterAnswer(quality=3, 5-2)', async () => {
+    const rq = makeReviewQueueService();
+    const built = makeService({ reviewQueueService: rq });
+    const question = makeFakeBlankTypingQuestion();
+    const round = built.blankTyping.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'SELECT',
+      submittedAt: 1_000,
+      hintsUsed: 2,
+    });
+
+    const args = (rq as unknown as { upsertAfterAnswer: ReturnType<typeof vi.fn> }).upsertAfterAnswer.mock.calls[0]!;
+    expect(args[2]).toBe(3); // base 5 - hintPenalty 2 = 3
+  });
+
+  it('reviewQueueService 미주입 → SR 호출 없음 (회귀 0)', async () => {
+    const built = makeService(); // no reviewQueueService
+    const question = makeMcQuestion();
+    const mc = built.registry.get('multiple-choice');
+    const round = mc.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    // Throw 없이 정상 동작
+    const result = await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'A',
+      submittedAt: 1_000,
+      hintsUsed: 0,
+    });
+    expect(result.isCorrect).toBe(true);
+    expect(built.historyRepo.records).toHaveLength(1);
+  });
+
+  it("playerId 빈 문자열 (게스트) → SR 스킵 (B A-CRITICAL #2 방어)", async () => {
+    const rq = makeReviewQueueService();
+    const built = makeService({ reviewQueueService: rq });
+    const question = makeMcQuestion();
+    const mc = built.registry.get('multiple-choice');
+    const round = mc.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    try {
+      await built.service.submitAnswer({
+        roundId: round.id,
+        playerId: '',
+        answer: 'A',
+        submittedAt: 1_000,
+        hintsUsed: 0,
+      });
+    } catch {
+      // historyRepo 가 '' userId 를 처리 못할 수는 있지만 — 본 테스트의 관심사는 아님
+    }
+
+    expect(
+      (rq as unknown as { upsertAfterAnswer: ReturnType<typeof vi.fn> }).upsertAfterAnswer,
+    ).not.toHaveBeenCalled();
+    expect(
+      (rq as unknown as { overwriteAfterOverride: ReturnType<typeof vi.fn> }).overwriteAfterOverride,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('upsertAfterAnswer throw → 학생 응답 정상 + recordSrUpsertFail 기록', async () => {
+    const rq = makeReviewQueueService({
+      upsertAfterAnswer: vi.fn().mockRejectedValue(new Error('db error')),
+    });
+    const gm = makeGradingMeasurement();
+    const built = makeService({ reviewQueueService: rq, gradingMeasurement: gm });
+    const question = makeMcQuestion();
+    const mc = built.registry.get('multiple-choice');
+    const round = mc.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    const result = await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'A',
+      submittedAt: 1_000,
+      hintsUsed: 0,
+    });
+
+    expect(result.isCorrect).toBe(true); // 학생 응답은 정상
+    const recordMock = (gm as unknown as { recordSrUpsertFail: ReturnType<typeof vi.fn> })
+      .recordSrUpsertFail;
+    expect(recordMock).toHaveBeenCalledOnce();
+    const call = recordMock.mock.calls[0]![0];
+    expect(call.userId).toBe('user-1');
+    expect(call.questionId).toBe('q-mc-1');
+    expect(call.stage).toBe('upsert');
+    expect((call.error as Error).message).toBe('db error');
+  });
+
+  it('overwriteAfterOverride throw → stage="overwrite" 로 기록', async () => {
+    // admin-override 는 정상 답변 경로에서 발생하기 어려우므로 private 메서드 직접 호출.
+    const rq = makeReviewQueueService({
+      overwriteAfterOverride: vi.fn().mockRejectedValue(new Error('ovr err')),
+    });
+    const gm = makeGradingMeasurement();
+    const built = makeService({ reviewQueueService: rq, gradingMeasurement: gm });
+
+    const question = makeMcQuestion();
+    const mc = built.registry.get('multiple-choice');
+    const round = mc.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+
+    // private 메서드 우회
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (built.service as any).routeToReviewQueue(
+      {
+        roundId: round.id,
+        playerId: 'user-1',
+        answer: 'A',
+        submittedAt: 1_000,
+        hintsUsed: 0,
+      },
+      round.question.id,
+      { isCorrect: true, score: 100, hintsUsed: 0, timeTakenMs: 0 } as EvaluationResult,
+      {
+        isCorrect: true,
+        partialScore: 1,
+        gradingMethod: 'admin-override',
+        graderDigest: 'admin',
+        gradingLayersUsed: [1],
+        rationale: 'admin',
+      } as GradingResult,
+    );
+
+    expect(
+      (rq as unknown as { overwriteAfterOverride: ReturnType<typeof vi.fn> }).overwriteAfterOverride,
+    ).toHaveBeenCalledOnce();
+    const recordMock = (gm as unknown as { recordSrUpsertFail: ReturnType<typeof vi.fn> })
+      .recordSrUpsertFail;
+    expect(recordMock.mock.calls[0]![0].stage).toBe('overwrite');
+  });
+
+  it("gradingMethod='held' → SR 스킵 (B-C3) — routeToReviewQueue 직접 호출", async () => {
+    const rq = makeReviewQueueService();
+    const built = makeService({ reviewQueueService: rq });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (built.service as any).routeToReviewQueue(
+      {
+        roundId: 'r1',
+        playerId: 'user-1',
+        answer: 'x',
+        submittedAt: 0,
+        hintsUsed: 0,
+      },
+      'q-1',
+      { isCorrect: false, score: 0, hintsUsed: 0, timeTakenMs: 0 } as EvaluationResult,
+      {
+        isCorrect: false,
+        partialScore: 0,
+        gradingMethod: 'held',
+        graderDigest: 'x',
+        gradingLayersUsed: [1, 2, 3],
+        rationale: 'x',
+      } as GradingResult,
+    );
+
+    expect(
+      (rq as unknown as { upsertAfterAnswer: ReturnType<typeof vi.fn> }).upsertAfterAnswer,
+    ).not.toHaveBeenCalled();
+    expect(
+      (rq as unknown as { overwriteAfterOverride: ReturnType<typeof vi.fn> }).overwriteAfterOverride,
+    ).not.toHaveBeenCalled();
   });
 });

@@ -25,6 +25,8 @@ import type { GradingResult } from '../../grading/grading.types';
 import { hashUserToken } from '../../grading/user-token-hash';
 import { ActiveEpochLookup } from '../../ops/active-epoch.lookup';
 import { GradingMeasurementService } from '../../ops/grading-measurement.service';
+import { ReviewQueueService } from '../../review/review-queue.service';
+import { mapAnswerToQuality } from '../../review/sm2';
 import { AnswerHistoryEntity } from '../../users/entities/answer-history.entity';
 import { UsersService } from '../../users/users.service';
 import { GameModeRegistry } from '../modes/game-mode.registry';
@@ -75,6 +77,9 @@ export class GameSessionService {
     @Optional() private readonly gradingMeasurement?: GradingMeasurementService,
     // consensus-007 S6-C2-6 — active epoch 조회 (user_token_hash_epoch 채움).
     @Optional() private readonly activeEpoch?: ActiveEpochLookup,
+    // ADR-019 §5.1 PR-3 — SM-2 SR Tx2 (보조, fail-open). 미주입 시 SR 경로 비활성
+    // (기존 호출자 회귀 0).
+    @Optional() private readonly reviewQueueService?: ReviewQueueService,
   ) {}
 
   /**
@@ -216,8 +221,72 @@ export class GameSessionService {
       });
     }
 
+    // ADR-019 §5.1 PR-3 — SM-2 review_queue Tx2 (보조 경로, fail-open).
+    // held → 스킵 (Agent B-C3) / admin-override → overwrite / 그 외 → upsert.
+    // 게스트(playerId 비어있음) 또는 ReviewQueueService 미주입 → 스킵 (회귀 0).
+    await this.routeToReviewQueue(answer, round.question.id, result, gradingResult);
+
     this.activeRounds.delete(answer.roundId);
     return result;
+  }
+
+  /**
+   * ADR-019 §5.1 PR-3 — SM-2 SR 분기. Tx2 fail-open.
+   *
+   *  - gradingMethod='held' → SR 편입 스킵 (B-C3)
+   *  - gradingMethod='admin-override' → overwriteAfterOverride
+   *  - 그 외 (정상 채점, gradingResult null 포함) → upsertAfterAnswer
+   *
+   * 서비스 미주입 / 게스트 → no-op. 내부 예외는 `recordSrUpsertFail` 기록 후 흡수
+   * (학생은 이미 정상 응답 수신). caller 에게 throw 하지 않는다.
+   */
+  private async routeToReviewQueue(
+    answer: PlayerAnswer,
+    questionId: string,
+    result: EvaluationResult,
+    gradingResult: GradingResult | null,
+  ): Promise<void> {
+    if (!this.reviewQueueService || !answer.playerId) return;
+
+    const method = gradingResult?.gradingMethod;
+    if (method === 'held') return;
+
+    const quality = mapAnswerToQuality({
+      isCorrect: result.isCorrect,
+      partialScore: gradingResult?.partialScore ?? null,
+      hintsUsed: result.hintsUsed,
+      gradingMethod: method ?? 'mode-evaluated',
+    });
+    if (quality === null) return; // held (이미 위에서 걸렀지만 방어적 null 가드)
+
+    const stage: 'upsert' | 'overwrite' =
+      method === 'admin-override' ? 'overwrite' : 'upsert';
+
+    try {
+      if (stage === 'overwrite') {
+        await this.reviewQueueService.overwriteAfterOverride(
+          answer.playerId,
+          questionId,
+          quality,
+        );
+      } else {
+        await this.reviewQueueService.upsertAfterAnswer(
+          answer.playerId,
+          questionId,
+          quality,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `SR ${stage} 실패 (fail-open) question=${questionId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await this.gradingMeasurement?.recordSrUpsertFail({
+        userId: answer.playerId,
+        questionId,
+        error: err,
+        stage,
+      });
+    }
   }
 
   /**
