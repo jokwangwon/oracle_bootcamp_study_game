@@ -73,6 +73,27 @@ export class AnswerHistoryEntity {
   partialScore!: string | null;
 
   /**
+   * consensus-007 S6-C2-6 — 역피라미드 채점의 사람-가독 근거 (복수 Layer '|' 결합).
+   * MVP 대시보드/이의제기 UI 의 표시 원문. 외부 Langfuse 미전송.
+   */
+  @Column({ type: 'text', nullable: true })
+  rationale!: string | null;
+
+  /**
+   * consensus-007 S6-C2-6 — AnswerSanitizer 플래그 (SUSPICIOUS_INPUT / BOUNDARY_ESCAPE 등).
+   * null 이거나 빈 배열 → 감지된 이상 없음.
+   */
+  @Column({ type: 'jsonb', name: 'sanitization_flags', nullable: true })
+  sanitizationFlags!: string[] | null;
+
+  /**
+   * consensus-007 S6-C2-6 — Layer 1 UNKNOWN 분류.
+   * 값: dialect_unsupported | truly_invalid_syntax | empty_answer | non_sql_block | null
+   */
+  @Column({ type: 'varchar', length: 32, name: 'ast_failure_reason', nullable: true })
+  astFailureReason!: string | null;
+
+  /**
    * ADR-016 §7 + consensus-005 §커밋2 — userId 의 HMAC-SHA256 (첫 16 hex chars).
    *
    * 목적 (ADR-018 §4 D3 Hybrid 반영): Langfuse 에는 저장하지 않고 **DB 한정** 감사·분석용.

@@ -13,6 +13,7 @@ import type { GradingOrchestrator } from '../../grading/grading.orchestrator';
 import { LlmJudgeTimeoutError } from '../../grading/graders/llm-judge.grader';
 import type { GradingResult } from '../../grading/grading.types';
 import type { GradingMeasurementService } from '../../ops/grading-measurement.service';
+import type { ActiveEpochLookup } from '../../ops/active-epoch.lookup';
 import { AnswerHistoryEntity } from '../../users/entities/answer-history.entity';
 import type { ConfigService } from '@nestjs/config';
 
@@ -100,6 +101,7 @@ interface ServiceDeps {
   orchestrator?: GradingOrchestrator;
   scopeValidator?: ScopeValidatorService;
   gradingMeasurement?: GradingMeasurementService;
+  activeEpoch?: ActiveEpochLookup;
 }
 
 function makeService(deps: ServiceDeps = {}) {
@@ -122,6 +124,7 @@ function makeService(deps: ServiceDeps = {}) {
     deps.orchestrator,
     deps.scopeValidator,
     deps.gradingMeasurement,
+    deps.activeEpoch,
   );
 
   return { service, registry, blankTyping, usersService, historyRepo };
@@ -317,10 +320,20 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
     } as Question;
   }
 
-  function makeConfig(flag: boolean): ConfigService {
+  function makeConfig(flag: boolean, salt = 'test-salt-at-least-16-chars'): ConfigService {
     return {
-      get: (key: string) => (key === 'ENABLE_FREE_FORM_GRADING' ? flag : undefined),
+      get: (key: string) => {
+        if (key === 'ENABLE_FREE_FORM_GRADING') return flag;
+        if (key === 'USER_TOKEN_HASH_SALT') return salt;
+        return undefined;
+      },
     } as unknown as ConfigService;
+  }
+
+  function makeActiveEpoch(epochId = 1): ActiveEpochLookup {
+    return {
+      getActiveEpochId: vi.fn().mockResolvedValue(epochId),
+    } as unknown as ActiveEpochLookup;
   }
 
   function makeOrchestrator(
@@ -397,6 +410,7 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
       config: makeConfig(true),
       orchestrator,
       scopeValidator: makeScopeValidator(['SELECT', 'FROM', 'EMP', 'ENAME']),
+      activeEpoch: makeActiveEpoch(),
     });
     const question = makeFreeFormQuestion();
     const round = built.blankTyping.generateRound(question, {
@@ -444,6 +458,7 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
       config: makeConfig(true),
       orchestrator,
       scopeValidator: makeScopeValidator(),
+      activeEpoch: makeActiveEpoch(),
     });
     const question = makeFreeFormQuestion();
     const round = built.blankTyping.generateRound(question, {
@@ -637,6 +652,268 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
     ).rejects.toThrow();
   });
 
+  it('C2-6: free-form 성공 시 7항 메타 + user_token_hash + epoch persist', async () => {
+    const gradingResult: GradingResult = {
+      isCorrect: true,
+      partialScore: 0.75,
+      gradingMethod: 'llm',
+      graderDigest: 'prompt:eval:v1|model:abcd1234|parser:sov1|temp:0|seed:42|topk:1',
+      gradingLayersUsed: [1, 2, 3],
+      rationale: 'Layer 1 UNKNOWN | keyword UNKNOWN | LLM PASS: 의미 동치',
+      sanitizationFlags: ['SUSPICIOUS_INPUT'],
+      astFailureReason: 'dialect_unsupported',
+    };
+    const measureSpy = vi.fn().mockResolvedValue(undefined);
+    const gradingMeasurement = {
+      measureGrading: measureSpy,
+      recordLlmTimeout: vi.fn(),
+    } as unknown as GradingMeasurementService;
+    const built = makeService({
+      config: makeConfig(true, 'salt-of-at-least-sixteen-chars!!'),
+      orchestrator: makeOrchestrator(gradingResult),
+      scopeValidator: makeScopeValidator(),
+      activeEpoch: makeActiveEpoch(7),
+      gradingMeasurement,
+    });
+    const round = built.blankTyping.generateRound(makeFreeFormQuestion(), {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'SELECT ENAME FROM EMP',
+      submittedAt: 1_000,
+      hintsUsed: 0,
+    });
+
+    expect(built.historyRepo.records).toHaveLength(1);
+    const saved = built.historyRepo.records[0] as unknown as {
+      gradingMethod: string;
+      graderDigest: string;
+      gradingLayersUsed: number[];
+      partialScore: string;
+      rationale: string;
+      sanitizationFlags: string[] | null;
+      astFailureReason: string | null;
+      userTokenHash: string | null;
+      userTokenHashEpoch: number | null;
+    };
+    expect(saved.gradingMethod).toBe('llm');
+    expect(saved.graderDigest).toContain('model:abcd1234');
+    expect(saved.gradingLayersUsed).toEqual([1, 2, 3]);
+    expect(saved.partialScore).toBe('0.750');
+    expect(saved.rationale).toContain('LLM PASS');
+    expect(saved.sanitizationFlags).toEqual(['SUSPICIOUS_INPUT']);
+    expect(saved.astFailureReason).toBe('dialect_unsupported');
+    // user_token_hash = 16 hex chars
+    expect(saved.userTokenHash).toMatch(/^[a-f0-9]{16}$/);
+    expect(saved.userTokenHashEpoch).toBe(7);
+
+    // grading_measured 이벤트
+    expect(measureSpy).toHaveBeenCalledOnce();
+    const call = measureSpy.mock.calls[0]![0] as {
+      questionId: string;
+      userId: string;
+      payload: {
+        gradingMethod: string;
+        gradingLayersUsed: number[];
+        astFailureReason?: string;
+        layer1Resolved: boolean;
+        layer3Invoked: boolean;
+        judgeInvocationCount: number;
+        heldForReview: boolean;
+        sanitizationFlagCount: number;
+      };
+    };
+    expect(call.questionId).toBe(round.question.id);
+    expect(call.userId).toBe('user-1');
+    expect(call.payload.gradingMethod).toBe('llm');
+    expect(call.payload.layer1Resolved).toBe(false); // Layer 1 UNKNOWN → escalate
+    expect(call.payload.layer3Invoked).toBe(true);
+    expect(call.payload.judgeInvocationCount).toBe(1);
+    expect(call.payload.heldForReview).toBe(false);
+    expect(call.payload.sanitizationFlagCount).toBe(1);
+    expect(call.payload.astFailureReason).toBe('dialect_unsupported');
+  });
+
+  it('C2-6: Layer 1 PASS → layer1Resolved=true / layer3Invoked=false / judgeInvocationCount=0', async () => {
+    const gradingResult: GradingResult = {
+      isCorrect: true,
+      partialScore: 1,
+      gradingMethod: 'ast',
+      graderDigest: 'ast-v1',
+      gradingLayersUsed: [1],
+      rationale: 'AST 구조 동일',
+    };
+    const measureSpy = vi.fn().mockResolvedValue(undefined);
+    const built = makeService({
+      config: makeConfig(true),
+      orchestrator: makeOrchestrator(gradingResult),
+      scopeValidator: makeScopeValidator(),
+      activeEpoch: makeActiveEpoch(1),
+      gradingMeasurement: {
+        measureGrading: measureSpy,
+        recordLlmTimeout: vi.fn(),
+      } as unknown as GradingMeasurementService,
+    });
+    const round = built.blankTyping.generateRound(makeFreeFormQuestion(), {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+    await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'SELECT 1',
+      submittedAt: 1_000,
+      hintsUsed: 0,
+    });
+
+    const payload = (measureSpy.mock.calls[0]![0] as {
+      payload: { layer1Resolved: boolean; layer3Invoked: boolean; judgeInvocationCount: number; heldForReview: boolean };
+    }).payload;
+    expect(payload.layer1Resolved).toBe(true);
+    expect(payload.layer3Invoked).toBe(false);
+    expect(payload.judgeInvocationCount).toBe(0);
+    expect(payload.heldForReview).toBe(false);
+  });
+
+  it('C2-6: held 경로 → heldForReview=true + gradingMethod=held persist', async () => {
+    const gradingResult: GradingResult = {
+      isCorrect: false,
+      partialScore: 0,
+      gradingMethod: 'held',
+      graderDigest: 'orchestrator-v1',
+      gradingLayersUsed: [1, 2, 3],
+      rationale: 'all UNKNOWN | held for admin review',
+    };
+    const measureSpy = vi.fn().mockResolvedValue(undefined);
+    const built = makeService({
+      config: makeConfig(true),
+      orchestrator: makeOrchestrator(gradingResult),
+      scopeValidator: makeScopeValidator(),
+      activeEpoch: makeActiveEpoch(3),
+      gradingMeasurement: {
+        measureGrading: measureSpy,
+        recordLlmTimeout: vi.fn(),
+      } as unknown as GradingMeasurementService,
+    });
+    const round = built.blankTyping.generateRound(makeFreeFormQuestion(), {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+    await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'weird answer',
+      submittedAt: 1_000,
+      hintsUsed: 0,
+    });
+
+    const saved = built.historyRepo.records[0] as unknown as {
+      gradingMethod: string;
+      userTokenHashEpoch: number;
+    };
+    expect(saved.gradingMethod).toBe('held');
+    expect(saved.userTokenHashEpoch).toBe(3);
+    expect((measureSpy.mock.calls[0]![0] as { payload: { heldForReview: boolean } }).payload.heldForReview).toBe(true);
+  });
+
+  it('C2-6: 비-free-form 경로 (MC/BlankTyping) 는 user_token_hash / epoch / 7항 미저장 (회귀 0)', async () => {
+    const orchestrator = makeOrchestrator({
+      isCorrect: true,
+      partialScore: 1,
+      gradingMethod: 'ast',
+      graderDigest: 'ast-v1',
+      gradingLayersUsed: [1],
+      rationale: 'x',
+    });
+    const measureSpy = vi.fn();
+    const built = makeService({
+      config: makeConfig(true),
+      orchestrator,
+      scopeValidator: makeScopeValidator(),
+      activeEpoch: makeActiveEpoch(),
+      gradingMeasurement: {
+        measureGrading: measureSpy,
+        recordLlmTimeout: vi.fn(),
+      } as unknown as GradingMeasurementService,
+    });
+    // answerFormat=single-token (free-form 아님) → gradeFreeForm 미호출
+    const question = {
+      ...makeFreeFormQuestion(),
+      answerFormat: 'single-token',
+    } as Question;
+    const round = built.blankTyping.generateRound(question, {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+    await built.service.submitAnswer({
+      roundId: round.id,
+      playerId: 'user-1',
+      answer: 'SELECT',
+      submittedAt: 1_000,
+      hintsUsed: 0,
+    });
+
+    const saved = built.historyRepo.records[0] as unknown as {
+      gradingMethod: string | null | undefined;
+      userTokenHash: string | null | undefined;
+      userTokenHashEpoch: number | null | undefined;
+    };
+    expect(saved.gradingMethod).toBeUndefined();
+    expect(saved.userTokenHash).toBeUndefined();
+    expect(saved.userTokenHashEpoch).toBeUndefined();
+    expect(measureSpy).not.toHaveBeenCalled();
+  });
+
+  it('C2-6: activeEpoch 미주입 시 free-form 채점 후 persist 단계에서 throw (fail-closed)', async () => {
+    const orchestrator = makeOrchestrator({
+      isCorrect: true,
+      partialScore: 1,
+      gradingMethod: 'ast',
+      graderDigest: 'ast-v1',
+      gradingLayersUsed: [1],
+      rationale: 'x',
+    });
+    const built = makeService({
+      config: makeConfig(true),
+      orchestrator,
+      scopeValidator: makeScopeValidator(),
+      // activeEpoch 미주입
+    });
+    const round = built.blankTyping.generateRound(makeFreeFormQuestion(), {
+      topic: 'sql-basics',
+      week: 1,
+      difficulty: 'EASY',
+      timeLimit: 20,
+    });
+    injectActiveRound(built.service, round);
+
+    await expect(
+      built.service.submitAnswer({
+        roundId: round.id,
+        playerId: 'user-1',
+        answer: 'SELECT',
+        submittedAt: 1_000,
+        hintsUsed: 0,
+      }),
+    ).rejects.toThrow(/ActiveEpochLookup/);
+  });
+
   it('MEDIUM 난이도 max score 150 × partialScore 반영', async () => {
     const orchestrator = makeOrchestrator({
       isCorrect: true,
@@ -650,6 +927,7 @@ describe('GameSessionService.submitAnswer — free-form 분기 (S6-C2-4)', () =>
       config: makeConfig(true),
       orchestrator,
       scopeValidator: makeScopeValidator(),
+      activeEpoch: makeActiveEpoch(),
     });
     const question = {
       ...makeFreeFormQuestion(),
