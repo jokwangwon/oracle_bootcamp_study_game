@@ -2,9 +2,12 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { QuestionEntity } from '../content/entities/question.entity';
+import { OpsEventLogEntity } from '../ops/entities/ops-event-log.entity';
 import { OpsModule } from '../ops/ops.module';
 import { ReviewQueueEntity } from './entities/review-queue.entity';
+import { SrMetricsDailyEntity } from './entities/sr-metrics-daily.entity';
 import { ReviewQueueService } from './review-queue.service';
+import { SrMetricsService } from './sr-metrics.service';
 
 /**
  * ADR-019 — Spaced Repetition Module.
@@ -21,9 +24,18 @@ import { ReviewQueueService } from './review-queue.service';
  */
 @Module({
   // PR-4: QuestionEntity 도 registerFeature 에 포함 (findDue 의 JOIN 쿼리용).
+  // PR-6: SrMetricsDailyEntity (일별 스냅샷), OpsEventLogEntity (sr_metric_breach 이벤트).
   // 동일 entity 를 여러 모듈이 register 해도 TypeORM 은 단일 repo 로 해석 (충돌 없음).
-  imports: [TypeOrmModule.forFeature([ReviewQueueEntity, QuestionEntity]), OpsModule],
-  providers: [ReviewQueueService],
-  exports: [TypeOrmModule, ReviewQueueService],
+  imports: [
+    TypeOrmModule.forFeature([
+      ReviewQueueEntity,
+      QuestionEntity,
+      SrMetricsDailyEntity,
+      OpsEventLogEntity,
+    ]),
+    OpsModule,
+  ],
+  providers: [ReviewQueueService, SrMetricsService],
+  exports: [TypeOrmModule, ReviewQueueService, SrMetricsService],
 })
 export class ReviewModule {}
