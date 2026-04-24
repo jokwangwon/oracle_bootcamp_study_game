@@ -86,6 +86,11 @@ export interface Layer3GradeInput {
   studentAnswer: string;
   expected: readonly string[];
   sanitizationFlags: readonly string[];
+  /**
+   * consensus-007 C2-1 — Langfuse trace metadata.session_id 로 전파.
+   * ADR-018 §8 금지 6 에 따라 userId 파생정보는 절대 전송되지 않는다.
+   */
+  sessionId?: string;
 }
 
 @Injectable()
@@ -188,9 +193,14 @@ export class LlmJudgeGrader implements Layer3Grader {
     }
 
     // 4. LLM 호출.
+    // consensus-007 C2-1: sessionId 가 주어지면 Langfuse trace metadata 로 전파.
+    // ADR-016 §7 화이트리스트 4종 중 session_id 만 사용 — userId 파생정보 불가.
+    const invokeOpts = input.sessionId
+      ? { metadata: { session_id: input.sessionId } }
+      : undefined;
     let responseText: string;
     try {
-      const response = await this.judgeLlm.invoke(messages);
+      const response = await this.judgeLlm.invoke(messages, invokeOpts);
       responseText =
         typeof response.content === 'string'
           ? response.content

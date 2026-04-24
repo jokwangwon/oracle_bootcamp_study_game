@@ -128,14 +128,21 @@ function makeDigestProvider(
 
 function makeFactory(
   responseText: string,
-  options?: { captureOpts?: unknown[] },
+  options?: { captureOpts?: unknown[]; createdClients?: LlmClient[] },
 ): LlmClientFactory {
   const captured: unknown[] = options?.captureOpts ?? [];
+  const tracked: LlmClient[] = options?.createdClients ?? [];
   return {
-    createDefault: () => makeMockLlmClient(responseText),
+    createDefault: () => {
+      const c = makeMockLlmClient(responseText);
+      tracked.push(c);
+      return c;
+    },
     createFor: (opts: unknown) => {
       captured.push(opts);
-      return makeMockLlmClient(responseText);
+      const c = makeMockLlmClient(responseText);
+      tracked.push(c);
+      return c;
     },
   } as unknown as LlmClientFactory;
 }
@@ -556,5 +563,87 @@ describe('redactErrorMessage (consensus-007 C1-3 — 에러 로깅 redaction)', 
     const red = redactErrorMessage(err);
     expect(red).not.toContain('abcdef1234567890');
     expect(red).toContain('[USER_TOKEN_HASH_REDACTED]');
+  });
+});
+
+/**
+ * consensus-007 C2-1 — Layer3GradeInput.sessionId → judgeLlm.invoke opts.metadata.session_id.
+ *
+ * ADR-016 §7 화이트리스트 4종 중 `session_id` 만 사용. userId 파생정보는 절대 전송 금지.
+ */
+describe('LlmJudgeGrader — sessionId → Langfuse metadata (consensus-007 C2-1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function getFirstInvokeCall(clients: LlmClient[]) {
+    // createFor 첫 호출 → judgeLlm, 두 번째 → fixerLlm. happy path 에선 fixer 미호출.
+    expect(clients.length).toBeGreaterThanOrEqual(1);
+    const judge = clients[0] as LlmClient & {
+      __invokeSpy: ReturnType<typeof vi.fn>;
+    };
+    expect(judge.__invokeSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+    return judge.__invokeSpy.mock.calls[0] as [unknown, unknown];
+  }
+
+  it('grade input.sessionId 가 있으면 judgeLlm.invoke 두번째 인자 opts.metadata.session_id 에 전달', async () => {
+    const created: LlmClient[] = [];
+    const grader = new LlmJudgeGrader(
+      makeConfig(),
+      makeFactory(VALID_RESPONSE_JSON, { createdClients: created }),
+      makePromptManager(makeLangfuseResolved()),
+      makeDigestProvider(),
+    );
+
+    await grader.grade({
+      studentAnswer: 'SELECT 1',
+      expected: ['SELECT 1'],
+      sanitizationFlags: [],
+      sessionId: 'sess-abc-001',
+    });
+
+    const [, opts] = getFirstInvokeCall(created);
+    expect(opts).toBeDefined();
+    expect(opts).toEqual({ metadata: { session_id: 'sess-abc-001' } });
+  });
+
+  it('grade input.sessionId 미전달 시 judgeLlm.invoke 두번째 인자는 undefined', async () => {
+    const created: LlmClient[] = [];
+    const grader = new LlmJudgeGrader(
+      makeConfig(),
+      makeFactory(VALID_RESPONSE_JSON, { createdClients: created }),
+      makePromptManager(makeLangfuseResolved()),
+      makeDigestProvider(),
+    );
+
+    await grader.grade({
+      studentAnswer: 'SELECT 1',
+      expected: ['SELECT 1'],
+      sanitizationFlags: [],
+    });
+
+    const [, opts] = getFirstInvokeCall(created);
+    expect(opts).toBeUndefined();
+  });
+
+  it('sessionId 외의 키는 grader 가 직접 주입하지 않는다 (metadata 에 session_id 만)', async () => {
+    const created: LlmClient[] = [];
+    const grader = new LlmJudgeGrader(
+      makeConfig(),
+      makeFactory(VALID_RESPONSE_JSON, { createdClients: created }),
+      makePromptManager(makeLangfuseResolved()),
+      makeDigestProvider(),
+    );
+
+    await grader.grade({
+      studentAnswer: 'SELECT 1',
+      expected: ['SELECT 1'],
+      sanitizationFlags: [],
+      sessionId: 's',
+    });
+
+    const [, opts] = getFirstInvokeCall(created);
+    const meta = (opts as { metadata: Record<string, unknown> }).metadata;
+    expect(Object.keys(meta)).toEqual(['session_id']);
   });
 });

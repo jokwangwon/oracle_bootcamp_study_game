@@ -36,6 +36,13 @@ export interface GradeInput {
   expected: readonly string[];
   /** 주차 화이트리스트 (대문자 정규화 권장) */
   allowlist: readonly string[];
+  /**
+   * ADR-016 §7 + ADR-018 §4 D3 Hybrid + consensus-007 C2-1.
+   *
+   * Layer 3 LLM-judge 호출 시 Langfuse trace metadata 의 `session_id` 키로 전파.
+   * Layer 1/2 는 LLM 을 호출하지 않으므로 사용하지 않는다.
+   */
+  sessionId?: string;
 }
 
 export interface Layer1Grader {
@@ -50,6 +57,7 @@ export interface Layer3Grader {
     studentAnswer: string;
     expected: readonly string[];
     sanitizationFlags: readonly string[];
+    sessionId?: string;
   }): Promise<LayerVerdict>;
 }
 
@@ -109,11 +117,13 @@ export class GradingOrchestrator {
       return terminal(l2, 'keyword', [1, 2], flags, l1.rationale, l1.astFailureReason);
     }
 
-    // Layer 3 (LLM) — Layer 1/2가 UNKNOWN일 때만
+    // Layer 3 (LLM) — Layer 1/2가 UNKNOWN일 때만.
+    // consensus-007 C2-1: sessionId 전파 — Langfuse metadata.session_id 로만 사용.
     const l3 = await this.layer3.grade({
       studentAnswer: clean,
       expected: input.expected,
       sanitizationFlags: flags,
+      sessionId: input.sessionId,
     });
     if (l3.verdict !== 'UNKNOWN') {
       return terminal(
