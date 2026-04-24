@@ -27,6 +27,10 @@ interface RequestOptions {
   body?: unknown;
 }
 
+export interface ReviewQueueSummary {
+  dueCount: number;
+}
+
 async function request<T>(
   method: 'GET' | 'POST',
   path: string,
@@ -94,5 +98,12 @@ export const apiClient = {
         totalScore: number;
       },
     ) => request<FinishSoloResponse>('POST', '/games/solo/finish', { token, body: input }),
+
+    /**
+     * ADR-019 §5.2 PR-4 (백엔드) / PR-5 (UI 소비).
+     * 오늘 due 인 review_queue 건수. ReviewBadge 컴포넌트 입력.
+     */
+    reviewQueue: (token: string) =>
+      request<ReviewQueueSummary>('GET', '/games/solo/review-queue', { token }),
   },
 };
