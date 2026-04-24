@@ -70,6 +70,16 @@ export interface PlayerAnswer {
   answer: string;
   submittedAt: number; // epoch ms
   hintsUsed: number;
+  /**
+   * ADR-016 §7 + ADR-018 §4 D3 Hybrid + consensus-007 C2-1.
+   *
+   * free-form 채점 경로(Layer 3 LLM-judge) 에서 Langfuse trace metadata 의
+   * `session_id` 키로 전파된다 (화이트리스트 4종 중 하나). ADR-018 §8 금지 6
+   * 에 따라 userId 파생정보는 Langfuse 로 절대 전송되지 않는다.
+   *
+   * MC / blank-typing / term-match 등 all-or-nothing 경로는 사용하지 않는다.
+   */
+  sessionId?: string;
 }
 
 /**

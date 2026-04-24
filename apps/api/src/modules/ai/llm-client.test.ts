@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatOllama } from '@langchain/ollama';
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
 
 import { LlmClient } from './llm-client';
 
@@ -191,6 +192,97 @@ describe('LlmClient', () => {
       expect(cbs).toHaveLength(1);
       // CallbackHandler는 BaseCallbackHandler를 상속하므로 객체 + name 속성을 가짐
       expect(typeof cbs[0]).toBe('object');
+    });
+  });
+
+  /**
+   * consensus-007 C2-1 — invoke opts.metadata 전파.
+   *
+   * 기존 호출자 회귀 0 (opts 미전달 시 callbacks 만 넘어감) +
+   * metadata 전달 시 LangChain RunnableConfig.metadata 로 투영.
+   */
+  describe('invoke opts.metadata (consensus-007 C2-1)', () => {
+    function spyModel(client: LlmClient) {
+      const model = client.getModel();
+      return vi.spyOn(model, 'invoke').mockResolvedValue(
+        new AIMessage('ok') as never,
+      );
+    }
+
+    it('opts 미전달 시 model.invoke 는 callbacks 만 포함한 config 로 호출 (회귀 0)', async () => {
+      const client = makeClient({
+        LLM_PROVIDER: 'anthropic',
+        LLM_API_KEY: 'sk-test',
+        LLM_MODEL: 'claude-opus-4-6',
+      });
+      const spy = spyModel(client);
+
+      await client.invoke([new HumanMessage('hi')]);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const [, config] = spy.mock.calls[0]!;
+      expect(config).toBeDefined();
+      expect((config as { callbacks: unknown }).callbacks).toBeDefined();
+      expect((config as { metadata?: unknown }).metadata).toBeUndefined();
+    });
+
+    it('opts.metadata.session_id 를 LangChain RunnableConfig.metadata 로 전달', async () => {
+      const client = makeClient({
+        LLM_PROVIDER: 'anthropic',
+        LLM_API_KEY: 'sk-test',
+        LLM_MODEL: 'claude-opus-4-6',
+      });
+      const spy = spyModel(client);
+
+      await client.invoke([new HumanMessage('hi')], {
+        metadata: { session_id: 'sess-abc-123' },
+      });
+
+      const [, config] = spy.mock.calls[0]!;
+      expect((config as { metadata: Record<string, unknown> }).metadata).toEqual({
+        session_id: 'sess-abc-123',
+      });
+    });
+
+    it('opts 가 빈 object 면 metadata 를 포함하지 않는다', async () => {
+      const client = makeClient({
+        LLM_PROVIDER: 'anthropic',
+        LLM_API_KEY: 'sk-test',
+        LLM_MODEL: 'claude-opus-4-6',
+      });
+      const spy = spyModel(client);
+
+      await client.invoke([new HumanMessage('hi')], {});
+
+      const [, config] = spy.mock.calls[0]!;
+      expect((config as { metadata?: unknown }).metadata).toBeUndefined();
+    });
+
+    it('opts.metadata 허용 4종 키 전달 (prompt_name/prompt_version/model_digest 포함)', async () => {
+      const client = makeClient({
+        LLM_PROVIDER: 'anthropic',
+        LLM_API_KEY: 'sk-test',
+        LLM_MODEL: 'claude-opus-4-6',
+      });
+      const spy = spyModel(client);
+
+      await client.invoke([new HumanMessage('hi')], {
+        metadata: {
+          session_id: 's',
+          prompt_name: 'evaluation/free-form-sql',
+          prompt_version: 1,
+          model_digest: 'abcd1234',
+        },
+      });
+
+      const [, config] = spy.mock.calls[0]!;
+      const meta = (config as { metadata: Record<string, unknown> }).metadata;
+      expect(meta).toEqual({
+        session_id: 's',
+        prompt_name: 'evaluation/free-form-sql',
+        prompt_version: 1,
+        model_digest: 'abcd1234',
+      });
     });
   });
 });

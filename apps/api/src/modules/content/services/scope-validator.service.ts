@@ -33,19 +33,7 @@ export class ScopeValidatorService {
     valid: boolean;
     outOfScope: string[];
   }> {
-    const scopes = await this.scopeRepo.find({
-      where: {
-        week: LessThanOrEqual(week),
-        topic,
-      },
-    });
-
-    const allowed = new Set<string>();
-    for (const scope of scopes) {
-      for (const kw of scope.keywords) {
-        allowed.add(kw.toUpperCase());
-      }
-    }
+    const allowed = await this.getAllowlistSet(week, topic);
 
     if (allowed.size === 0) {
       // 화이트리스트가 비어 있으면 검증 보류 (관리자 승인 단계로 위임)
@@ -59,5 +47,31 @@ export class ScopeValidatorService {
       valid: outOfScope.length === 0,
       outOfScope: [...new Set(outOfScope)],
     };
+  }
+
+  /**
+   * consensus-007 S6-C2-4 — GradingOrchestrator 입력용 누적 allowlist.
+   * validateText 의 allowed 집합을 공개 배열로 반환 (대문자 정규화, 중복 제거).
+   * 빈 배열이면 keyword grader 가 UNKNOWN → Layer 3 로 이관.
+   */
+  async getAllowlist(week: number, topic: string): Promise<string[]> {
+    const allowed = await this.getAllowlistSet(week, topic);
+    return [...allowed];
+  }
+
+  private async getAllowlistSet(week: number, topic: string): Promise<Set<string>> {
+    const scopes = await this.scopeRepo.find({
+      where: {
+        week: LessThanOrEqual(week),
+        topic,
+      },
+    });
+    const allowed = new Set<string>();
+    for (const scope of scopes) {
+      for (const kw of scope.keywords) {
+        allowed.add(kw.toUpperCase());
+      }
+    }
+    return allowed;
   }
 }

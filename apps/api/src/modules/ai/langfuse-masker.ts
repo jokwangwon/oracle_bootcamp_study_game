@@ -75,6 +75,20 @@ export const ALLOWED_METADATA_KEYS: ReadonlySet<string> = new Set<string>([
   'model_digest',
 ]);
 
+/**
+ * consensus-007 C2-1 — LlmClient.invoke opts.metadata 의 compile-time 타입.
+ *
+ * runtime 검증은 `MaskingLangfuseCallbackHandler.guardMetadata` 가 담당 (dev throw /
+ * prod drop + ops event). 본 타입은 호출자가 실수로 금지 키를 넣는 것을 TS 단계에서
+ * 차단하는 사전 가드. `as any` 우회 시 masker 가 최후 보루.
+ */
+export interface WhitelistedMetadata {
+  session_id?: string;
+  prompt_name?: string;
+  prompt_version?: string | number;
+  model_digest?: string;
+}
+
 export interface MetadataFilterResult {
   allowed: Record<string, unknown>;
   violations: string[];

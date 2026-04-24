@@ -55,6 +55,28 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  /**
+   * ADR-013 + consensus-007 S6-C2-4 — free-form 3단 채점 경로 kill-switch.
+   * 기본 false (프로덕션 보수). 'true' 설정 시 answerFormat='free-form' 문제는
+   * GradingOrchestrator (AST → Keyword → LLM-judge) 로 채점.
+   * false 시 기존 mode.evaluateAnswer 경로 유지 (회귀 0).
+   */
+  ENABLE_FREE_FORM_GRADING: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  /**
+   * ADR-016 §추가 + consensus-007 Q1/S6-C2-5 — Layer 3 LLM-judge 호출 timeout (ms).
+   * 기본 8000ms (사용자 체감 상한). 초과 시 gradingMethod='held' persist + HTTP 503.
+   * 운영 p95 관측 후 ADR-018 §10 에 따라 조정.
+   */
+  LLM_JUDGE_TIMEOUT_MS: z
+    .string()
+    .default('8000')
+    .transform((v) => Number.parseInt(v, 10))
+    .refine((n) => Number.isFinite(n) && n > 0, {
+      message: 'LLM_JUDGE_TIMEOUT_MS 는 양의 정수 (ms)',
+    }),
   // OSS 모델 평가 (단계 7) — 운영자 화이트리스트 + 결과 디렉토리 + config 경로.
   // EVAL_ADMIN_USERNAMES는 fail-closed (미설정 시 모든 eval 트리거 거부).
   EVAL_ADMIN_USERNAMES: z.string().optional(),

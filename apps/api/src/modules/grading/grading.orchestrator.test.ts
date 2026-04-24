@@ -223,4 +223,36 @@ describe('GradingOrchestrator', () => {
   it('ORCHESTRATOR_VERSION 상수 노출 (감사용)', () => {
     expect(ORCHESTRATOR_VERSION).toMatch(/^orchestrator-v/);
   });
+
+  /**
+   * consensus-007 C2-1 — sessionId 전파.
+   * GradeInput.sessionId 가 Layer3Grader.grade 인자로 그대로 전달됨을 확인.
+   */
+  describe('sessionId 전파 (consensus-007 C2-1)', () => {
+    it('GradeInput.sessionId 가 주어지면 layer3.grade 인자에 포함된다', async () => {
+      const { orchestrator, layer3 } = makeOrchestrator({});
+      await orchestrator.grade({
+        studentAnswer: 'SELECT ENAME FROM EMP',
+        expected: ['SELECT ENAME FROM EMP WHERE DEPTNO = 10 ORDER BY SAL'],
+        allowlist: ALLOWLIST,
+        sessionId: 'sess-xyz',
+      });
+
+      expect(layer3.grade).toHaveBeenCalledOnce();
+      const call = layer3.grade.mock.calls[0]![0] as { sessionId?: string };
+      expect(call.sessionId).toBe('sess-xyz');
+    });
+
+    it('GradeInput.sessionId 미전달 시 layer3.grade input.sessionId 는 undefined', async () => {
+      const { orchestrator, layer3 } = makeOrchestrator({});
+      await orchestrator.grade({
+        studentAnswer: 'SELECT ENAME FROM EMP',
+        expected: ['SELECT ENAME FROM EMP WHERE DEPTNO = 10 ORDER BY SAL'],
+        allowlist: ALLOWLIST,
+      });
+
+      const call = layer3.grade.mock.calls[0]![0] as { sessionId?: string };
+      expect(call.sessionId).toBeUndefined();
+    });
+  });
 });

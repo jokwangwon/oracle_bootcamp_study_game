@@ -12,6 +12,7 @@ import { EvalAdminGuard } from '../ai/eval/eval-admin.guard';
 import { ActiveEpochLookup } from './active-epoch.lookup';
 import { AdminReviewController } from './admin-review.controller';
 import { AdminReviewService } from './admin-review.service';
+import { GradingMeasurementService } from './grading-measurement.service';
 import { OpsAggregationService } from './ops-aggregation.service';
 import { OpsMeasurementService } from './ops-measurement.service';
 import { PiiMaskerEventRecorder } from './pii-masker-event.recorder';
@@ -43,6 +44,7 @@ import { SaltRotationService } from './salt-rotation.service';
   controllers: [QuestionReportController, AdminReviewController],
   providers: [
     OpsMeasurementService,
+    GradingMeasurementService,
     QuestionReportService,
     OpsAggregationService,
     AdminReviewService,
@@ -58,6 +60,7 @@ import { SaltRotationService } from './salt-rotation.service';
   ],
   exports: [
     OpsMeasurementService,
+    GradingMeasurementService,
     OpsAggregationService,
     SaltRotationService,
     PiiMaskerEventRecorder,

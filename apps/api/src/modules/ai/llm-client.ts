@@ -9,6 +9,20 @@ import { CallbackHandler } from 'langfuse-langchain';
 
 import { PiiMaskerEventRecorder } from '../ops/pii-masker-event.recorder';
 import { MaskingLangfuseCallbackHandler } from './masking-callback-handler';
+import type { WhitelistedMetadata } from './langfuse-masker';
+
+export type { WhitelistedMetadata } from './langfuse-masker';
+
+/**
+ * consensus-007 C2-1 — LlmClient.invoke 옵션.
+ *
+ * `metadata` 는 Langfuse trace metadata 로 전달되며 ADR-016 §7 화이트리스트
+ * 4종만 TS 단계에서 허용. runtime 회귀 방어는 MaskingLangfuseCallbackHandler
+ * 가 담당 (dev throw / prod drop + ops event).
+ */
+export interface LlmInvokeOptions {
+  metadata?: WhitelistedMetadata;
+}
 
 /**
  * LLM 클라이언트 (ADR-009 + SDD v2 §7).
@@ -95,9 +109,22 @@ export class LlmClient {
   /**
    * 단일 진입점. 모든 LLM 호출은 이 메서드를 통해 이루어지며 자동으로
    * Langfuse callback이 부착된다 (활성화된 경우).
+   *
+   * consensus-007 C2-1 — opts.metadata 는 Langfuse trace metadata 로 전달되고
+   * MaskingLangfuseCallbackHandler 의 화이트리스트 가드를 통과해야 한다.
+   * 허용 키: `session_id`, `prompt_name`, `prompt_version`, `model_digest`.
    */
-  async invoke(messages: BaseMessage[]): Promise<BaseMessage> {
-    return this.model.invoke(messages, { callbacks: this.callbacks });
+  async invoke(
+    messages: BaseMessage[],
+    opts?: LlmInvokeOptions,
+  ): Promise<BaseMessage> {
+    const runConfig: { callbacks: Callbacks; metadata?: Record<string, unknown> } = {
+      callbacks: this.callbacks,
+    };
+    if (opts?.metadata) {
+      runConfig.metadata = { ...opts.metadata };
+    }
+    return this.model.invoke(messages, runConfig);
   }
 
   /**
