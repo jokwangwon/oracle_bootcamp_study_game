@@ -181,7 +181,7 @@ export default function SoloPlayPage() {
             background: 'var(--accent)',
             border: 'none',
             borderRadius: 8,
-            color: '#0f172a',
+            color: 'var(--accent-fg)',
             fontWeight: 700,
           }}
         >
@@ -266,7 +266,7 @@ export default function SoloPlayPage() {
           background: 'var(--accent)',
           border: 'none',
           borderRadius: 8,
-          color: '#0f172a',
+          color: 'var(--accent-fg)',
           fontWeight: 700,
         }}
       >
@@ -410,7 +410,7 @@ function RoundPlayer({
               background: 'var(--accent)',
               border: 'none',
               borderRadius: 8,
-              color: '#0f172a',
+              color: 'var(--accent-fg)',
               fontWeight: 700,
               opacity: submitting ? 0.5 : 1,
               cursor: submitting ? 'wait' : 'pointer',
@@ -428,7 +428,7 @@ function RoundPlayer({
               background: 'var(--accent)',
               border: 'none',
               borderRadius: 8,
-              color: '#0f172a',
+              color: 'var(--accent-fg)',
               fontWeight: 700,
             }}
             autoFocus

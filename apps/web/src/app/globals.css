@@ -2,12 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * ADR-020 §3.3 — light/dark 팔레트.
+ *
+ * - :root  = light (Q15=b 기본). PR-4 next-themes 가 .dark 토글 전까지 light only.
+ * - .dark  = dark.
+ *
+ * WCAG 2.1 AA (ADR-020 §7): 대비비 ≥ 4.5:1 보장. success/error 는 light 에선
+ * 더 진한 색을 사용 (흰 배경 가독성).
+ */
 :root {
+  --bg: #ffffff;
+  --bg-elevated: #f8fafc;
+  --fg: #0f172a;
+  --fg-muted: #64748b;
+  --accent: #0284c7;
+  --accent-fg: #ffffff;
+  --success: #16a34a;
+  --error: #dc2626;
+  --border: #e2e8f0;
+}
+
+.dark {
   --bg: #0f172a;
   --bg-elevated: #1e293b;
   --fg: #f1f5f9;
   --fg-muted: #94a3b8;
   --accent: #38bdf8;
+  --accent-fg: #0f172a;
   --success: #4ade80;
   --error: #f87171;
   --border: #334155;
