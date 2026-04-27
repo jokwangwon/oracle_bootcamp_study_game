@@ -93,7 +93,7 @@ describe('AppealRateLimiter', () => {
 
   it('첫 INCR 시 TTL 설정 (minute=120s, day=86400s)', async () => {
     await limiter.check('user-1', NOW);
-    const minuteKey = `rate:appeal:user-1:min:${Math.floor(NOW.getTime() / 60000)}`;
+    const minuteKey = `rate:appeal:user-1:minute:${Math.floor(NOW.getTime() / 60000)}`;
     const dayKey = `rate:appeal:user-1:day:2026-04-22`;
     expect(state.expires.get(minuteKey)).toBe(120);
     expect(state.expires.get(dayKey)).toBe(86400);
