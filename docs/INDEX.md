@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-24 (Session 7 ADR-019 SM-2 Spaced Repetition 로드맵 완결 — PR #14~#23 전수 머지, 10 PR 누적 / 695 → 908+1s / +213 tests)
+**최종 업데이트**: 2026-04-24 저녁 (Session 7 완결 — ADR-019 SM-2 + 오답 노트 + ADR-020 UX 재설계 초안 / 13 PR 누적 / 695 → 936+1s / +241 tests / consensus-008·009 두 3+1 합의 성공)
 
 ---
 
@@ -91,7 +91,8 @@ docs/
 │   ├── ADR-016-llm-judge-safety.md              # LLM-judge 안전 프로토콜 (v2.9, D3 Hybrid 반영 2026-04-22)
 │   ├── ADR-017-mt6-mt7-mt8-metrics.md           # 운영 지표 MT6/MT7/MT8 (v2.9)
 │   ├── ADR-018-user-token-hash-salt-rotation.md # USER_TOKEN_HASH_SALT rotation 정책 (2026-04-22)
-│   └── ADR-019-sm2-spaced-repetition.md         # SM-2 Spaced Repetition 도입 (2026-04-24)
+│   ├── ADR-019-sm2-spaced-repetition.md         # SM-2 Spaced Repetition 도입 (2026-04-24)
+│   └── ADR-020-ux-redesign.md                   # UX 재설계: Tailwind + shadcn/ui + R4 토론 + R6 voting (2026-04-24)
 │
 ├── sessions/                             # 세션 로그
 │   └── ...
@@ -103,7 +104,8 @@ docs/
 │   ├── consensus-005-llm-judge-safety-architecture.md          # MVP-B Session 4 LLM-judge 안전 합의 (2026-04-17)
 │   ├── consensus-006-adr-018-salt-rotation.md                  # ADR-018 salt rotation 합의 (2026-04-22)
 │   ├── consensus-007-session-6-grading-wiring.md               # Session 6 PR#1/#2 grading 배선 합의 (2026-04-23)
-│   └── consensus-008-sm2-spaced-repetition.md                  # SM-2 SR 합의 (2026-04-24)
+│   ├── consensus-008-sm2-spaced-repetition.md                  # SM-2 SR 합의 (2026-04-24)
+│   └── consensus-009-ux-redesign.md                            # UX 재설계 합의 (2026-04-24, CRITICAL 5건 Session 4 룰)
 │
 └── rationale/                            # 판단 근거 (의사결정 narrative)
     ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
@@ -194,6 +196,7 @@ CLAUDE.md (에이전트 지시사항)
 | 2026-04-23 오후 | **UX #1 즉시 피드백 + 헤더 로그인 반영 + UX #2 scenario/rationale (3 커밋, 695 GREEN 유지)** — (1) `aa79dec` UX #1 (brief §2.1): RoundPlayer `lastResult` state + FeedbackCard (정/오 뱃지 + 내 답 + 정답 + 해설) + "다음 라운드" 버튼 (Enter 가능) — EvaluationResult.correctAnswer/explanation 가 이미 응답에 있었는데 UI 가 버리던 문제. (2) `dee664f` 헤더 로그인 상태 즉시 반영: Header mount-only 체크 → `usePathname()` deps + 커스텀 이벤트 `AUTH_CHANGED_EVENT` + storage 이벤트 3계층 감지. (3) `bd328cb` UX #2 (brief §2.2): `Question`/`QuestionEntity` 에 `scenario`/`rationale` optional 필드 + `SeedService.insertQuestion()` 필드 전달 누락 버그 수정 + 1·2주차 seed 60건 전수 재작성 (blank 15+15 + term 15+15) + `ContextPanel`(📋 상황 — 풀이 중) / `FeedbackCard` 확장(💡 왜? — 제출 후) **스포일러 방지** (사용자 2차 피드백). 재시드 절차: `TRUNCATE weekly_scope CASCADE; TRUNCATE questions CASCADE;` + SEED_ON_BOOT=true. | PR #12, 커밋 `aa79dec`/`dee664f`/`bd328cb` |
 | 2026-04-24 오전 | **Session 6 PR #2 (free-form 채점 배선, 7 커밋 C2-1~C2-7) + 3+1 사후 검증 hotfix (`persistHeldAnswer` 7항 누락 CRITICAL-1) + D3 Hybrid 대칭성 (`ops_event_log` user_token_hash/epoch)** — 4 PR 머지 (#14~#17). `ENABLE_FREE_FORM_GRADING=false` 프로덕션 기본. `multi-agent-system-design §7.3/7.4` 합의율 패턴 관찰 기록 신설. **695 → 779+1s (+84)**. | PR #14~#17, `SESSION_2026-04-24.md` §1~2 |
 | 2026-04-24 오후 | **ADR-019 SM-2 Spaced Repetition 로드맵 완결 (PR-1~PR-6, 6 PR 연속 머지)** — Phase 0 브리프 + Phase 1 consensus-008 (합의율 36.8% / B-C1~C4 + A-CRITICAL 3 전원 반영) + 사용자 Q1~Q5. (PR-1) review_queue entity + migration 1714000007000. (PR-2) `sm2Next` + `mapAnswerToQuality` pure function (SM-2-lite clamp [2.3,2.6] 항상 ON, timePenalty 제거). (PR-3) `ReviewQueueService.upsertAfterAnswer/overwriteAfterOverride` + submitAnswer Tx2 (fail-open). (PR-4) `findDue` JOIN questions + `pickQuestionsForSolo` srLimit=ceil(rounds*0.7) + `GET /games/solo/review-queue` + `QuestionPoolService.pickRandom(excludeIds)`. (PR-5) Next.js `ReviewBadge` + `apiClient.solo.reviewQueue`. (PR-6) `sr_metrics_daily` 테이블 + `SrMetricsService` + `@Cron(EVERY_DAY_AT_MIDNIGHT)` + `evaluateSrMetricBreaches` (retention/completion/guard). **779 → 908+1s (+129)**. | PR #17~#23, `ADR-019`, `consensus-008`, `SESSION_2026-04-24.md` §3.6~3.10 |
+| 2026-04-24 저녁 | **오답 노트 + UX v2 (PR #25) + ADR-020 UX 재설계 초안 (PR #26)** — 2 PR 머지 준비. (1) 오답 노트 — `UserMistakesService` + `GET /api/users/me/mistakes` (search/sort/status/topic/week/gameMode 필터 + summary 3차원 집계 + hasMore 페이지네이션). Next.js `/review/mistakes` 좌측 사이드바 블로그 스타일 (검색박스 + 섹션별 카운트 뱃지 + 활성 필터 chips). **+41 tests (908 → 936+1s + 2 신규 파일)**. (2) ADR-020 UX 재설계 Phase 1 완결 — 3+1 합의 consensus-009 (합의율 63% / Agent B 단독 CRITICAL 5건 Session 4 룰 전원 채택 / Reviewer 축자 검증) + 사용자 Q10~Q15 확정. 스택 = Tailwind v3.4 + shadcn/ui + Radix + next-themes (`defaultTheme="light"`). R4 = 3-테이블 + 1-level nested + Reddit hot. 보안 5종 (helmet+CSP / httpOnly 쿠키 / auth rate limit / vote UNIQUE / pre-commit Layer 3-a3 재귀). **12 PR 로드맵 (약 13일)** 확정. | PR #25, PR #26, `consensus-009-ux-redesign.md`, `ADR-020-ux-redesign.md` |
 
 ---
 

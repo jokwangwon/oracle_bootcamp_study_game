@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-24 (**ADR-019 SM-2 Spaced Repetition 로드맵 완결 — 오늘 10 PR 머지**): PR #14 Session 6 free-form 채점 배선 → PR #15 hotfix → PR #16 D3 대칭 → PR #17 SM-2 PR-1 entity/migration + ADR-019 → PR #18 세션 로그 1차 → PR #19 PR-2 sm2Next + mapAnswerToQuality pure fn → PR #20 PR-3 ReviewQueueService + submitAnswer Tx2 → PR #21 PR-4 /solo/start SR 혼합(70% 상한) + GET /review-queue → PR #22 PR-5 "오늘 복습 N" 뱃지 UI → PR #23 PR-6 sr_metrics_daily 집계 + 3지표 breach (retention/completion/guard). **695 → 908 + 1 skipped (+213 tests)** / typecheck clean / pre-commit 전 커밋 자동 통과. `ENABLE_FREE_FORM_GRADING=false` 프로덕션 기본 유지. **다음: 사용자 실기 테스트 (staging migration 실행 smoke + /play/solo 뱃지 + /solo/start 혼합 편성 + 24h 후 cron 관측)** 결과 기반 후속 결정. 전면 UI 재설계 (brief R4~R7, ADR-020 가칭) 는 별도 세션 대기 유지.
+**최종 업데이트**: 2026-04-24 저녁 (**Session 7 완결 — 13 PR 누적 / 3+1 합의 2회 / ADR-019 구현 완결 + ADR-020 초안 확정**): 오전 (PR #14~#17) Session 6 free-form 배선 + hotfix + D3 대칭. 오후 (PR #18~#23) ADR-019 SM-2 Spaced Repetition PR-1~6 순차 완결 + PR #24 docs 갱신. 저녁 (PR #25, #26) 오답 노트 + UX v2 좌측 사이드바 블로그 스타일 + ADR-020 UX 재설계 초안 (consensus-009 합의율 63% / Agent B 단독 CRITICAL 5건 Session 4 룰 전원 채택 / Reviewer 축자 검증 / 사용자 Q10~Q15 확정). **695 → 936 + 1 skipped (+241 tests)**. `ENABLE_FREE_FORM_GRADING=false` 프로덕션 기본 유지. **다음 세션**: ADR-020 12 PR 로드맵 착수 — 권장 시작 PR-6 (`@nestjs/throttler` auth rate limit) 또는 PR-7 (pre-commit Layer 3-a3 재귀) — 독립 병렬 + 보안 즉시 이득. 또는 PR-1 (Tailwind 인프라) 순차.
 
 ---
 
@@ -190,25 +190,38 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-**0순위 — 사용자 실기 테스트 피드백 대기 (2026-04-24 PR #14~#23 전수 머지 직후)**
-- staging 부팅 smoke: migration 1714000004~008000 자동 실행 확인.
-- `/play/solo` 접속 → `ReviewBadge` 렌더 (dueCount 0/N 양쪽).
-- `/solo/start` 혼합 편성 관측: 2회차 이후 due 우선 편성 확인 (DB `review_queue` 행 생성 로그).
-- 24h 후 `@Cron(EVERY_DAY_AT_MIDNIGHT)` 자동 실행 관측: `sr_metrics_daily` 1 행 INSERT.
-- `pii_masker_triggered` 이벤트 = 0 (호출자 정합 확인).
-- 이상 발견 시 hotfix PR 우선.
+**0순위 — PR #25 (오답 노트) + PR #26 (ADR-020 docs) 머지 확인**
+- 사용자 리뷰 대기 중. 머지되면 main 동기화 후 다음 착수.
 
-**1순위 — 트랙 X: 전면 UI 재설계 (별도 세션 권장)** — PR #11 `ux-redesign-brief-v1.md` 기반.
-- **Phase 0 검토 질문지 작성** (ADR-001) — 브리프 §5 시드 6개 활용:
-  1. 레퍼런스 4종 중 가장 가까운 하나 / 피해야 할 것
-  2. R1~R7 중 MVP-C 이전 반드시 필요한 것
-  3. 커뮤니티 심도: (a) Q&A (b) + upvote (c) + 댓글 (d) + 실시간 반응
-  4. 학습 진지함 vs 끄투온라인 캐주얼 톤 트레이드오프
-  5. Mobile-first 여부 / 6. 다크모드 선호도
-- **Phase 1 3+1 합의** → ADR-020 (가칭) UX 재설계 + SDD UI 섹션 + Tailwind CSS + shadcn/ui 도입.
-- **구현 순서 제안**: 홈 재설계 → 솔로 랜덤 진입 (R3) → 문제당 토론 쓰레드 entity/API/UI → Discord 스타일 반응 → Mobile 대응.
+**1순위 — ADR-020 UX 재설계 12 PR 로드맵 착수**
 
-**2순위 — Session 8 기술 부채 해소 (ADR-019 §8.1)**
+권장 시작 (독립 병렬 가능, 보안 즉시 이득):
+- **PR-6**: `@nestjs/throttler` + auth rate limit + `RedisRateLimiter` 일반화 (CRITICAL-B3 해소)
+- **PR-7**: pre-commit Layer 3-a3 재귀 glob + pii-regression 확장 (CRITICAL-B5 해소)
+
+순차 시작 대안:
+- **PR-1**: Tailwind v3.4 + postcss + utils 설치 (인프라 선행)
+- **PR-2**: CSS 변수 → Tailwind theme 브리지 + light 팔레트
+
+**전체 12 PR 로드맵** (ADR-020 §6 참조):
+1. Tailwind 인프라
+2. theme token 브리지 + light 팔레트
+3. helmet + CSP (CRITICAL-B1)
+4. next-themes + Header 토글
+5. shadcn/ui 초기화 + Button/Card/Dialog/Input
+6. auth rate limit (CRITICAL-B3)
+7. pre-commit 재귀 (CRITICAL-B5)
+8. Header + `/`, `/login`, `/register` Tailwind
+9. `/play/solo` Tailwind 이전
+10. **(Q11=a 통합)** httpOnly 쿠키 + refresh + CSRF + R4 discussion + sanitize-html (CRITICAL-B2 + C-B4 부분)
+11. R6 vote UNIQUE + self-vote CHECK + race (CRITICAL-B4)
+12. discussion 페이지 + VoteButton + rehype-sanitize (CRITICAL-B1)
+
+**2순위 — ADR-019 24h 관측 (자동)**
+- 24h 후 `@Cron(EVERY_DAY_AT_MIDNIGHT)` 자동 실행 확인: `sr_metrics_daily` 1행 INSERT.
+- SR 혼합 편성 실사용 피드백 (2회차 이후 due 우선 편성).
+
+**3순위 — Session 8+ 기술 부채 해소 (ADR-019 §8.1)**
 - `Round.startedAt: number` 필드 + `timeTakenMs = answer.submittedAt - round.startedAt` + 프론트 epoch ms 전송.
 - 해소 후 quality 공식에 `timePenalty` 재도입 평가 (현재 Q5=a 로 제거됨).
 
