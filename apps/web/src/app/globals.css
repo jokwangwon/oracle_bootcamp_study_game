@@ -36,3 +36,14 @@ button {
 input {
   font: inherit;
 }
+
+/* 오답 노트 반응형 — 1024px 미만에서 사이드바 상단 스택 (Q8=a desktop-first) */
+@media (max-width: 1023px) {
+  [data-mistakes-grid] {
+    grid-template-columns: 1fr !important;
+  }
+  [data-mistakes-sidebar] {
+    position: static !important;
+    max-height: none !important;
+  }
+}
