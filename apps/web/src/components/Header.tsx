@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { AUTH_CHANGED_EVENT, clearToken, hasToken } from '@/lib/auth-storage';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 /**
  * 전역 헤더 — 로그인 상태에 따라 메뉴 표시.
@@ -74,6 +75,7 @@ export function Header() {
         </Link>
 
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', minHeight: 32 }}>
+          <ThemeToggle />
           {!mounted ? null : authed ? (
             <>
               <Link href="/play/solo" style={linkBtnStyle}>
