@@ -354,7 +354,7 @@ function SidebarSection({
                 style={sidebarItemStyle(active)}
               >
                 <span>{item.label}</span>
-                <span style={{ color: active ? '#0f172a' : 'var(--fg-muted)', fontSize: '0.75rem' }}>
+                <span style={{ color: active ? 'var(--accent-fg)' : 'var(--fg-muted)', fontSize: '0.75rem' }}>
                   {item.count}
                 </span>
               </button>
@@ -623,7 +623,7 @@ function sidebarItemStyle(active: boolean): React.CSSProperties {
     width: '100%',
     padding: '0.35rem 0.5rem',
     background: active ? 'var(--accent)' : 'transparent',
-    color: active ? '#0f172a' : 'var(--fg)',
+    color: active ? 'var(--accent-fg)' : 'var(--fg)',
     border: 'none',
     borderRadius: 4,
     fontSize: '0.82rem',

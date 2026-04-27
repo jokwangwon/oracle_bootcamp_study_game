@@ -52,7 +52,7 @@ export function ReviewBadge({ token }: Props) {
         gap: '0.4rem',
         padding: '0.45rem 0.85rem',
         background: emphasized ? 'var(--accent)' : 'var(--bg-elevated)',
-        color: emphasized ? '#0f172a' : 'var(--fg-muted)',
+        color: emphasized ? 'var(--accent-fg)' : 'var(--fg-muted)',
         border: emphasized ? 'none' : '1px solid var(--border)',
         borderRadius: 6,
         fontSize: '0.85rem',

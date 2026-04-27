@@ -105,7 +105,7 @@ export function Header() {
               </Link>
               <Link
                 href="/register"
-                style={{ ...linkBtnStyle, background: 'var(--accent)', color: '#0f172a', borderColor: 'transparent' }}
+                style={{ ...linkBtnStyle, background: 'var(--accent)', color: 'var(--accent-fg)', borderColor: 'transparent' }}
               >
                 회원가입
               </Link>
