@@ -1,20 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type IORedis from 'ioredis';
 
+import {
+  RedisRateLimiter,
+  type RateLimitResult as GenericResult,
+} from '../../shared/rate-limit/redis-rate-limiter';
+
 /**
  * ADR-016 §레이트리밋 — grading_appeals 제출 rate limit.
  *
- * 기본값: 분당 10회 / 일당 5회.
+ * ADR-020 §4.3 (PR-6) 에서 일반화 `RedisRateLimiter` 위 thin wrapper 로 재작성.
+ * 외부 시그니처 (check 결과의 `minuteCount`/`dayCount`) 와 키 구조
+ * (`rate:appeal:{userId}:min:{floor(ts/60000)}` / `rate:appeal:{userId}:day:{YYYY-MM-DD}`)
+ * 은 회귀 0 을 위해 어댑터 계층에서 변환.
  *
- * 구현:
- *  - Redis INCR + EXPIRE (first increment 시 TTL 설정).
- *  - Key 구조:
- *    - minute: `rate:appeal:{userId}:min:{floor(ts/60000)}`
- *    - day:    `rate:appeal:{userId}:day:{YYYY-MM-DD}`
- *  - Atomic 보장은 약함 (race 시 ±1 오차). 부트캠프 규모에서 정확도 > 실용 균형으로 수용.
- *  - 상한 초과 시 INCR 한 count 는 rollback 하지 않음 — 다음 window 에서 자연 리셋.
- *
- * ADR-018 §8 금지 2 준수: `userId` 는 평문 사용. `user_token_hash` 를 key 에 포함하지 않음.
+ * 기본값: 분당 10 / 일당 5 (ADR-016 §레이트리밋).
  */
 
 export const APPEAL_RATE_LIMIT_PER_MINUTE = 10;
@@ -30,48 +30,31 @@ export interface RateLimitResult {
 @Injectable()
 export class AppealRateLimiter {
   private readonly logger = new Logger(AppealRateLimiter.name);
+  private readonly inner: RedisRateLimiter;
 
-  constructor(private readonly redis: IORedis) {}
+  constructor(redis: IORedis) {
+    this.inner = new RedisRateLimiter(redis, {
+      kind: 'appeal',
+      limits: {
+        minute: APPEAL_RATE_LIMIT_PER_MINUTE,
+        day: APPEAL_RATE_LIMIT_PER_DAY,
+      },
+    });
+  }
 
   async check(userId: string, now: Date = new Date()): Promise<RateLimitResult> {
-    const minuteKey = this.minuteKey(userId, now);
-    const dayKey = this.dayKey(userId, now);
+    const r = await this.inner.check(userId, now);
+    return adapt(r);
+  }
+}
 
-    const minuteCount = await this.redis.incr(minuteKey);
-    if (minuteCount === 1) {
-      await this.redis.expire(minuteKey, 120); // 2분 TTL (안전 마진)
-    }
-
-    const dayCount = await this.redis.incr(dayKey);
-    if (dayCount === 1) {
-      await this.redis.expire(dayKey, 86400);
-    }
-
-    if (minuteCount > APPEAL_RATE_LIMIT_PER_MINUTE) {
-      this.logger.warn(
-        `appeal rate limit (minute) exceeded for user=${userId}: ${minuteCount}/${APPEAL_RATE_LIMIT_PER_MINUTE}`,
-      );
-      return { allowed: false, reason: 'minute_exceeded', minuteCount, dayCount };
-    }
-
-    if (dayCount > APPEAL_RATE_LIMIT_PER_DAY) {
-      this.logger.warn(
-        `appeal rate limit (day) exceeded for user=${userId}: ${dayCount}/${APPEAL_RATE_LIMIT_PER_DAY}`,
-      );
-      return { allowed: false, reason: 'day_exceeded', minuteCount, dayCount };
-    }
-
+function adapt(r: GenericResult): RateLimitResult {
+  const minuteCount = r.counts.minute ?? 0;
+  const dayCount = r.counts.day ?? 0;
+  if (r.allowed) {
     return { allowed: true, minuteCount, dayCount };
   }
-
-  private minuteKey(userId: string, now: Date): string {
-    return `rate:appeal:${userId}:min:${Math.floor(now.getTime() / 60000)}`;
-  }
-
-  private dayKey(userId: string, now: Date): string {
-    const yyyy = now.getUTCFullYear();
-    const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(now.getUTCDate()).padStart(2, '0');
-    return `rate:appeal:${userId}:day:${yyyy}-${mm}-${dd}`;
-  }
+  // appeal 정책상 reason 은 minute_exceeded | day_exceeded 두 가지만 발생.
+  const reason = r.reason as 'minute_exceeded' | 'day_exceeded';
+  return { allowed: false, reason, minuteCount, dayCount };
 }
