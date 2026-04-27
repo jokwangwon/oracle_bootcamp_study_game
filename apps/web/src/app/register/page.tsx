@@ -136,7 +136,7 @@ const buttonStyle: React.CSSProperties = {
   background: 'var(--accent)',
   border: 'none',
   borderRadius: 8,
-  color: '#0f172a',
+  color: 'var(--accent-fg)',
   fontWeight: 700,
   cursor: 'pointer',
   width: '100%',
