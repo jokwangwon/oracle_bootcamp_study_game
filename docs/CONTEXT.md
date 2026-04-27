@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-24 저녁 (**Session 7 완결 — 13 PR 누적 / 3+1 합의 2회 / ADR-019 구현 완결 + ADR-020 초안 확정**): 오전 (PR #14~#17) Session 6 free-form 배선 + hotfix + D3 대칭. 오후 (PR #18~#23) ADR-019 SM-2 Spaced Repetition PR-1~6 순차 완결 + PR #24 docs 갱신. 저녁 (PR #25, #26) 오답 노트 + UX v2 좌측 사이드바 블로그 스타일 + ADR-020 UX 재설계 초안 (consensus-009 합의율 63% / Agent B 단독 CRITICAL 5건 Session 4 룰 전원 채택 / Reviewer 축자 검증 / 사용자 Q10~Q15 확정). **695 → 936 + 1 skipped (+241 tests)**. `ENABLE_FREE_FORM_GRADING=false` 프로덕션 기본 유지. **다음 세션**: ADR-020 12 PR 로드맵 착수 — 권장 시작 PR-6 (`@nestjs/throttler` auth rate limit) 또는 PR-7 (pre-commit Layer 3-a3 재귀) — 독립 병렬 + 보안 즉시 이득. 또는 PR-1 (Tailwind 인프라) 순차.
+**최종 업데이트**: 2026-04-27 (**Session 8 — ADR-020 12 PR 로드맵 본격 착수, 5 PR open**): PR #27 (PR-6 auth rate limit, CRITICAL-B3, 독립) + 4-stack [PR #28 (PR-1 Tailwind 인프라) → PR #29 (PR-2 theme token + light) → PR #30 (PR-4 next-themes 토글) → PR #31 (PR-5 shadcn init + 6 컴포넌트, `--accent`→`--brand` rename 22 위치)]. **936 → 955 + 1 skipped (+19 tests)**. tailscale 외부 노트북 검증 2회 (PR-4 / PR-5). 사용자 디자인 평가 ("카드/배너/색감 밋밋") → 진짜 시각 변경은 **PR-8 부터** (Header + 홈 + 로그인 + 회원가입 Tailwind 마이그레이션). **다음 세션**: PR #27~#31 머지 후 PR-8 진행 + 평가 사이클 시작.
 
 ---
 
@@ -190,18 +190,35 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-**0순위 — PR #25 (오답 노트) + PR #26 (ADR-020 docs) 머지 확인**
-- 사용자 리뷰 대기 중. 머지되면 main 동기화 후 다음 착수.
+**0순위 — PR #27 / #28 / #29 / #30 / #31 머지 (5 PR open)**
 
-**1순위 — ADR-020 UX 재설계 12 PR 로드맵 착수**
+머지 순서 (4-stack 자동 rebase):
+1. PR #27 (PR-6 auth rate limit) — 독립
+2. PR #28 (PR-1 Tailwind 인프라) → 머지 시 PR #29 base 자동 main
+3. PR #29 (PR-2 theme token) → 머지 시 PR #30 base 자동 main
+4. PR #30 (PR-4 next-themes 토글)
+5. PR #31 (PR-5 shadcn init + 6 컴포넌트)
 
-권장 시작 (독립 병렬 가능, 보안 즉시 이득):
-- **PR-6**: `@nestjs/throttler` + auth rate limit + `RedisRateLimiter` 일반화 (CRITICAL-B3 해소)
-- **PR-7**: pre-commit Layer 3-a3 재귀 glob + pii-regression 확장 (CRITICAL-B5 해소)
+머지 후 main 동기화 → docker compose `web` + `api` 재빌드 (api 는 PR-6 적용).
 
-순차 시작 대안:
-- **PR-1**: Tailwind v3.4 + postcss + utils 설치 (인프라 선행)
-- **PR-2**: CSS 변수 → Tailwind theme 브리지 + light 팔레트
+**1순위 — PR-8 (Header + 홈 + 로그인 + 회원가입 Tailwind 마이그레이션, PR-5 의존)**
+
+ADR-020 §6 PR-8. **카드/배너/색감 첫 본격 변경 — 사용자 평가 사이클 시작점**:
+- `Header.tsx` inline-style → Tailwind utility + shadcn `Button` (필요 시)
+- `app/page.tsx` 홈 카드 그리드 → shadcn `Card` 또는 Tailwind 카드 패턴
+- `login/page.tsx` / `register/page.tsx` → shadcn `Input` / `Label` / `Button` + Card 레이아웃
+
+**2순위 — 보안 게이트 (독립 병렬, 시각 변경 0)**
+- **PR-3** (CRITICAL-B1) — `helmet` + CSP
+- **PR-7** (CRITICAL-B5) — pre-commit Layer 3-a3 재귀 + pii-regression 확장
+
+**3순위 — ADR-020 §3.3 spec 패치 (docs)**
+`--accent` → `--brand` rename + `--accent-fg` 토큰 추가는 PR-2/PR-5 에서 이행됐지만 ADR-020 §3.3 본문에는 미반영. §11 (변경 기록) 추가 필요.
+
+**4순위 — 디자인 평가 후속 (조건부, PR-8 이후)**
+- (a) 색감/타이포 보강 → 토큰 패치 (가벼움)
+- (b) 컴포넌트 라이브러리 보강 → 21st.dev / Magic UI MCP 도입 검토 (3+1 합의 가동 가능)
+- (c) 디자인 도구 도입 → TweakCN / v0.dev (별도 ADR-022 가칭)
 
 **전체 12 PR 로드맵** (ADR-020 §6 참조):
 1. Tailwind 인프라
