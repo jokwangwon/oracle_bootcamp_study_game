@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-27 (**Session 8 — ADR-020 12 PR 로드맵 본격 착수, 5 PR open**): PR #27 (PR-6 auth rate limit, CRITICAL-B3, 독립) + 4-stack [PR #28 (PR-1 Tailwind 인프라) → PR #29 (PR-2 theme token + light) → PR #30 (PR-4 next-themes 토글) → PR #31 (PR-5 shadcn init + 6 컴포넌트, `--accent`→`--brand` rename 22 위치)]. **936 → 955 + 1 skipped (+19 tests)**. tailscale 외부 노트북 검증 2회 (PR-4 / PR-5). 사용자 디자인 평가 ("카드/배너/색감 밋밋") → 진짜 시각 변경은 **PR-8 부터** (Header + 홈 + 로그인 + 회원가입 Tailwind 마이그레이션). **다음 세션**: PR #27~#31 머지 후 PR-8 진행 + 평가 사이클 시작.
+**최종 업데이트**: 2026-04-28 (**Session 9 — ADR-020 PR-8 + PR-8b 시안 D 메인 페이지 통합 완성, 3 PR 머지**): PR #33 (stack 머지 누락 PR-2/4/5 cherry-pick 복구) + PR #34 (PR-8 Header + 홈 + 로그인/회원가입 Tailwind 마이그레이션) + PR #35 (**PR-8b 시안 D 통합 — Hero 3-layer 글라스 패널 + Journey strip + 비대칭 카드 + 페이지 배경 블롭**, Apple Vision 톤). 신규 디자인 문서 2종 (`main-page-design-brief.md` + `main-page-redesign-concept-d.md`). 신규 토큰 5종 + Tailwind 매핑 3종. **테스트 955+1s 그대로 (web 변경 only)**. 외부 노트북 검증 4회. **다음 세션**: 보안 게이트 (PR-3 helmet+CSP / PR-7 pre-commit 재귀) 또는 PR-9 (`/play/solo` Tailwind) 또는 시안 D mock → 실 API 연결.
 
 ---
 
@@ -160,6 +160,11 @@ Phase 4: 통합 테스트 + 배포
   - PR-4 (`0996536`, PR #21) — `findDue` (review_queue JOIN questions) + `countDueForUser` + `pickQuestionsForSolo` `srLimit=ceil(rounds*0.7)` + `QuestionPoolService.pickRandom` excludeIds 옵션 + `GET /games/solo/review-queue`. 855 → 880+1s (+25).
   - PR-5 (`49ec20a`, PR #22) — Next.js `ReviewBadge` 컴포넌트 + `apiClient.solo.reviewQueue` + `/play/solo` config 단계 상단 배치. 로딩/에러 silent, 0건도 표시, aria-label 접근성.
   - PR-6 (`d7a2ac8`, PR #23) — `sr_metrics_daily` 테이블 + migration 1714000008000 + `SrMetricsService.computeMetrics` / `snapshotDaily` + `@Cron(EVERY_DAY_AT_MIDNIGHT)` + `evaluateSrMetricBreaches` pure fn + `sr_metric_breach` 이벤트. Primary retention / Secondary completion / Guard low_rate 3지표. 880 → 908+1s (+28).
+- ✅ **Session 8 — ADR-020 PR-1/2/4/5/6 5 PR (2026-04-27)** — Tailwind 인프라 / theme token / next-themes / shadcn init / auth rate limit. 936 → 955+1s (+19). 단, PR #29/#30/#31 (PR-2/4/5) 가 stack 부모 feature 브랜치에 머지되어 main 미반영 (Session 9 PR #33 으로 복구).
+- ✅ **Session 9 — ADR-020 PR-8 + PR-8b 시안 D 통합 (2026-04-28, 3 PR)** —
+  - PR #33 (`a6713da`) — stack 머지 누락 PR-2/4/5 cherry-pick 복구 (3 commit)
+  - PR #34 (`994e30b`, PR-8) — Header + 홈 + 로그인/회원가입 Tailwind 마이그레이션. inline-style → Tailwind utility + shadcn Button/Card/Input/Label
+  - PR #35 (`76e4086`, PR-8b 시안 D 통합) — Hero 3-layer 글라스 패널 + Journey strip 20-day + 비대칭 1.4:1:1 카드 + 페이지 배경 블롭. Apple Vision 톤 (사용자 결정). 신규 토큰 5종 (`--brand-strong` / `--code-bg` / `--code-tab-bg` / `--syntax-blank` / `--syntax-blank-fg`) + Tailwind 매핑 3종 (`brand-gradient` / `grid-cols-20` / code+syntax colors). 신규 web 6 파일 (`lib/home/{types,mock,data}.ts` + `components/home/{hero-live-panel,journey-strip,feature-cards}.tsx`). 신규 디자인 문서 2종 (`main-page-design-brief.md` 외부 핸드오프 + `main-page-redesign-concept-d.md` 시안 D 명세). ADR-020 §11 변경 기록 2행. 외부 노트북 검증 4회.
 - 🔴 MVP-C (3주) — 주차별 미니 캡스톤 + 3-entity + 주제 팩 4종 + MT7. ADR-014
 - 🔴 MVP-C' (2주) — 최종 캡스톤 2트랙(SQL/PL-SQL). ADR-014
 - 🔴 MVP-D (2주) — 주간 릴리스 cron + grading_appeals UI + mc-distractor assertion. ADR-015/016/017
@@ -190,35 +195,46 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-**0순위 — PR #27 / #28 / #29 / #30 / #31 머지 (5 PR open)**
+**0순위 — 시안 D 평가 후속 (조건부)**
 
-머지 순서 (4-stack 자동 rebase):
-1. PR #27 (PR-6 auth rate limit) — 독립
-2. PR #28 (PR-1 Tailwind 인프라) → 머지 시 PR #29 base 자동 main
-3. PR #29 (PR-2 theme token) → 머지 시 PR #30 base 자동 main
-4. PR #30 (PR-4 next-themes 토글)
-5. PR #31 (PR-5 shadcn init + 6 컴포넌트)
+외부 노트북 평가 결과에 따라:
+- (a) 토큰 패치 (색감/스페이싱/대비) — 가벼운 폴리시 PR
+- (b) 미세 조정 (모바일 reflow, 글라스 GPU 부하 등) — concept-d §13 미해결 항목
+- (c) 만족 시 다음 PR 진행
 
-머지 후 main 동기화 → docker compose `web` + `api` 재빌드 (api 는 PR-6 적용).
+**1순위 — ADR-020 §6 남은 PR**
 
-**1순위 — PR-8 (Header + 홈 + 로그인 + 회원가입 Tailwind 마이그레이션, PR-5 의존)**
-
-ADR-020 §6 PR-8. **카드/배너/색감 첫 본격 변경 — 사용자 평가 사이클 시작점**:
-- `Header.tsx` inline-style → Tailwind utility + shadcn `Button` (필요 시)
-- `app/page.tsx` 홈 카드 그리드 → shadcn `Card` 또는 Tailwind 카드 패턴
-- `login/page.tsx` / `register/page.tsx` → shadcn `Input` / `Label` / `Button` + Card 레이아웃
-
-**2순위 — 보안 게이트 (독립 병렬, 시각 변경 0)**
-- **PR-3** (CRITICAL-B1) — `helmet` + CSP
+**보안 게이트 (CRITICAL, 시각 변경 0, 독립 병렬)**:
+- **PR-3** (CRITICAL-B1) — `helmet` + CSP + Next.js `headers()`
 - **PR-7** (CRITICAL-B5) — pre-commit Layer 3-a3 재귀 + pii-regression 확장
 
-**3순위 — ADR-020 §3.3 spec 패치 (docs)**
-`--accent` → `--brand` rename + `--accent-fg` 토큰 추가는 PR-2/PR-5 에서 이행됐지만 ADR-020 §3.3 본문에는 미반영. §11 (변경 기록) 추가 필요.
+**UX 후속**:
+- **PR-9** — `/play/solo` Tailwind 마이그레이션 (PR-8b 글라스 톤 재사용 가능)
 
-**4순위 — 디자인 평가 후속 (조건부, PR-8 이후)**
-- (a) 색감/타이포 보강 → 토큰 패치 (가벼움)
-- (b) 컴포넌트 라이브러리 보강 → 21st.dev / Magic UI MCP 도입 검토 (3+1 합의 가동 가능)
-- (c) 디자인 도구 도입 → TweakCN / v0.dev (별도 ADR-022 가칭)
+**대규모 (PR-3, PR-6 의존)**:
+- **PR-10** — httpOnly 쿠키 + refresh + CSRF + R4 discussion + sanitize-html (CRITICAL-B2 + C-B4 부분, 3d 추정). 머지 시 `lib/home/data.ts` RSC 로 환원 가능
+- **PR-11** — R6 vote UNIQUE + self-vote CHECK + race (CRITICAL-B4)
+- **PR-12** — discussion 페이지 + VoteButton + rehype-sanitize (CRITICAL-B1)
+
+**2순위 — 시안 D mock → 실 API 연결**
+
+`lib/home/data.ts` 가 mock 반환. 실 데이터 연결 시점:
+- `todayQuestion` — 챕터 시드 + AI 생성 후 오늘 챕터 추출
+- `ticker` — Phase B 운영 모니터링 또는 별도 endpoint
+- `journey` — `user_progress` 집계
+- `cards.primary.chapterProgress` — 동일
+- `cards.ranking` — 기존 ranking endpoint (현재 `/rankings` 미구현)
+- `streak` — 별도 ADR + 백엔드 PR (concept-d §13)
+
+**3순위 — ADR-019 24h 관측 결과**
+
+24h 후 `@Cron(EVERY_DAY_AT_MIDNIGHT)` 자동 실행 확인: `sr_metrics_daily` 1행 INSERT.
+SR 혼합 편성 실사용 피드백 (2회차 이후 due 우선 편성).
+
+**4순위 — Session 8+ 기술 부채 (이월)**
+
+- `Round.startedAt: number` 필드 + `timeTakenMs = answer.submittedAt - round.startedAt` + 프론트 epoch ms 전송 (ADR-019 §8.1)
+- 해소 후 quality 공식 `timePenalty` 재도입 평가 (현재 Q5=a 로 제거됨)
 
 **전체 12 PR 로드맵** (ADR-020 §6 참조):
 1. Tailwind 인프라
