@@ -103,33 +103,41 @@ function SoloPlayPageInner() {
     });
   }, []);
 
-  const startGame = useCallback(async () => {
-    if (!token) return;
-    const [primaryMode] = config.modes;
-    if (!primaryMode) return;
-    setError(null);
-    setFinishResponse(null);
-    setStarting(true);
-    try {
-      // 시안 β §4.2 — 백엔드 변경 전 단계: modes[0] / difficulty ?? 'EASY' 로 변환해
-      // 기존 시그니처 호환. 트랙별 라운드 mix / 적응형 난이도는 별도 백엔드 PR.
-      const data = await apiClient.solo.start(token, {
-        topic: config.topic,
-        week: config.week,
-        gameMode: primaryMode,
-        difficulty: config.difficulty ?? 'EASY',
-        rounds: 10,
-      });
-      setRounds(data);
-      setResults([]);
-      setCurrentIndex(0);
-      setPhase('playing');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setStarting(false);
-    }
-  }, [token, config]);
+  // 시안 ε §3.1.4 (Session 12 변경) — `overrides` 인자로 호출자가 임시 config 덮어쓰기.
+  // `추천으로 시작` / `이어서 학습` CTA 가 setConfig + startGame 을 한 번에 호출.
+  // setState 비동기성 회피 — `effective` 로 즉시 시작 + 시각 동기화는 setConfig 별도.
+  const startGame = useCallback(
+    async (overrides?: Partial<SoloConfigSelection>) => {
+      if (!token) return;
+      const effective: SoloConfigSelection = overrides ? { ...config, ...overrides } : config;
+      const [primaryMode] = effective.modes;
+      if (!primaryMode) return;
+      setError(null);
+      setFinishResponse(null);
+      setStarting(true);
+      if (overrides) setConfig(effective);
+      try {
+        // 시안 β §4.2 — 백엔드 변경 전 단계: modes[0] / difficulty ?? 'EASY' 로 변환해
+        // 기존 시그니처 호환. 트랙별 라운드 mix / 적응형 난이도는 별도 백엔드 PR.
+        const data = await apiClient.solo.start(token, {
+          topic: effective.topic,
+          week: effective.week,
+          gameMode: primaryMode,
+          difficulty: effective.difficulty ?? 'EASY',
+          rounds: 10,
+        });
+        setRounds(data);
+        setResults([]);
+        setCurrentIndex(0);
+        setPhase('playing');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Unknown error');
+      } finally {
+        setStarting(false);
+      }
+    },
+    [token, config],
+  );
 
   // 'finished' 진입 시 1회 server에 세션 결과 제출
   // (StrictMode로 useEffect가 두 번 실행될 수 있으므로 ref로 1회 제한)
@@ -196,13 +204,13 @@ function SoloPlayPageInner() {
           recommendedAccuracyPct={MOCK_RECOMMENDED_ACCURACY_PCT}
           weeklyXpDelta={MOCK_WEEKLY_XP_DELTA}
           onRecommendedStart={() => {
-            setConfig((prev) => ({ ...prev, week: MOCK_CURRENT_BOOTCAMP_DAY }));
+            void startGame({ week: MOCK_CURRENT_BOOTCAMP_DAY });
           }}
           onResumeSession={(() => {
             const last = MOCK_LAST_SESSION;
             if (!last) return undefined;
             return () => {
-              setConfig((prev) => ({ ...prev, topic: last.topic, week: last.day }));
+              void startGame({ topic: last.topic, week: last.day });
             };
           })()}
         />
@@ -236,7 +244,9 @@ function SoloPlayPageInner() {
         <div className="flex flex-wrap gap-2 items-center">
           <Button
             type="button"
-            onClick={startGame}
+            onClick={() => {
+              void startGame();
+            }}
             disabled={startDisabled}
             className="flex-1 min-w-[140px] bg-brand-gradient text-brand-fg disabled:opacity-50"
           >
