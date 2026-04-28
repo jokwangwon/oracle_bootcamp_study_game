@@ -4,11 +4,22 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import {
+  DataSource,
+  IsNull,
+  LessThan,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 
 import { DiscussionPostEntity } from './entities/discussion-post.entity';
 import { DiscussionThreadEntity } from './entities/discussion-thread.entity';
+import {
+  DiscussionVoteEntity,
+  type DiscussionVoteTarget,
+  type DiscussionVoteValue,
+} from './entities/discussion-vote.entity';
 import { sanitizePostBody, sanitizeTitle } from './sanitize-post-body';
 
 /**
@@ -46,6 +57,15 @@ export type CreatePostDto = { body: string; parentId?: string | null };
 export type UpdatePostDto = { body: string };
 export type ListPostsOpts = { parentId?: string | null };
 
+export type CastVoteDto = {
+  targetType: DiscussionVoteTarget;
+  targetId: string;
+  value: -1 | 0 | 1;
+};
+
+/** PG SQLSTATE 23514 = check_violation. self-vote 트리거의 ERRCODE. */
+const PG_CHECK_VIOLATION = '23514';
+
 @Injectable()
 export class DiscussionService {
   constructor(
@@ -53,6 +73,10 @@ export class DiscussionService {
     private readonly threadRepo: Repository<DiscussionThreadEntity>,
     @InjectRepository(DiscussionPostEntity)
     private readonly postRepo: Repository<DiscussionPostEntity>,
+    @InjectRepository(DiscussionVoteEntity)
+    private readonly voteRepo: Repository<DiscussionVoteEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly opts: { now?: () => Date } = {},
   ) {}
 
@@ -227,5 +251,117 @@ export class DiscussionService {
     if (!existing) throw new NotFoundException('post_not_found');
     if (existing.authorId !== authorId) throw new ForbiddenException('discussion_idor');
     await this.postRepo.update({ id: postId }, { isDeleted: true });
+  }
+
+  // ─────────────────────────── Vote / Accept (Phase 4c) ──────────────────────
+
+  /**
+   * §5.3 POST /api/discussion/vote — 동일 트랜잭션 안에서 vote UPSERT/DELETE +
+   * target.score 원자 increment (Q1=a/Q8=a). value=0 이면 철회 (멱등 — Q7=a).
+   *
+   * self-vote 트리거(1714000012000) 위반 (ERRCODE=23514) → ForbiddenException
+   * 변환 (Q4=a). 그 외 PG 에러는 그대로 전파.
+   */
+  async castVote(
+    userId: string,
+    dto: CastVoteDto,
+  ): Promise<{ change: number }> {
+    return this.dataSource.transaction(async (manager) => {
+      const existing = await manager.findOne(DiscussionVoteEntity, {
+        where: {
+          userId,
+          targetType: dto.targetType,
+          targetId: dto.targetId,
+        },
+      });
+      const oldValue = existing?.value ?? 0;
+      const newValue = dto.value;
+
+      // 동일 (또는 둘 다 0) → noop. value=0 + existing=null 케이스 포함.
+      if (oldValue === newValue) return { change: 0 };
+
+      const targetEntity =
+        dto.targetType === 'thread' ? DiscussionThreadEntity : DiscussionPostEntity;
+      const change = newValue - oldValue;
+
+      try {
+        if (newValue === 0) {
+          await manager.delete(DiscussionVoteEntity, {
+            userId,
+            targetType: dto.targetType,
+            targetId: dto.targetId,
+          });
+        } else if (existing) {
+          await manager.update(
+            DiscussionVoteEntity,
+            {
+              userId,
+              targetType: dto.targetType,
+              targetId: dto.targetId,
+            },
+            { value: newValue as DiscussionVoteValue },
+          );
+        } else {
+          await manager.insert(DiscussionVoteEntity, {
+            userId,
+            targetType: dto.targetType,
+            targetId: dto.targetId,
+            value: newValue as DiscussionVoteValue,
+          });
+        }
+
+        await manager.increment(
+          targetEntity,
+          { id: dto.targetId },
+          'score',
+          change,
+        );
+      } catch (err) {
+        if (
+          err instanceof QueryFailedError &&
+          (err.driverError as { code?: string } | undefined)?.code ===
+            PG_CHECK_VIOLATION
+        ) {
+          throw new ForbiddenException('self_vote_forbidden');
+        }
+        throw err;
+      }
+
+      return { change };
+    });
+  }
+
+  /**
+   * §5.3 POST /api/discussion/posts/:postId/accept — thread author only.
+   *
+   * Q6=a 1-accept rule: thread 안에 isAccepted=true 인 post 가 0 또는 1개. 새
+   * accept 시 같은 thread 의 기존 accepted 모두 false 후 본 post true. 이미
+   * accepted 인 post 재호출은 noop. unaccept 별도 endpoint 없음.
+   */
+  async acceptPost(userId: string, postId: string): Promise<void> {
+    const post = await this.postRepo.findOne({ where: { id: postId } });
+    if (!post) throw new NotFoundException('post_not_found');
+
+    const thread = await this.threadRepo.findOne({ where: { id: post.threadId } });
+    if (!thread || thread.authorId !== userId) {
+      throw new ForbiddenException('discussion_idor');
+    }
+
+    if (post.isAccepted) return; // 1-accept rule + 멱등.
+
+    await this.dataSource.transaction(async (manager) => {
+      // (1) 같은 thread 의 기존 accepted post 모두 unaccept.
+      await manager.update(
+        DiscussionPostEntity,
+        { threadId: post.threadId, isAccepted: true },
+        { isAccepted: false },
+      );
+      // (2) 본 post accept.
+      await manager.update(
+        DiscussionPostEntity,
+        { id: postId },
+        { isAccepted: true },
+      );
+    });
   }
 }

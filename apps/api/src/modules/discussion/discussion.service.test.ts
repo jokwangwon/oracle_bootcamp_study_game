@@ -1,10 +1,12 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { QueryFailedError } from 'typeorm';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { IsNull, type Repository } from 'typeorm';
+import { IsNull, type DataSource, type EntityManager, type Repository } from 'typeorm';
 
 import { DiscussionService, type ThreadCursor } from './discussion.service';
 import { DiscussionPostEntity } from './entities/discussion-post.entity';
 import { DiscussionThreadEntity } from './entities/discussion-thread.entity';
+import { DiscussionVoteEntity } from './entities/discussion-vote.entity';
 
 /**
  * PR-10b Phase 4a — DiscussionService Thread CRUD.
@@ -46,10 +48,44 @@ function makeRepo(): MockRepo {
   };
 }
 
-function makeService(threadRepo: MockRepo, postRepo: MockRepo = makeRepo()) {
+type MockManager = {
+  findOne: ReturnType<typeof vi.fn>;
+  insert: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+  increment: ReturnType<typeof vi.fn>;
+};
+
+function makeManager(overrides: Partial<MockManager> = {}): MockManager {
+  return {
+    findOne: vi.fn(),
+    insert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    increment: vi.fn(),
+    ...overrides,
+  };
+}
+
+function makeDataSource(manager: MockManager) {
+  return {
+    transaction: vi.fn(async (cb: (m: EntityManager) => unknown) => {
+      return cb(manager as unknown as EntityManager);
+    }),
+  } as unknown as DataSource;
+}
+
+function makeService(
+  threadRepo: MockRepo,
+  postRepo: MockRepo = makeRepo(),
+  voteRepo: MockRepo = makeRepo(),
+  ds: DataSource = makeDataSource(makeManager()),
+) {
   return new DiscussionService(
     threadRepo as unknown as Repository<DiscussionThreadEntity>,
     postRepo as unknown as Repository<DiscussionPostEntity>,
+    voteRepo as unknown as Repository<DiscussionVoteEntity>,
+    ds,
     { now: () => NOW },
   );
 }
@@ -303,6 +339,282 @@ describe('DiscussionService — Thread CRUD (Phase 4a)', () => {
       );
       expect(threadRepo.update).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('DiscussionService — castVote (Phase 4c)', () => {
+  let threadRepo: MockRepo;
+  let postRepo: MockRepo;
+  let voteRepo: MockRepo;
+  let manager: MockManager;
+  let ds: DataSource;
+
+  beforeEach(() => {
+    threadRepo = makeRepo();
+    postRepo = makeRepo();
+    voteRepo = makeRepo();
+    manager = makeManager();
+    ds = makeDataSource(manager);
+  });
+
+  describe('UPSERT + atomic score increment (Q1=a / Q8=a)', () => {
+    it('value=+1, existing=null → INSERT vote + increment(+1)', async () => {
+      manager.findOne.mockResolvedValue(null);
+      manager.insert.mockResolvedValue({ identifiers: [{}], raw: [], generatedMaps: [] });
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      const out = await service.castVote(USER_ID, {
+        targetType: 'post',
+        targetId: POST_ID,
+        value: 1,
+      });
+
+      expect(manager.insert).toHaveBeenCalledOnce();
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(manager.delete).not.toHaveBeenCalled();
+      expect(manager.increment).toHaveBeenCalledOnce();
+      const incArgs = manager.increment.mock.calls[0]!;
+      expect(incArgs[0]).toBe(DiscussionPostEntity); // target=post
+      expect(incArgs[1]).toEqual({ id: POST_ID });
+      expect(incArgs[2]).toBe('score');
+      expect(incArgs[3]).toBe(1);
+      expect(out.change).toBe(1);
+    });
+
+    it('value=-1, existing=null → INSERT vote + increment(-1)', async () => {
+      manager.findOne.mockResolvedValue(null);
+      manager.insert.mockResolvedValue({ identifiers: [{}], raw: [], generatedMaps: [] });
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      const out = await service.castVote(USER_ID, {
+        targetType: 'post',
+        targetId: POST_ID,
+        value: -1,
+      });
+
+      expect(manager.insert).toHaveBeenCalledOnce();
+      expect(manager.increment.mock.calls[0]![3]).toBe(-1);
+      expect(out.change).toBe(-1);
+    });
+
+    it('value=+1, existing=+1 (동일) → noop (insert/update/delete/increment 모두 미호출)', async () => {
+      manager.findOne.mockResolvedValue({
+        userId: USER_ID,
+        targetType: 'post',
+        targetId: POST_ID,
+        value: 1,
+      });
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      const out = await service.castVote(USER_ID, {
+        targetType: 'post',
+        targetId: POST_ID,
+        value: 1,
+      });
+
+      expect(manager.insert).not.toHaveBeenCalled();
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(manager.delete).not.toHaveBeenCalled();
+      expect(manager.increment).not.toHaveBeenCalled();
+      expect(out.change).toBe(0);
+    });
+
+    it('value=+1, existing=-1 (toggle) → UPDATE + increment(+2)', async () => {
+      manager.findOne.mockResolvedValue({
+        userId: USER_ID,
+        targetType: 'post',
+        targetId: POST_ID,
+        value: -1,
+      });
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      const out = await service.castVote(USER_ID, {
+        targetType: 'post',
+        targetId: POST_ID,
+        value: 1,
+      });
+
+      expect(manager.update).toHaveBeenCalledOnce();
+      expect(manager.insert).not.toHaveBeenCalled();
+      expect(manager.delete).not.toHaveBeenCalled();
+      expect(manager.increment.mock.calls[0]![3]).toBe(2);
+      expect(out.change).toBe(2);
+    });
+
+    it('value=-1, existing=+1 (toggle) → UPDATE + increment(-2)', async () => {
+      manager.findOne.mockResolvedValue({
+        userId: USER_ID,
+        targetType: 'post',
+        targetId: POST_ID,
+        value: 1,
+      });
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      const out = await service.castVote(USER_ID, {
+        targetType: 'post',
+        targetId: POST_ID,
+        value: -1,
+      });
+
+      expect(manager.update).toHaveBeenCalledOnce();
+      expect(manager.increment.mock.calls[0]![3]).toBe(-2);
+      expect(out.change).toBe(-2);
+    });
+
+    it('value=0, existing=+1 → DELETE + increment(-1)', async () => {
+      manager.findOne.mockResolvedValue({
+        userId: USER_ID,
+        targetType: 'post',
+        targetId: POST_ID,
+        value: 1,
+      });
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      const out = await service.castVote(USER_ID, {
+        targetType: 'post',
+        targetId: POST_ID,
+        value: 0,
+      });
+
+      expect(manager.delete).toHaveBeenCalledOnce();
+      expect(manager.insert).not.toHaveBeenCalled();
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(manager.increment.mock.calls[0]![3]).toBe(-1);
+      expect(out.change).toBe(-1);
+    });
+
+    it('value=0, existing=null → noop (Q7=a 멱등 철회)', async () => {
+      manager.findOne.mockResolvedValue(null);
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      const out = await service.castVote(USER_ID, {
+        targetType: 'post',
+        targetId: POST_ID,
+        value: 0,
+      });
+
+      expect(manager.insert).not.toHaveBeenCalled();
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(manager.delete).not.toHaveBeenCalled();
+      expect(manager.increment).not.toHaveBeenCalled();
+      expect(out.change).toBe(0);
+    });
+
+    it('targetType=thread → increment 가 DiscussionThreadEntity 대상으로 호출', async () => {
+      manager.findOne.mockResolvedValue(null);
+      manager.insert.mockResolvedValue({ identifiers: [{}], raw: [], generatedMaps: [] });
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      await service.castVote(USER_ID, {
+        targetType: 'thread',
+        targetId: THREAD_ID,
+        value: 1,
+      });
+
+      const incArgs = manager.increment.mock.calls[0]!;
+      expect(incArgs[0]).toBe(DiscussionThreadEntity);
+      expect(incArgs[1]).toEqual({ id: THREAD_ID });
+    });
+  });
+
+  describe('self-vote 트리거 매핑 (Q4=a)', () => {
+    it('PG QueryFailedError code=23514 (check_violation) → ForbiddenException', async () => {
+      manager.findOne.mockResolvedValue(null);
+      const pgError = new QueryFailedError(
+        'INSERT INTO discussion_votes',
+        [],
+        Object.assign(new Error('self-vote prohibited'), { code: '23514' }),
+      );
+      manager.insert.mockRejectedValue(pgError);
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      await expect(
+        service.castVote(USER_ID, { targetType: 'post', targetId: POST_ID, value: 1 }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('다른 PG 에러 (code !== 23514) 는 그대로 전파 (오진 방지)', async () => {
+      manager.findOne.mockResolvedValue(null);
+      const pgError = new QueryFailedError(
+        'INSERT INTO discussion_votes',
+        [],
+        Object.assign(new Error('connection lost'), { code: '08006' }),
+      );
+      manager.insert.mockRejectedValue(pgError);
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      await expect(
+        service.castVote(USER_ID, { targetType: 'post', targetId: POST_ID, value: 1 }),
+      ).rejects.toBeInstanceOf(QueryFailedError);
+    });
+  });
+});
+
+describe('DiscussionService — acceptPost (Phase 4c, Q6=a 1-accept rule)', () => {
+  let threadRepo: MockRepo;
+  let postRepo: MockRepo;
+  let voteRepo: MockRepo;
+  let manager: MockManager;
+  let ds: DataSource;
+
+  beforeEach(() => {
+    threadRepo = makeRepo();
+    postRepo = makeRepo();
+    voteRepo = makeRepo();
+    manager = makeManager();
+    ds = makeDataSource(manager);
+  });
+
+  it('post 미존재 → NotFoundException', async () => {
+    postRepo.findOne.mockResolvedValue(null);
+    const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+    await expect(service.acceptPost(USER_ID, POST_ID)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(manager.update).not.toHaveBeenCalled();
+  });
+
+  it('thread author 불일치 → ForbiddenException (UPDATE 미호출)', async () => {
+    postRepo.findOne.mockResolvedValue(makePost());
+    threadRepo.findOne.mockResolvedValue(makeThread({ authorId: OTHER_USER_ID }));
+    const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+    await expect(service.acceptPost(USER_ID, POST_ID)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(manager.update).not.toHaveBeenCalled();
+  });
+
+  it('thread author 일치 → 같은 thread 내 다른 accepted 모두 false + 본 post true (트랜잭션)', async () => {
+    postRepo.findOne.mockResolvedValue(makePost({ isAccepted: false }));
+    threadRepo.findOne.mockResolvedValue(makeThread()); // authorId=USER_ID
+    manager.update.mockResolvedValue({ affected: 1, raw: [], generatedMaps: [] });
+    const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+    await service.acceptPost(USER_ID, POST_ID);
+
+    // 트랜잭션 내부 update 호출 2회 — (1) 같은 thread 내 다른 post unaccept, (2) 본 post accept
+    expect(manager.update).toHaveBeenCalledTimes(2);
+    const calls = manager.update.mock.calls;
+    // 첫 호출: 같은 thread + isAccepted=true 인 다른 post 만 false 로
+    expect(calls[0]![0]).toBe(DiscussionPostEntity);
+    expect(calls[0]![1]).toMatchObject({ threadId: THREAD_ID });
+    expect(calls[0]![2]).toEqual({ isAccepted: false });
+    // 두번째 호출: 본 post 만 isAccepted=true
+    expect(calls[1]![0]).toBe(DiscussionPostEntity);
+    expect(calls[1]![1]).toEqual({ id: POST_ID });
+    expect(calls[1]![2]).toEqual({ isAccepted: true });
+  });
+
+  it('이미 isAccepted=true 인 post 재호출 → noop (Q6=a 1-accept rule)', async () => {
+    postRepo.findOne.mockResolvedValue(makePost({ isAccepted: true }));
+    threadRepo.findOne.mockResolvedValue(makeThread());
+    const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+    await service.acceptPost(USER_ID, POST_ID);
+
+    expect(manager.update).not.toHaveBeenCalled();
   });
 });
 
