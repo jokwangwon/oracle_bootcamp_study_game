@@ -118,7 +118,8 @@ docs/
     ├── main-page-design-brief.md                  # 메인 페이지 디자인 브리프 v1 (2026-04-28, 외부 도구/디자이너 핸드오프)
     ├── main-page-redesign-concept-d.md            # 메인 페이지 시안 D 구현 핸드오프 v1 (2026-04-28, PR-8b)
     ├── play-and-mistakes-design-brief.md          # 플레이+오답 노트 디자인 브리프 v1 (2026-04-28, /play/solo 3 phase + /review/mistakes, 시안 D 톤 확장)
-    └── play-and-mistakes-redesign-concept-beta.md  # 플레이+오답 시안 β (Flow Glass) 구현 핸드오프 v1 (2026-04-28, PR-9a~9d, 트랙 분기 + 옵션 1 다중 모드 + 적응형 난이도)
+    ├── play-and-mistakes-redesign-concept-beta.md  # 플레이+오답 시안 β (Flow Glass) 구현 핸드오프 v1 (2026-04-28, PR-9a~9d, 트랙 분기 + 옵션 1 다중 모드 + 적응형 난이도)
+    └── solo-play-config-design-brief.md            # /play/solo config phase 시각 풍부함 brief v1 (2026-04-28, PR-9a 후속 시안 도출용 입력)
 ```
 
 ---
