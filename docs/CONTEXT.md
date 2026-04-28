@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-29 (**Session 13 후속 — PR-10b 본 작업 머지 (PR #53, 1037+1s → 1175+1s, +138 cases)**): Session 13 0순위 (§8) 이행. 환경 점검 (swap 만재 회복 — ollama 3 모델 unload 로 15→2.2GiB / 11일째 좀비 claude 2개 SIGKILL / sshd ClientAlive 60·3 / jsonl 7d 이전 26개 archive) → PR-10b 코드 7 commit 단일 PR 머지. **Phase 1** `2fefb6a` 3-table + self_vote trigger / **Phase 2** `53f65fc` 3 entity + Module 스켈레톤 / **Phase 3** `db9bfd0` sanitize-post-body 화이트리스트 + **OWASP XSS Cheat Sheet 50종 negative TDD** (76 cases) / **Phase 4a** `a0153fa` Thread CRUD + IDOR + composite cursor (15) / **Phase 4b** `da86cd3` Post CRUD + 1-level nested (12) / **Phase 4c** `f4dac82` Vote + Accept (DataSource.transaction + manager.increment atomic + self-vote 트리거 ForbiddenException 매핑 + 1-accept rule, 14) / **Phase 5** `c713fe4` Controller 11 endpoint + class-validator DTO + cursor base64url + `discussion_write` named throttler (60s/5회) + AppModule 통합 (19). 의존성 신규 `sanitize-html ^2.17.3` + `@types/sanitize-html ^2.16.1`. **사용자 결정 11건 (Q1~Q11 권장값 채택, Q11 만 자체 조정 — auth-throttler 컨벤션)**. **ADR-020 §6 PR-10b 항목 7/10 완료**, 잔여 3종 (web 표시 측 sanitize / hot 정렬 raw query / HIGH-3 블러) 은 PR-12 / 별도 PR 이월. docs commit 충돌은 옵션 A 로 코드 PR 분리 + 본 docs PR (`docs/pr-10b-merge-followup`) 합류. **다음 세션 0순위**: PR-10c (CSRF Origin guard 또는 폐기, 1d) — 위협 모델 재합의 필수. **1순위**: PR #45 외부 검증 (4번째 세션 잔존). **2순위**: PR-12 (web 토론 페이지 + rehype-sanitize + hot/top raw query).
+**최종 업데이트**: 2026-04-29 (**Session 13 후속2 — PR-10c CSRF 위협 모델 재합의 + ADR-020 §4.2.1 E·I·K 갱신 (consensus-011)**): ADR-020 §4.2.1 E "유보" 트리거. 3+1 합의 (Agent A·B·C 병렬 + Reviewer) 합의율 만장일치 35.7% / 유효 92.9%. 사용자 6결정 모두 추천값 채택 (a/a/a/b/a/a). **CRITICAL 3건 식별** — (1) startsWith bypass (`example.com.attacker.com` / Tailscale port prefix 우회) → URL 객체 parse + exact match. (2) CORS_ORIGIN fail-OPEN (`''.startsWith('')`=true) → fail-closed (env.validation refine + runtime 이중). (3) 운영 회귀 (학생 curl/Postman 차단) → SkipOriginCheck decorator + Report-Only 1주 + 한국어 학습 힌트 + ORIGIN_GUARD_DISABLED kill-switch. §4.2.1 E 절 명세 17 → 25~30 LOC 갱신 + §4.2.1 I 절 정정 + §4.2.1 K 절 신설 (머지 전 추가 선결 조건 + 미래 재검토 트리거 TR-CSRF-1/2/3/iron-session). CSRF token 폐기 = 명목상 작업 0 (csurf/xsrf grep 0건). Sec-Fetch-Site hybrid 거부 (Tailscale HTTP 환경 미전송). **다음 작업**: 본 docs PR 머지 → 코드 PR Phase 1~3 (~140 LOC + 33 cases TDD) → 1주 Report-Only 관측 → enforce 전환. **이전 (Session 13 후속): PR-10b 본 작업 머지 (PR #53, 1037+1s → 1175+1s, +138 cases)**: Session 13 0순위 (§8) 이행. 환경 점검 (swap 만재 회복 — ollama 3 모델 unload 로 15→2.2GiB / 11일째 좀비 claude 2개 SIGKILL / sshd ClientAlive 60·3 / jsonl 7d 이전 26개 archive) → PR-10b 코드 7 commit 단일 PR 머지. **Phase 1** `2fefb6a` 3-table + self_vote trigger / **Phase 2** `53f65fc` 3 entity + Module 스켈레톤 / **Phase 3** `db9bfd0` sanitize-post-body 화이트리스트 + **OWASP XSS Cheat Sheet 50종 negative TDD** (76 cases) / **Phase 4a** `a0153fa` Thread CRUD + IDOR + composite cursor (15) / **Phase 4b** `da86cd3` Post CRUD + 1-level nested (12) / **Phase 4c** `f4dac82` Vote + Accept (DataSource.transaction + manager.increment atomic + self-vote 트리거 ForbiddenException 매핑 + 1-accept rule, 14) / **Phase 5** `c713fe4` Controller 11 endpoint + class-validator DTO + cursor base64url + `discussion_write` named throttler (60s/5회) + AppModule 통합 (19). 의존성 신규 `sanitize-html ^2.17.3` + `@types/sanitize-html ^2.16.1`. **사용자 결정 11건 (Q1~Q11 권장값 채택, Q11 만 자체 조정 — auth-throttler 컨벤션)**. **ADR-020 §6 PR-10b 항목 7/10 완료**, 잔여 3종 (web 표시 측 sanitize / hot 정렬 raw query / HIGH-3 블러) 은 PR-12 / 별도 PR 이월. docs commit 충돌은 옵션 A 로 코드 PR 분리 + 본 docs PR (`docs/pr-10b-merge-followup`) 합류. **다음 세션 0순위**: PR-10c (CSRF Origin guard 또는 폐기, 1d) — 위협 모델 재합의 필수. **1순위**: PR #45 외부 검증 (4번째 세션 잔존). **2순위**: PR-12 (web 토론 페이지 + rehype-sanitize + hot/top raw query).
 
 ---
 
@@ -204,11 +204,14 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-**0순위 — PR-10c CSRF Origin guard 또는 폐기 (1d)**
+**0순위 — PR-10c 코드 PR (Phase 1~3, 1d)** — consensus-011 결과 반영
 
-consensus-010 Q-R2 (b) 결정 — Lax + Origin 헤더 검증으로 99% 커버, double-submit token 폐기. **위협 모델 변화 시 reviewer 재합의 필수** — 단순 명세 이행이 아닌 결정 단계 필요.
+위협 모델 재합의 완료 (consensus-011). 본 docs PR 머지 후 코드 PR 진입:
 
-- ADR-020 §4.2.1 E 절 `OriginGuard` 글로벌 등록. GET/HEAD/OPTIONS 통과 / 그 외 origin·referer 검증 + `CORS_ORIGIN` allow-list match → ForbiddenException
+- **Phase 1~3 (1d)**: TDD 33 cases (Method 5 + CORS_ORIGIN env 6 + startsWith bypass 4 + 정규화 3 + Origin/Referer 4 + Tailscale 4 + SkipOriginCheck 3 + 에러 응답 4) + `origin.guard.ts` (~50 LOC URL parse + report/enforce + kill-switch) + `skip-origin-check.decorator.ts` (~5 LOC) + `AppModule` `APP_GUARD` provider + `env.validation.ts` CORS_ORIGIN/ORIGIN_GUARD_MODE/ORIGIN_GUARD_DISABLED refine + 한국어 에러 메시지 + `.env.example` CORS_ORIGIN 추가
+- **Phase 4 (머지 후 1주)**: Report-Only 모드 (`ORIGIN_GUARD_MODE=report`) 운영 → 차단 사례 적재 → enforce 전환 follow-up commit
+- **가드 순서** (Q-S6=a): `ThrottlerGuard → OriginGuard → JwtAuthGuard`
+- **머지 전 선결 조건** (ADR-020 §4.2.1 K 절): CORS_ORIGIN 운영 값 결정 + env.validation refine + Rollback runbook
 
 **1순위 — PR #45 외부 검증 잔존 (Session 11~13 4번째 세션 잔존)**
 
