@@ -38,6 +38,10 @@
   --syntax-blank: #fde047;
   --syntax-blank-fg: #422006;
 
+  /* PR-9a 시안 β — FeedbackCard 정/오 wash (alpha 10% — PR-9b 에서 사용) */
+  --feedback-correct: rgba(22, 163, 74, 0.10);
+  --feedback-incorrect: rgba(220, 38, 38, 0.10);
+
   /* PR-5 shadcn HSL 토큰 (slate baseColor) */
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
@@ -78,6 +82,10 @@
   --code-tab-bg: #1e293b;
   --syntax-blank: #fde047;
   --syntax-blank-fg: #422006;
+
+  /* PR-9a 시안 β — FeedbackCard 정/오 wash (다크: 더 밝은 success/error 기반) */
+  --feedback-correct: rgba(74, 222, 128, 0.10);
+  --feedback-incorrect: rgba(248, 113, 113, 0.10);
 
   /* PR-5 shadcn HSL 토큰 */
   --background: 222.2 84% 4.9%;
