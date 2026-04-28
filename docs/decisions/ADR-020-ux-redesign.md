@@ -130,16 +130,107 @@ R4 배포 전 완료 필수. 각 항목은 ADR-020 본문 조항.
 
 ### 4.1 Sanitize + CSP + helmet (CRITICAL-B1)
 
-**서버**:
+> **2026-04-28 갱신 (consensus-PR-3 합의)** — 본 절의 PR-3 은 PR-3a/3b/3c 로 분할됨.
+> 단계 분할 사유 + 각 PR 범위 / 게이트는 §4.1.0 참조. 본 코드 블록은 **각 PR 의
+> 결과물 명세**이며 본 PR 머지 후 갱신된다 (현 시점은 PR-3a 만 enforce).
+
+#### 4.1.0 PR-3 분할 (3+1 합의 PR-3 결과)
+
+**합의 배경**: Reviewer 보고서 기준 3-Agent 합의율 87% (2+ 일치). 핵심 CRITICAL 3건:
+1. helmet HSTS default 가 tailscale `100.102.41.122:3002` HTTP 환경 영구 차단
+2. ADR 본문 `nonce-${nonce}` 의 `nonce` 변수 미정의 + Next.js 14.2 `headers()` 정적 한계로 nonce 한 번에 enforce 불가
+3. inline `style={{}}` 81곳 + Radix/next-themes/HMR 으로 한 번 enforce 시 silent break 다발
+
+**분할안**:
+
+| 단계 | 범위 | 게이트 | 의존 | 공수 |
+|------|------|-------|------|------|
+| **PR-3a** (본 PR, 2026-04-28) | helmet 7.x + production-only HSTS + COEP off + supertest e2e 헤더 단언 | typecheck + 전체 test + e2e 18 cases | 없음 | 0.5d |
+| PR-3b | `apps/web/next.config.mjs` 정적 CSP `Content-Security-Policy-Report-Only` + `/api/csp-report` (NestJS) 수집 endpoint + dev/prod 분기 + 누락 directive 4종 (`frame-ancestors 'none'` / `form-action 'self'` / `base-uri 'self'` / `object-src 'none'`) | Report-Only 1주 관측 + 위반 보고 분류 | PR-3a | 0.5d + 1주 |
+| PR-3c | `apps/web/middleware.ts` nonce 도입 + inline `style={{}}` 81곳 className 화 (PR-8b 후속 작업으로 흡수) + enforce 전환 | `next dev` HMR 무사 + 위반 보고 0 | PR-3b 데이터 + PR-10 동시 또는 직전 | 2~3d |
+
+**Q2 결정 (CSP report 수신 데이터)**: 로그 파일 + 7일 회전. PR-3b 시 구체화.
+
+**Q3 결정 (inline style 81곳 마이그레이션)**: PR-8b 후속 작업으로 흡수 (파일군 중복 편집 회피).
+
+**ADR 본문 코드 블록 사실 오류 수정**:
+- `apps/web/next.config.js` → 실제 파일은 **`apps/web/next.config.mjs`** (ESM)
+
+#### 4.1.1 PR-3a 결과물 (helmet, **현재 enforce**)
+
+**서버 (apps/api/src/main.ts)**:
 ```ts
-// apps/api/src/main.ts
-import helmet from 'helmet';
-app.use(helmet({
-  contentSecurityPolicy: false, // Next.js headers() 에서 관리
-}));
+import { applySecurityMiddleware } from './security/security-middleware';
+
+const app = await NestFactory.create(AppModule);
+applySecurityMiddleware(app);  // helmet — Next.js 가 CSP 단독 관리
 ```
 
-**sanitize-html 서버 측** (토론 저장 전):
+**helmet 옵션 (apps/api/src/security/security-middleware.ts)**:
+```ts
+function buildHelmetOptions(env: NodeJS.ProcessEnv = process.env): HelmetOptions {
+  const isProd = env.NODE_ENV === 'production';
+  return {
+    contentSecurityPolicy: false,        // PR-3b 의 Next.js next.config.mjs 가 단독 관리
+    crossOriginEmbedderPolicy: false,    // 외부 자원 호환
+    hsts: isProd
+      ? { maxAge: 15552000, includeSubDomains: true }
+      : false,                            // CRITICAL-1 가드 — tailscale HTTP 차단 방지
+  };
+}
+```
+
+helmet@^7.2.x default 헤더 (X-Content-Type-Options / X-Frame-Options / Referrer-Policy /
+X-DNS-Prefetch-Control / X-Download-Options / X-Permitted-Cross-Domain-Policies) +
+X-Powered-By 제거가 적용됨. e2e 검증 18 cases (`security-middleware.test.ts`).
+
+#### 4.1.2 PR-3b 결과물 명세 (CSP Report-Only — **미구현**)
+
+**Next.js CSP** (apps/web/next.config.mjs):
+
+```mjs
+const isProd = process.env.NODE_ENV === 'production';
+const apiOrigin = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+// PR-3b: Report-Only — 1주 관측 후 enforce. PR-3c 에서 nonce 추가.
+const cspDirectives = [
+  "default-src 'self'",
+  // 'unsafe-eval' 은 next dev HMR 호환을 위한 dev 한정.
+  isProd ? "script-src 'self'" : "script-src 'self' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",   // PR-3c 에서 inline 제거 후 nonce 화 검토
+  "img-src 'self' data: blob:",
+  `connect-src 'self' ${apiOrigin}`,
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "report-uri /api/csp-report",
+].join('; ');
+
+export default {
+  reactStrictMode: true,
+  transpilePackages: ['@oracle-game/shared'],
+  async headers() {
+    return [{
+      source: '/:path*',
+      headers: [
+        { key: 'Content-Security-Policy-Report-Only', value: cspDirectives },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      ],
+    }];
+  },
+};
+```
+
+**`/api/csp-report` endpoint (NestJS)**:
+- POST `application/csp-report` 수신
+- 로그 파일 + 7일 회전 (Q2 결정)
+- 200 응답 (4xx 시 브라우저가 재시도 → 트래픽 증폭)
+
+#### 4.1.3 PR-3c 결과물 명세 (nonce + enforce — **미구현**)
+
+**Sanitize 서버 측** (토론 저장 전, **PR-10 와 함께**):
 ```ts
 import sanitizeHtml from 'sanitize-html';
 const clean = sanitizeHtml(body, {
@@ -149,7 +240,7 @@ const clean = sanitizeHtml(body, {
 });
 ```
 
-**클라 렌더링** (react-markdown + rehype-sanitize):
+**클라 렌더링** (react-markdown + rehype-sanitize, **PR-12 와 함께**):
 ```tsx
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
@@ -157,23 +248,10 @@ import rehypeSanitize from 'rehype-sanitize';
 <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{body}</ReactMarkdown>
 ```
 
-**Next.js CSP**:
-```js
-// apps/web/next.config.js
-const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'`;
-module.exports = {
-  async headers() {
-    return [{
-      source: '/:path*',
-      headers: [
-        { key: 'Content-Security-Policy', value: cspHeader },
-        { key: 'X-Content-Type-Options', value: 'nosniff' },
-        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-      ],
-    }];
-  },
-};
-```
+**Next.js middleware nonce** (apps/web/middleware.ts):
+- `crypto.randomUUID()` → `x-nonce` request header → CSP `script-src 'self' 'nonce-${nonce}'`
+- RootLayout 이 `headers().get('x-nonce')` 읽어 `<Script nonce>` 삽입
+- `Content-Security-Policy-Report-Only` → `Content-Security-Policy` enforce 전환
 
 ### 4.2 httpOnly 쿠키 + refresh + CSRF (CRITICAL-B2, HIGH-1, Q11=a)
 
@@ -502,6 +580,7 @@ Q11=a 로 PR-6+PR-11 통합 → 총 **12 PR**. 각 PR 는 세션 1회 완료 가
 | 2026-04-27 | PR-2/PR-5 토큰 rename — 우리 `--accent`/`--accent-fg` → `--brand`/`--brand-fg` (shadcn 표준 `--accent` 가 hover bg 의미라 충돌). shadcn HSL 토큰 (`--primary`/`--card`/...) 도 §3.3 에 공존 등록. light/dark 양쪽 적용 22 위치 sed | Session 8 PR #29 (PR-2) + PR #31 (PR-5) |
 | 2026-04-28 | PR-8b 시안 D — 신규 토큰 5종 (`--brand-strong` / `--code-bg` / `--code-tab-bg` / `--syntax-blank` / `--syntax-blank-fg`) 추가. Tailwind `theme.extend` 에 `brand-gradient` background-image + `grid-cols-20` 추가. 메인 페이지 Hero 3-layer 패널 + Journey strip + 비대칭 카드 | `docs/rationale/main-page-redesign-concept-d.md` §5 |
 | 2026-04-28 | PR-7 (CRITICAL-B5) — `.githooks/pre-commit` Layer 3-a3 glob 을 `apps/api/src/**/*.prompt.ts` 재귀로 확장 (+ `*.test.ts` 제외). `pii-regression.test.ts` 에 `findPromptFilesRecursively` helper 분리 + 단위 테스트 3종 추가, 기존 PII 회귀 스캔도 `apps/api/src` 전체 재귀로 변경. 신규 모듈 `prompts/` 자동 커버 | ADR-020 §4.5 |
+| 2026-04-28 | PR-3a (CRITICAL-B1, 분할 1/3) — helmet@^7.2 + `applySecurityMiddleware` (production-only HSTS / COEP off / CSP off — Next.js 단독 관리). supertest e2e 18 cases (헤더 6+1종 + HSTS 환경 분기 4종 + CSP/COEP 옵트아웃 2종 + 옵션 단위 5종). §4.1 본문에 PR-3 분할 명세 추가 (3a/3b/3c) + Q2/Q3 결정 + `next.config.js` → `next.config.mjs` 사실 오류 수정 | ADR-020 §4.1, 3+1 합의 보고서 |
 
 ---
 
