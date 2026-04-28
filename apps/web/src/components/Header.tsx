@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { AUTH_CHANGED_EVENT, clearToken, hasToken } from '@/lib/auth-storage';
+import { apiClient } from '@/lib/api-client';
+import { AUTH_CHANGED_EVENT, clearToken } from '@/lib/auth-storage';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
 
@@ -14,23 +15,48 @@ export function Header() {
   const [mounted, setMounted] = useState(false);
   const [authed, setAuthed] = useState(false);
 
+  /**
+   * PR-10a §4.2.1 — httpOnly cookie 는 JS 가 읽을 수 없으므로 me() endpoint 호출로
+   * 인증 상태 추적. 401 시 api-client 의 자동 refresh interceptor 가 1회 retry.
+   * 그래도 401 이면 비인증.
+   */
   useEffect(() => {
     setMounted(true);
-    setAuthed(hasToken());
+    let cancelled = false;
+    void apiClient.auth
+      .me()
+      .then(() => {
+        if (!cancelled) setAuthed(true);
+      })
+      .catch(() => {
+        if (!cancelled) setAuthed(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [pathname]);
 
+  // 같은 탭의 login/logout 즉시 반영 (login/register/logout 핸들러가 이벤트 발행).
   useEffect(() => {
-    const refresh = () => setAuthed(hasToken());
+    const refresh = () => {
+      void apiClient.auth
+        .me()
+        .then(() => setAuthed(true))
+        .catch(() => setAuthed(false));
+    };
     window.addEventListener(AUTH_CHANGED_EVENT, refresh);
-    window.addEventListener('storage', refresh);
     return () => {
       window.removeEventListener(AUTH_CHANGED_EVENT, refresh);
-      window.removeEventListener('storage', refresh);
     };
   }, []);
 
-  function handleLogout() {
-    clearToken();
+  async function handleLogout() {
+    try {
+      await apiClient.auth.logout();
+    } catch {
+      // logout endpoint 가 실패해도 클라이언트 상태는 무효화 진행 (cookie 는 expire 자연 소멸).
+    }
+    clearToken(); // localStorage legacy fallback 정리.
     setAuthed(false);
     router.push('/login');
   }

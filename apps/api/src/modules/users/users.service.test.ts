@@ -19,7 +19,12 @@ class FakeUserRepo {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   create(input: any): UserEntity {
-    return { id: 'u-fake', createdAt: new Date(), ...input } as UserEntity;
+    return {
+      id: 'u-fake',
+      createdAt: new Date(),
+      tokenEpoch: 0,
+      ...input,
+    } as UserEntity;
   }
 
   async save(u: UserEntity): Promise<UserEntity> {
@@ -38,6 +43,21 @@ class FakeUserRepo {
         Object.entries(where).every(([k, v]) => (u as Record<string, unknown>)[k] === v),
       ) ?? null
     );
+  }
+
+  /** Repository.increment 모방 — atomic UPDATE SET col = col + value WHERE ... */
+  async increment(
+    where: Partial<UserEntity>,
+    propertyPath: keyof UserEntity,
+    value: number,
+  ): Promise<{ affected: number }> {
+    const user = this.users.find((u) =>
+      Object.entries(where).every(([k, v]) => (u as Record<string, unknown>)[k] === v),
+    );
+    if (!user) return { affected: 0 };
+    const current = (user as unknown as Record<string, number>)[propertyPath as string] ?? 0;
+    (user as unknown as Record<string, number>)[propertyPath as string] = current + value;
+    return { affected: 1 };
   }
 }
 
@@ -236,5 +256,45 @@ describe('UsersService.recordSessionProgress', () => {
         sessionScore: 5000,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('UsersService.tokenEpoch (PR-10a Phase 5)', () => {
+  let svc: UsersService;
+  let userRepo: FakeUserRepo;
+
+  beforeEach(async () => {
+    const built = makeService();
+    svc = built.service;
+    userRepo = built.userRepo;
+    // 테스트용 user 사전 INSERT
+    await userRepo.save({
+      id: 'user-x',
+      username: 'x',
+      email: 'x@x',
+      passwordHash: 'h',
+      role: 'player',
+      tokenEpoch: 0,
+      createdAt: new Date(),
+    } as UserEntity);
+  });
+
+  it('getTokenEpoch — 신규 user 는 0 반환', async () => {
+    expect(await svc.getTokenEpoch('user-x')).toBe(0);
+  });
+
+  it('incrementTokenEpoch — atomic increment (5 호출 → 5)', async () => {
+    for (let i = 0; i < 5; i++) {
+      await svc.incrementTokenEpoch('user-x');
+    }
+    expect(await svc.getTokenEpoch('user-x')).toBe(5);
+  });
+
+  it('getTokenEpoch — 없는 user → NotFoundException', async () => {
+    await expect(svc.getTokenEpoch('ghost-user')).rejects.toThrow(/not found/i);
+  });
+
+  it('incrementTokenEpoch — 없는 user → NotFoundException', async () => {
+    await expect(svc.incrementTokenEpoch('ghost-user')).rejects.toThrow(/not found/i);
   });
 });

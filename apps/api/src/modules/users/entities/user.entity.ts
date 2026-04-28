@@ -18,6 +18,14 @@ export class UserEntity {
   @Column({ type: 'varchar', length: 20, default: 'player' })
   role!: UserRole;
 
+  /**
+   * PR-10a §4.2.1 B 절. logout/revoke 즉시 무효화 카운터.
+   * JWT payload epoch claim 과 비교 — 불일치 시 401.
+   * migration 1714000009000 에서 컬럼 신설.
+   */
+  @Column({ type: 'integer', name: 'token_epoch', default: 0 })
+  tokenEpoch = 0;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

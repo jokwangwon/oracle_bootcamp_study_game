@@ -76,14 +76,44 @@ export interface MistakesResponse {
   summary: MistakeSummary;
 }
 
+/**
+ * 401 자동 refresh 시 재시도 동안 한 번만 refresh 호출 보장 (concurrent request race 방지).
+ * backend Redis SETNX 가 server-side race 는 막지만, client 에서 동일 요청을 N번
+ * 동시에 fail-retry 하면 N번 refresh 호출 → 비효율. 단일 promise 캐시.
+ */
+let inflightRefresh: Promise<void> | null = null;
+
+async function refreshOnce(): Promise<void> {
+  if (inflightRefresh) return inflightRefresh;
+  inflightRefresh = (async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+        cache: 'no-store',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        throw new Error(`refresh failed: ${res.status}`);
+      }
+    } finally {
+      inflightRefresh = null;
+    }
+  })();
+  return inflightRefresh;
+}
+
 async function request<T>(
   method: 'GET' | 'POST',
   path: string,
   options: RequestOptions = {},
+  retried = false,
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
+  // dual-mode: cookie 가 우선이고 Bearer 는 transition window 호환 (Phase 7).
   if (options.token) {
     headers.Authorization = `Bearer ${options.token}`;
   }
@@ -93,7 +123,20 @@ async function request<T>(
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: 'no-store',
+    // PR-10a §4.2.1 — httpOnly cookie 자동 송신 + CORS credentials.
+    credentials: 'include',
   });
+
+  // 401 → 자동 refresh 1회 retry (refresh / login / register endpoint 자체는 제외).
+  const skipRetry = path === '/auth/refresh' || path === '/auth/login' || path === '/auth/register';
+  if (res.status === 401 && !retried && !skipRetry) {
+    try {
+      await refreshOnce();
+      return request<T>(method, path, options, true);
+    } catch {
+      // refresh 실패 → 401 그대로 전파
+    }
+  }
 
   if (!res.ok) {
     const errorBody = await res.text();
@@ -103,12 +146,28 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+export interface MeResponse {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  createdAt: string;
+}
+
 export const apiClient = {
   auth: {
     register: (input: { username: string; email: string; password: string }) =>
-      request<{ accessToken: string }>('POST', '/auth/register', { body: input }),
+      request<{ accessToken: string; refreshToken: string }>('POST', '/auth/register', {
+        body: input,
+      }),
     login: (input: { email: string; password: string }) =>
-      request<{ accessToken: string }>('POST', '/auth/login', { body: input }),
+      request<{ accessToken: string; refreshToken: string }>('POST', '/auth/login', {
+        body: input,
+      }),
+    /** Header 의 인증 상태 polling 용 — 401 시 자동 refresh 후 retry. */
+    me: () => request<MeResponse>('GET', '/users/me'),
+    /** PR-10a §4.2.1 B — incrementTokenEpoch + revokeAllForUser + clearCookie. */
+    logout: () => request<{ ok: true }>('POST', '/auth/logout', { body: {} }),
   },
   solo: {
     start: (
