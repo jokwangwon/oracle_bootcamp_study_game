@@ -42,6 +42,14 @@
   --feedback-correct: rgba(22, 163, 74, 0.10);
   --feedback-incorrect: rgba(220, 38, 38, 0.10);
 
+  /* PR-9a' 시안 ε — 난이도 chip 색·강도 분기 (3중 인코딩 — 색 + 강도 dot + 라벨) */
+  --difficulty-easy: #10b981;
+  --difficulty-easy-bg: #ecfdf5;
+  --difficulty-medium: #f59e0b;
+  --difficulty-medium-bg: #fffbeb;
+  --difficulty-hard: #dc2626;
+  --difficulty-hard-bg: #fef2f2;
+
   /* PR-5 shadcn HSL 토큰 (slate baseColor) */
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
@@ -86,6 +94,14 @@
   /* PR-9a 시안 β — FeedbackCard 정/오 wash (다크: 더 밝은 success/error 기반) */
   --feedback-correct: rgba(74, 222, 128, 0.10);
   --feedback-incorrect: rgba(248, 113, 113, 0.10);
+
+  /* PR-9a' 시안 ε — 난이도 chip (다크: 라이트보다 한 단계 밝은 톤 + 글라스 위 alpha 배경) */
+  --difficulty-easy: #4ade80;
+  --difficulty-easy-bg: rgba(74, 222, 128, 0.12);
+  --difficulty-medium: #fbbf24;
+  --difficulty-medium-bg: rgba(251, 191, 36, 0.12);
+  --difficulty-hard: #f87171;
+  --difficulty-hard-bg: rgba(248, 113, 113, 0.12);
 
   /* PR-5 shadcn HSL 토큰 */
   --background: 222.2 84% 4.9%;

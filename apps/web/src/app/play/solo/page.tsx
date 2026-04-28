@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Notebook, Sparkles } from 'lucide-react';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   type Difficulty,
@@ -11,11 +12,43 @@ import { apiClient, type FinishSoloResponse } from '@/lib/api-client';
 import { getToken } from '@/lib/auth-storage';
 import { ReviewBadge } from '@/components/ReviewBadge';
 import { ConfigForm } from '@/components/play/config-form';
+import { ConfigHero } from '@/components/play/config-hero';
 import { TrackSelector } from '@/components/play/track-selector';
-import { DEFAULT_CONFIG, PRACTICE_INITIAL_CONFIG, getMockLiveUserCount } from '@/lib/play/mock';
+import { WeeklyStatsStrip } from '@/components/play/weekly-stats-strip';
+import {
+  DEFAULT_CONFIG,
+  MOCK_LAST_SESSION,
+  MOCK_MODE_STATS,
+  MOCK_PRACTICE_TRACK_STATS,
+  MOCK_RANKED_TRACK_STATS,
+  MOCK_RECOMMENDED_PREVIEW,
+  MOCK_WEEKLY_STATS,
+  PRACTICE_INITIAL_CONFIG,
+} from '@/lib/play/mock';
+import { Button } from '@/components/ui/button';
 import type { SoloConfigSelection, SoloTrack } from '@/lib/play/types';
 
 type Phase = 'config' | 'playing' | 'finished';
+
+/**
+ * 시안 ε §3.1 / §3.4.3 mock — 백엔드 endpoint 준비 전 정적 값.
+ *
+ * 후속 PR 에서 1:1 swap (시안 ε §4.2):
+ *  - `MOCK_NICKNAME` → `useUser()` 훅의 `currentUser.nickname`
+ *  - `MOCK_CURRENT_BOOTCAMP_DAY` → `userStats.currentDay`
+ *  - `MOCK_PLAYED_DAYS` → `userPracticeStats.playedDays`
+ *  - `MOCK_CUMULATIVE_ACCURACY_PCT` → `userStats.accuracyPct`
+ *  - `MOCK_RECOMMENDED_ACCURACY_PCT` → `recommendedPreview.averageAccuracyPct`
+ *  - `MOCK_WEEKLY_XP_DELTA` → `userWeeklyStats.xpDelta`
+ *  - `MOCK_DATE_RANGE_LABEL` → 클라이언트 계산 (이번 주 월~일)
+ */
+const MOCK_NICKNAME = '플레이어';
+const MOCK_CURRENT_BOOTCAMP_DAY = 16;
+const MOCK_PLAYED_DAYS: Set<number> = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+const MOCK_CUMULATIVE_ACCURACY_PCT = 78;
+const MOCK_RECOMMENDED_ACCURACY_PCT = 67;
+const MOCK_WEEKLY_XP_DELTA = 120;
+const MOCK_DATE_RANGE_LABEL = '4월 22 ~ 28일';
 
 /**
  * Next 14 — `useSearchParams()` 는 prerender 시 Suspense 경계 필수.
@@ -148,38 +181,95 @@ function SoloPlayPageInner() {
   }
 
   if (phase === 'config') {
-    return (
-      <Container>
-        {/* 시안 β §3.1.1 — 페이지 헤더 (Tailwind utility, ReviewBadge 우상단) */}
-        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
-          <h1 className="text-2xl sm:text-3xl font-medium tracking-tight text-fg m-0">
-            솔로 플레이 설정
-          </h1>
-          {token ? <ReviewBadge token={token} /> : null}
-        </div>
+    const startDisabled =
+      starting || config.modes.length === 0 || (config.track === 'ranked' && !config.difficulty);
 
-        {/* 시안 β §3.1.2 — Layer 1 트랙 선택 (랭킹 도전 / 개인 공부) */}
+    return (
+      <ConfigContainer>
+        {/* 시안 ε §3.1 — Hero anchor (좌: 인사+CTA / 우: 추천 코드 패널) */}
+        <ConfigHero
+          user={{ nickname: MOCK_NICKNAME, currentDay: MOCK_CURRENT_BOOTCAMP_DAY }}
+          weeklyStats={MOCK_WEEKLY_STATS}
+          lastSession={MOCK_LAST_SESSION}
+          recommendedPreview={MOCK_RECOMMENDED_PREVIEW}
+          cumulativeAccuracyPct={MOCK_CUMULATIVE_ACCURACY_PCT}
+          recommendedAccuracyPct={MOCK_RECOMMENDED_ACCURACY_PCT}
+          weeklyXpDelta={MOCK_WEEKLY_XP_DELTA}
+          onRecommendedStart={() => {
+            setConfig((prev) => ({ ...prev, week: MOCK_CURRENT_BOOTCAMP_DAY }));
+          }}
+          onResumeSession={(() => {
+            const last = MOCK_LAST_SESSION;
+            if (!last) return undefined;
+            return () => {
+              setConfig((prev) => ({ ...prev, topic: last.topic, week: last.day }));
+            };
+          })()}
+        />
+
+        {/* 시안 ε §3.2 — 본문 섹션 라벨 (페이지의 진짜 main heading. Hero 가 시선 흡수하므로 작게) */}
+        <h1 className="text-base sm:text-lg font-medium text-fg mt-6 mb-3 px-1">
+          솔로 플레이 설정
+        </h1>
+
+        {/* 시안 β §3.1.2 / 시안 ε §3.3 — Layer 1 트랙 선택 (랭킹 도전 / 개인 공부) */}
         <TrackSelector
           value={config.track}
           onChange={handleTrackChange}
-          liveUserCount={token ? getMockLiveUserCount() : undefined}
+          rankedStats={token ? MOCK_RANKED_TRACK_STATS : undefined}
+          practiceStats={token ? MOCK_PRACTICE_TRACK_STATS : undefined}
         />
 
-        {/* 시안 β §3.1.3~§3.1.6 — Layer 2/3/4 + CTA */}
+        {/* 시안 ε §3.4 / §3.5 — Split 폼 (좌: 주제+주차 / 우: 모드+난이도) */}
         <ConfigForm
           config={config}
           onConfigChange={setConfig}
-          onStart={startGame}
-          onJumpToMistakes={() => router.push('/review/mistakes')}
-          starting={starting}
+          currentBootcampDay={MOCK_CURRENT_BOOTCAMP_DAY}
+          playedDays={MOCK_PLAYED_DAYS}
+          modeStats={MOCK_MODE_STATS}
         />
+
+        {/* 시안 ε §3.6 — 라이브 통계 strip (신규 사용자는 strip 자체 silent) */}
+        <WeeklyStatsStrip stats={MOCK_WEEKLY_STATS} dateRangeLabel={MOCK_DATE_RANGE_LABEL} />
+
+        {/* 시안 ε §3.7 — CTA 그룹 (시작하기 + 최근 오답 + 오늘의 챌린지 + ReviewBadge) */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <Button
+            type="button"
+            onClick={startGame}
+            disabled={startDisabled}
+            className="flex-1 min-w-[140px] bg-brand-gradient text-brand-fg disabled:opacity-50"
+          >
+            {starting ? '시작 중...' : '시작하기 →'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push('/review/mistakes')}
+          >
+            <Notebook className="mr-1 h-3 w-3" aria-hidden />
+            최근 오답
+          </Button>
+          {/* 오늘의 챌린지 — 시안 ε §3.7 / §14: 본 PR 은 placeholder route, 백엔드 미연결 */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push('/play/solo?challenge=daily')}
+            disabled
+            title="오늘의 챌린지 — 다음 PR 에서 백엔드 연결"
+          >
+            <Sparkles className="mr-1 h-3 w-3" aria-hidden />
+            오늘의 챌린지
+          </Button>
+          {token ? <ReviewBadge token={token} /> : null}
+        </div>
 
         {error && (
           <p role="alert" className="text-sm text-error mt-4">
             {error}
           </p>
         )}
-      </Container>
+      </ConfigContainer>
     );
   }
 
@@ -609,6 +699,16 @@ function Container({ children }: { children: React.ReactNode }) {
     >
       {children}
     </main>
+  );
+}
+
+/**
+ * 시안 ε §13.2 — config phase 용 wider 컨테이너 (`max-w-5xl`).
+ * Hero anchor + split form 이 720px 에서는 답답함.
+ */
+function ConfigContainer({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="mx-auto max-w-5xl px-6 py-12 sm:py-16">{children}</main>
   );
 }
 

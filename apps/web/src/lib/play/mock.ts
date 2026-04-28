@@ -11,7 +11,18 @@
 
 import type { Difficulty, GameModeId, Topic } from '@oracle-game/shared';
 
-import type { AdaptiveHistoryEntry, PracticeStats, SoloConfigSelection, WeakArea } from './types';
+import type {
+  AdaptiveHistoryEntry,
+  CodeQuestion,
+  LastSessionSummary,
+  ModeStat,
+  PracticeStats,
+  PracticeTrackStats,
+  RankedTrackStats,
+  SoloConfigSelection,
+  WeakArea,
+  WeeklyStats,
+} from './types';
 
 /**
  * config phase 기본값. 시안 β §3.1.2 — 랭킹 도전 선택 + 빈칸 1개 모드.
@@ -34,16 +45,6 @@ export const PRACTICE_INITIAL_CONFIG: SoloConfigSelection = {
   modes: ['blank-typing'],
   difficulty: null,
 };
-
-/**
- * 시안 β §3.1.2 — 랭킹 도전 타일의 라이브 동기 카운트.
- *
- * 본 PR-9a 는 mock 고정. 백엔드 `/api/users/active` 같은 endpoint 가 별도 트랙으로
- * 추가되면 1:1 swap.
- */
-export function getMockLiveUserCount(): number {
-  return 12;
-}
 
 /**
  * 적응형 난이도 흐름 mock — PR-9c 에서 finished 화면에 사용. 본 PR-9a 미사용.
@@ -97,4 +98,111 @@ export const CONFIG_AVAILABLE_MODES: GameModeId[] = [
   'result-predict',
   'category-sort',
 ];
+
+/**
+ * 시안 ε §4.2 / §3.6 — 라이브 통계 strip mock.
+ *
+ * 백엔드 `GET /api/users/me/weekly-stats` 가 준비되면 1:1 swap. 신규 사용자는 null.
+ */
+export const MOCK_WEEKLY_STATS: WeeklyStats = {
+  solved: 24,
+  accuracy: 0.78,
+  streak: 8,
+  dailyAvg: 3.4,
+};
+
+/**
+ * 시안 ε §3.3 / §6.1 — Hero 우측 추천 문제 미리보기 mock.
+ *
+ * 시안 D Day 16 CURSOR 예제와 톤 일치 — 두 페이지 코드 영역이 같은 디자인 시스템임을 보여줌.
+ * 백엔드 `GET /api/questions/recommended-preview` swap 시 `code: CodeLine[]` 만 동적 변경,
+ * `<CodePreviewPanel>` 호출부는 변경 없음.
+ */
+export const MOCK_RECOMMENDED_PREVIEW: CodeQuestion = {
+  filename: 'day16-cursor.sql',
+  modeLabel: '추천 문제 · 빈칸 1개',
+  code: [
+    [
+      { text: 'DECLARE', kind: 'keyword' },
+    ],
+    [
+      { text: '  ' },
+      { text: 'CURSOR', kind: 'keyword' },
+      { text: ' c_emp ' },
+      { text: 'IS', kind: 'keyword' },
+    ],
+    [
+      { text: '    ' },
+      { text: 'SELECT', kind: 'keyword' },
+      { text: ' empno, ename ' },
+      { text: 'FROM', kind: 'keyword' },
+      { text: ' emp;' },
+    ],
+    [
+      { text: 'BEGIN', kind: 'keyword' },
+    ],
+    [
+      { text: '  ' },
+      { text: 'FOR', kind: 'keyword' },
+      { text: ' rec ' },
+      { text: 'IN', kind: 'keyword' },
+      { text: ' c_emp ' },
+      { text: 'LOOP', kind: 'keyword' },
+    ],
+    [
+      { text: '    DBMS_OUTPUT.PUT_LINE(' },
+      { text: 'rec.ename', kind: 'highlight' },
+      { text: ');' },
+    ],
+    [
+      { text: '  ' },
+      { text: 'END LOOP', kind: 'keyword' },
+      { text: ';' },
+    ],
+    [
+      { text: 'END', kind: 'keyword' },
+      { text: ';' },
+    ],
+  ],
+};
+
+/**
+ * 시안 ε §4.2 / §10.6 — 모드 chip 메타 (예상 시간 + 정답률) mock.
+ *
+ * 백엔드 `GET /api/users/me/mode-stats` swap 대상. 신규 사용자는 `accuracyPct` 미포함
+ * (시간만 노출 — 시안 ε §4.4 신규 사용자 분기).
+ */
+export const MOCK_MODE_STATS: Record<GameModeId, ModeStat> = {
+  'blank-typing': { estimatedMinutes: 8, accuracyPct: 78 },
+  'term-match': { estimatedMinutes: 5, accuracyPct: 65 },
+  'multiple-choice': { estimatedMinutes: 6, accuracyPct: 82 },
+  'result-predict': { estimatedMinutes: 7, accuracyPct: 71 },
+  'category-sort': { estimatedMinutes: 6, accuracyPct: 60 },
+  scenario: { estimatedMinutes: 12, accuracyPct: 55 },
+};
+
+/**
+ * 시안 ε §4.2 / §10.1 — Hero `이어서 학습` CTA tooltip mock. 첫 진입 사용자는 null.
+ */
+export const MOCK_LAST_SESSION: LastSessionSummary | null = {
+  topic: 'sql-basics',
+  day: 5,
+  lastPlayedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+};
+
+/**
+ * 시안 ε §3.2 / §10.5 — 트랙 타일 stats row mock.
+ *
+ * 두 트랙이 다른 stat 라인 노출. ranked 의 liveUserCount 는 기존 PR-9a 의 단일
+ * `liveUserCount` prop 을 흡수.
+ */
+export const MOCK_RANKED_TRACK_STATS: RankedTrackStats = {
+  liveUserCount: 12,
+  myRank: 23,
+};
+
+export const MOCK_PRACTICE_TRACK_STATS: PracticeTrackStats = {
+  studyDays: 14,
+  weakMode: 'term-match',
+};
 
