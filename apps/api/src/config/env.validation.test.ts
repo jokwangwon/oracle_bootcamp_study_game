@@ -19,6 +19,8 @@ const BASE: Record<string, string> = {
   LANGFUSE_PUBLIC_KEY: 'pk_test',
   LANGFUSE_SECRET_KEY: 'sk_test',
   USER_TOKEN_HASH_SALT: 'prod-real-random-abcdef-1234567890',
+  // ADR-020 §4.2.1 E·K (consensus-011) — production CORS_ORIGIN 필수 (fail-closed)
+  CORS_ORIGIN: 'http://localhost:3000',
 };
 
 describe('env.validation refinement (ADR-018 §7)', () => {
@@ -134,6 +136,31 @@ describe('env.validation refinement (ADR-018 §7)', () => {
       expect(
         uniqueCharRatio('XkJ4mN8qPz2Ws7Yr5Tv1aB9cD6eF3gH0'),
       ).toBeGreaterThanOrEqual(0.5);
+    });
+  });
+
+  // ADR-020 §4.2.1 E·K (consensus-011) — CORS_ORIGIN refine 회귀
+  describe('CORS_ORIGIN refine (consensus-011 CRITICAL #2)', () => {
+    it('production + CORS_ORIGIN 미설정 → 거부 (fail-closed)', () => {
+      const { CORS_ORIGIN, ...withoutCors } = BASE;
+      expect(() => configValidationSchema(withoutCors)).toThrow(/CORS_ORIGIN/);
+    });
+
+    it('production + CORS_ORIGIN 빈 문자열 → 거부', () => {
+      expect(() => configValidationSchema({ ...BASE, CORS_ORIGIN: '' })).toThrow(/CORS_ORIGIN/);
+    });
+
+    it('production + CORS_ORIGIN 공백 → 거부', () => {
+      expect(() => configValidationSchema({ ...BASE, CORS_ORIGIN: '   ' })).toThrow(/CORS_ORIGIN/);
+    });
+
+    it('development + CORS_ORIGIN 미설정 → 통과 (runtime 안전망 위임)', () => {
+      const { CORS_ORIGIN, ...withoutCors } = BASE;
+      expect(() => configValidationSchema({ ...withoutCors, NODE_ENV: 'development' })).not.toThrow();
+    });
+
+    it('production + CORS_ORIGIN 정상 값 → 통과', () => {
+      expect(() => configValidationSchema(BASE)).not.toThrow();
     });
   });
 });

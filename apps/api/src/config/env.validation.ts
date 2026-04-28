@@ -149,6 +149,25 @@ const envSchema = z.object({
   USER_TOKEN_HASH_SALT_PREV: z.string().min(16).optional(),
   // Langfuse self-host encryption salt — USER_TOKEN_HASH_SALT 과 재사용 금지 (§7 refinement 3).
   LANGFUSE_SALT: z.string().optional(),
+  /**
+   * ADR-020 §4.2.1 E·K (consensus-011) — OriginGuard allow-list.
+   * 콤마 구분 origin (예: `http://localhost:3000,http://100.102.41.122:3002`).
+   * fail-closed: production 에서 비어있으면 boot 거부 (refinement 아래).
+   * runtime 이중 안전망 — OriginGuard 가 빈 결과 시 InternalServerErrorException.
+   */
+  CORS_ORIGIN: z.string().optional(),
+  /**
+   * ADR-020 §4.2.1 E (consensus-011 H3) — OriginGuard 차단 모드.
+   * `enforce` (기본): 차단 시 ForbiddenException.
+   * `report`: 차단 대신 console.warn + 통과. PR-10c 머지 후 1주 관측 시 사용.
+   */
+  ORIGIN_GUARD_MODE: z.enum(['enforce', 'report']).default('enforce'),
+  /**
+   * ADR-020 §4.2.1 E (consensus-011 G3) — OriginGuard kill-switch.
+   * `true` 시 모든 origin 검증 우회 (사고 시 즉시 비활성). production 에서는
+   * 신중히 — 임시 대응 후 즉시 false 권장.
+   */
+  ORIGIN_GUARD_DISABLED: z.enum(['true', 'false']).optional(),
 })
   // ADR-018 §7 refinement 1 — production 모드에서 placeholder salt 거부
   .refine(
@@ -198,6 +217,21 @@ const envSchema = z.object({
       message:
         'USER_TOKEN_HASH_SALT 엔트로피 부족 — 반복 문자열 의심 (unique chars / length < 0.5). openssl rand -base64 32 권장 (ADR-018 §7 refinement 4)',
       path: ['USER_TOKEN_HASH_SALT'],
+    },
+  )
+  /**
+   * ADR-020 §4.2.1 E·K (consensus-011 CRITICAL #2) — production 에서 CORS_ORIGIN 필수.
+   * dev/test 에서는 OriginGuard runtime 안전망이 InternalServerErrorException 으로 차단.
+   */
+  .refine(
+    (cfg) => {
+      if (cfg.NODE_ENV !== 'production') return true;
+      return typeof cfg.CORS_ORIGIN === 'string' && cfg.CORS_ORIGIN.trim().length > 0;
+    },
+    {
+      message:
+        'production 에서 CORS_ORIGIN 미설정 — fail-closed (ADR-020 §4.2.1 E·K, consensus-011 CRITICAL #2)',
+      path: ['CORS_ORIGIN'],
     },
   );
 
