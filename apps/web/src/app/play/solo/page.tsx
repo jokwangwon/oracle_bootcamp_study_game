@@ -12,10 +12,25 @@ import { getToken } from '@/lib/auth-storage';
 import { ReviewBadge } from '@/components/ReviewBadge';
 import { ConfigForm } from '@/components/play/config-form';
 import { TrackSelector } from '@/components/play/track-selector';
-import { DEFAULT_CONFIG, MOCK_PRACTICE_TRACK_STATS, MOCK_RANKED_TRACK_STATS, PRACTICE_INITIAL_CONFIG } from '@/lib/play/mock';
+import {
+  DEFAULT_CONFIG,
+  MOCK_MODE_STATS,
+  MOCK_PRACTICE_TRACK_STATS,
+  MOCK_RANKED_TRACK_STATS,
+  PRACTICE_INITIAL_CONFIG,
+} from '@/lib/play/mock';
+import { Button } from '@/components/ui/button';
 import type { SoloConfigSelection, SoloTrack } from '@/lib/play/types';
 
 type Phase = 'config' | 'playing' | 'finished';
+
+/**
+ * 시안 ε §3.4.3 mock — 백엔드 endpoint 준비 전 정적 값.
+ * `MOCK_CURRENT_BOOTCAMP_DAY` 는 §11-8 에서 `useUser()` 훅 도입 시 `userStats.currentDay` 로,
+ * `MOCK_PLAYED_DAYS` 는 `userPracticeStats.playedDays` 로 1:1 swap.
+ */
+const MOCK_CURRENT_BOOTCAMP_DAY = 16;
+const MOCK_PLAYED_DAYS: Set<number> = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
 
 /**
  * Next 14 — `useSearchParams()` 는 prerender 시 Suspense 경계 필수.
@@ -166,14 +181,29 @@ function SoloPlayPageInner() {
           practiceStats={token ? MOCK_PRACTICE_TRACK_STATS : undefined}
         />
 
-        {/* 시안 β §3.1.3~§3.1.6 — Layer 2/3/4 + CTA */}
+        {/* 시안 β §3.1.3~§3.1.6 / 시안 ε §3.4~§3.5 — Layer 2/3/4 split form */}
         <ConfigForm
           config={config}
           onConfigChange={setConfig}
-          onStart={startGame}
-          onJumpToMistakes={() => router.push('/review/mistakes')}
-          starting={starting}
+          currentBootcampDay={MOCK_CURRENT_BOOTCAMP_DAY}
+          playedDays={MOCK_PLAYED_DAYS}
+          modeStats={MOCK_MODE_STATS}
         />
+
+        {/* CTA 그룹 — 본격 통합은 §11-8 에서 (Hero anchor 추가 시 재구성) */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-3">
+          <Button
+            type="button"
+            onClick={startGame}
+            disabled={starting || config.modes.length === 0 || (config.track === 'ranked' && !config.difficulty)}
+            className="bg-brand-gradient text-brand-fg disabled:opacity-50 sm:flex-1"
+          >
+            {starting ? '시작 중...' : '시작하기 →'}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => router.push('/review/mistakes')}>
+            최근 오답 다시 보기
+          </Button>
+        </div>
 
         {error && (
           <p role="alert" className="text-sm text-error mt-4">
