@@ -6,6 +6,10 @@ import { useState, type FormEvent } from 'react';
 
 import { apiClient } from '@/lib/api-client';
 import { setToken } from '@/lib/auth-storage';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -35,109 +39,88 @@ export default function RegisterPage() {
   }
 
   return (
-    <main
-      style={{
-        maxWidth: 420,
-        margin: '0 auto',
-        padding: '4rem 1.5rem',
-      }}
-    >
-      <h1 style={{ fontSize: '1.75rem', marginBottom: '1.5rem' }}>회원가입</h1>
+    <main className="mx-auto flex max-w-md flex-col px-6 py-16">
+      <Card className="border-border bg-bg-elevated">
+        <CardHeader className="space-y-2">
+          <CardTitle className="text-2xl text-fg">회원가입</CardTitle>
+          <CardDescription className="text-fg-muted">
+            이메일로 가입하고 부트캠프 학습을 시작하세요.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username" className="text-fg">
+                닉네임
+              </Label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                minLength={2}
+                maxLength={50}
+                autoFocus
+                autoComplete="nickname"
+              />
+              <p className="text-xs text-fg-muted">2~50자</p>
+            </div>
 
-      <form onSubmit={handleSubmit}>
-        <Field label="닉네임 (2자 이상)">
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            minLength={2}
-            maxLength={50}
-            autoFocus
-            style={inputStyle}
-          />
-        </Field>
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-fg">
+                이메일
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
 
-        <Field label="이메일">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={inputStyle}
-          />
-        </Field>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-fg">
+                비밀번호
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete="new-password"
+              />
+              <p className="text-xs text-fg-muted">8자 이상</p>
+            </div>
 
-        <Field label="비밀번호 (8자 이상)">
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            style={inputStyle}
-          />
-        </Field>
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-brand text-brand-fg hover:bg-brand/90"
+              size="lg"
+            >
+              {submitting ? '가입 중...' : '회원가입'}
+            </Button>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          style={{
-            ...buttonStyle,
-            opacity: submitting ? 0.6 : 1,
-            marginTop: '1rem',
-          }}
-        >
-          {submitting ? '가입 중...' : '회원가입'}
-        </button>
+            {error && (
+              <p role="alert" aria-live="polite" className="text-sm text-error">
+                {error}
+              </p>
+            )}
+          </form>
 
-        {error && <p style={{ color: 'var(--error)', marginTop: '1rem' }}>{error}</p>}
-      </form>
-
-      <p style={{ marginTop: '1.5rem', color: 'var(--fg-muted)' }}>
-        이미 계정이 있나요?{' '}
-        <Link href="/login" style={{ color: 'var(--brand)' }}>
-          로그인
-        </Link>
-      </p>
+          <p className="mt-6 text-sm text-fg-muted">
+            이미 계정이 있나요?{' '}
+            <Link href="/login" className="font-medium text-brand underline-offset-4 hover:underline">
+              로그인
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
     </main>
   );
 }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: 'block', marginBottom: '1rem' }}>
-      <span
-        style={{
-          display: 'block',
-          color: 'var(--fg-muted)',
-          marginBottom: '0.25rem',
-          fontSize: '0.9rem',
-        }}
-      >
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '0.75rem 1rem',
-  background: 'var(--bg-elevated)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  color: 'var(--fg)',
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: '0.75rem 1.5rem',
-  background: 'var(--brand)',
-  border: 'none',
-  borderRadius: 8,
-  color: 'var(--brand-fg)',
-  fontWeight: 700,
-  cursor: 'pointer',
-  width: '100%',
-};
