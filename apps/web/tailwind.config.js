@@ -40,6 +40,9 @@ module.exports = {
           blank: 'var(--syntax-blank)',
           'blank-fg': 'var(--syntax-blank-fg)',
         },
+        // PR-9a 시안 β — FeedbackCard 정/오 wash (PR-9b 에서 활용)
+        'feedback-correct': 'var(--feedback-correct)',
+        'feedback-incorrect': 'var(--feedback-incorrect)',
 
         // shadcn 토큰 (HSL)
         background: 'hsl(var(--background))',

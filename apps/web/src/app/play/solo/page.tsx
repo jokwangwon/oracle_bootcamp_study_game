@@ -1,25 +1,37 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  CURRICULUM_TOPICS,
-  GAME_MODE_LABELS,
-  TOPIC_LABELS,
   type Difficulty,
   type EvaluationResult,
-  type GameModeId,
   type Round,
-  type Topic,
 } from '@oracle-game/shared';
 import { apiClient, type FinishSoloResponse } from '@/lib/api-client';
 import { getToken } from '@/lib/auth-storage';
 import { ReviewBadge } from '@/components/ReviewBadge';
+import { ConfigForm } from '@/components/play/config-form';
+import { TrackSelector } from '@/components/play/track-selector';
+import { DEFAULT_CONFIG, PRACTICE_INITIAL_CONFIG, getMockLiveUserCount } from '@/lib/play/mock';
+import type { SoloConfigSelection, SoloTrack } from '@/lib/play/types';
 
 type Phase = 'config' | 'playing' | 'finished';
 
+/**
+ * Next 14 — `useSearchParams()` 는 prerender 시 Suspense 경계 필수.
+ * Inner 컴포넌트를 Suspense 로 감싸 build 시 missing-suspense-with-csr-bailout 회피.
+ */
 export default function SoloPlayPage() {
+  return (
+    <Suspense fallback={null}>
+      <SoloPlayPageInner />
+    </Suspense>
+  );
+}
+
+function SoloPlayPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [token, setLocalToken] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -35,27 +47,44 @@ export default function SoloPlayPage() {
   }, [router]);
 
   const [phase, setPhase] = useState<Phase>('config');
-  const [topic, setTopic] = useState<Topic>('sql-basics');
-  const [week, setWeek] = useState(1);
-  const [gameMode, setGameMode] = useState<GameModeId>('blank-typing');
-  const [difficulty, setDifficulty] = useState<Difficulty>('EASY');
+  // 시안 β PR-9a — 단일 config 객체 (트랙 / 주제 / 주차 / 모드 다중 / 난이도)
+  const [config, setConfig] = useState<SoloConfigSelection>(() => {
+    const trackParam = searchParams?.get('track');
+    return trackParam === 'practice' ? PRACTICE_INITIAL_CONFIG : DEFAULT_CONFIG;
+  });
   const [rounds, setRounds] = useState<Round[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [results, setResults] = useState<EvaluationResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [finishResponse, setFinishResponse] = useState<FinishSoloResponse | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [starting, setStarting] = useState(false);
+
+  // 트랙 변경 시 difficulty 자동 보정 (practice → null, ranked → 기존 또는 EASY)
+  const handleTrackChange = useCallback((nextTrack: SoloTrack) => {
+    setConfig((prev) => {
+      if (nextTrack === prev.track) return prev;
+      const nextDifficulty: Difficulty | null =
+        nextTrack === 'practice' ? null : prev.difficulty ?? 'EASY';
+      return { ...prev, track: nextTrack, difficulty: nextDifficulty };
+    });
+  }, []);
 
   const startGame = useCallback(async () => {
     if (!token) return;
+    const [primaryMode] = config.modes;
+    if (!primaryMode) return;
     setError(null);
     setFinishResponse(null);
+    setStarting(true);
     try {
+      // 시안 β §4.2 — 백엔드 변경 전 단계: modes[0] / difficulty ?? 'EASY' 로 변환해
+      // 기존 시그니처 호환. 트랙별 라운드 mix / 적응형 난이도는 별도 백엔드 PR.
       const data = await apiClient.solo.start(token, {
-        topic,
-        week,
-        gameMode,
-        difficulty,
+        topic: config.topic,
+        week: config.week,
+        gameMode: primaryMode,
+        difficulty: config.difficulty ?? 'EASY',
         rounds: 10,
       });
       setRounds(data);
@@ -64,9 +93,10 @@ export default function SoloPlayPage() {
       setPhase('playing');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setStarting(false);
     }
-    // token, topic, week, gameMode, difficulty 변경 시 재생성
-  }, [token, topic, week, gameMode, difficulty]);
+  }, [token, config]);
 
   // 'finished' 진입 시 1회 server에 세션 결과 제출
   // (StrictMode로 useEffect가 두 번 실행될 수 있으므로 ref로 1회 제한)
@@ -85,11 +115,14 @@ export default function SoloPlayPage() {
     const totalScore = results.reduce((sum, r) => sum + r.score, 0);
 
     setFinishing(true);
+    const [primaryMode] = config.modes;
+    if (!primaryMode) return;
     apiClient.solo
       .finish(token, {
-        topic,
-        week,
-        gameMode,
+        topic: config.topic,
+        week: config.week,
+        // PR-9a 단계 — 백엔드는 단일 mode 만 받음. 첫 번째 모드를 대표로 전달.
+        gameMode: primaryMode,
         totalRounds: results.length,
         correctCount,
         totalScore,
@@ -103,7 +136,7 @@ export default function SoloPlayPage() {
       .finally(() => {
         setFinishing(false);
       });
-  }, [phase, results, rounds, token, topic, week, gameMode]);
+  }, [phase, results, rounds, token, config]);
 
   // 인증 미확인 시 빈 컨테이너 (리다이렉트 진행 중)
   if (!authChecked) {
@@ -117,77 +150,35 @@ export default function SoloPlayPage() {
   if (phase === 'config') {
     return (
       <Container>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '1.5rem',
-            gap: '1rem',
-            flexWrap: 'wrap',
-          }}
-        >
-          <h1 style={{ fontSize: '1.75rem', margin: 0 }}>솔로 플레이 설정</h1>
-          {/* ADR-019 §5.2 PR-5 — 오늘 복습 건수 뱃지. 토큰 없으면 렌더되지 않음. */}
+        {/* 시안 β §3.1.1 — 페이지 헤더 (Tailwind utility, ReviewBadge 우상단) */}
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+          <h1 className="text-2xl sm:text-3xl font-medium tracking-tight text-fg m-0">
+            솔로 플레이 설정
+          </h1>
           {token ? <ReviewBadge token={token} /> : null}
         </div>
 
-        <Field label="주제">
-          <select value={topic} onChange={(e) => setTopic(e.target.value as Topic)}>
-            {CURRICULUM_TOPICS.map((t) => (
-              <option key={t} value={t}>
-                {TOPIC_LABELS[t]}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {/* 시안 β §3.1.2 — Layer 1 트랙 선택 (랭킹 도전 / 개인 공부) */}
+        <TrackSelector
+          value={config.track}
+          onChange={handleTrackChange}
+          liveUserCount={token ? getMockLiveUserCount() : undefined}
+        />
 
-        <Field label="주차">
-          <input
-            type="number"
-            min={1}
-            value={week}
-            onChange={(e) => setWeek(Number.parseInt(e.target.value, 10))}
-          />
-        </Field>
+        {/* 시안 β §3.1.3~§3.1.6 — Layer 2/3/4 + CTA */}
+        <ConfigForm
+          config={config}
+          onConfigChange={setConfig}
+          onStart={startGame}
+          onJumpToMistakes={() => router.push('/review/mistakes')}
+          starting={starting}
+        />
 
-        <Field label="게임 모드">
-          <select
-            value={gameMode}
-            onChange={(e) => setGameMode(e.target.value as GameModeId)}
-          >
-            <option value="blank-typing">{GAME_MODE_LABELS['blank-typing']}</option>
-            <option value="term-match">{GAME_MODE_LABELS['term-match']}</option>
-          </select>
-        </Field>
-
-        <Field label="난이도">
-          <select
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value as Difficulty)}
-          >
-            <option value="EASY">EASY</option>
-            <option value="MEDIUM">MEDIUM</option>
-            <option value="HARD">HARD</option>
-          </select>
-        </Field>
-
-        <button
-          type="button"
-          onClick={startGame}
-          style={{
-            marginTop: '1.5rem',
-            padding: '0.75rem 1.5rem',
-            background: 'var(--brand)',
-            border: 'none',
-            borderRadius: 8,
-            color: 'var(--brand-fg)',
-            fontWeight: 700,
-          }}
-        >
-          시작하기
-        </button>
-        {error && <p style={{ color: 'var(--error)', marginTop: '1rem' }}>{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-error mt-4">
+            {error}
+          </p>
+        )}
       </Container>
     );
   }
@@ -621,18 +612,3 @@ function Container({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label
-      style={{
-        display: 'block',
-        marginBottom: '1rem',
-      }}
-    >
-      <span style={{ display: 'block', color: 'var(--fg-muted)', marginBottom: '0.25rem' }}>
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
