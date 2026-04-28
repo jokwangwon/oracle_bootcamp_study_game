@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -15,6 +16,7 @@ import { GradingAppealsModule } from './modules/grading/appeal/grading-appeals.m
 import { NotionModule } from './modules/notion/notion.module';
 import { ReviewModule } from './modules/review/review.module';
 import { DiscussionModule } from './modules/discussion/discussion.module';
+import { OriginGuard } from './security/origin.guard';
 import { typeOrmConfig } from './config/typeorm.config';
 import { configValidationSchema } from './config/env.validation';
 
@@ -44,6 +46,13 @@ import { configValidationSchema } from './config/env.validation';
     // PR-10b §5 — R4 토론 (3 entity + service + controller + discussion_write throttler).
     DiscussionModule,
     EvalModule,
+  ],
+  providers: [
+    // PR-10c (consensus-011) — OriginGuard 글로벌 등록. 가드 순서:
+    // OriginGuard (글로벌, 본 등록) → ThrottlerGuard / JwtAuthGuard (컨트롤러별 @UseGuards).
+    // → 결과적으로 학생 curl/Postman 차단이 throttle 카운터 소모 없이 즉시 일어남.
+    // SkipOriginCheck() decorator 로 endpoint 별 옵트아웃 가능 (미래 OAuth callback 등).
+    { provide: APP_GUARD, useClass: OriginGuard },
   ],
 })
 export class AppModule {}
