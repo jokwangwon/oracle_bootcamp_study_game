@@ -45,6 +45,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     ThrottlerModule.forRoot([
       { name: 'login', ttl: 15 * 60_000, limit: 5 },
       { name: 'register', ttl: 60 * 60_000, limit: 3 },
+      // PR-10b §5.3 — R4 토론 write endpoint (분당 5회). DiscussionController 가 사용.
+      { name: 'discussion_write', ttl: 60_000, limit: 5 },
     ]),
   ],
   providers: [
