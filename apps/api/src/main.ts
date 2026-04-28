@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { applySecurityMiddleware } from './security/security-middleware';
 
@@ -9,6 +10,9 @@ async function bootstrap() {
 
   // ADR-020 §4.1 PR-3a — helmet 보안 헤더 (HSTS production-only).
   applySecurityMiddleware(app);
+
+  // ADR-020 §4.2.1 — JwtStrategy 의 cookie extractor 가 req.cookies 사용.
+  app.use(cookieParser());
 
   app.useGlobalPipes(
     new ValidationPipe({

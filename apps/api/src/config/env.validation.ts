@@ -37,8 +37,42 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET은 최소 32자 이상이어야 합니다'),
-  JWT_EXPIRES_IN: z.string().default('15m'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+  /**
+   * ADR-020 §4.2.1 부속서 F. Q-R3 정식 30m. 임시 완화 (Session 12) 24h 는
+   * .env 운영 값에서만 활성. PR-10a 머지 시 회귀.
+   */
+  JWT_EXPIRES_IN: z
+    .string()
+    .default('30m')
+    .refine((v) => /^(\d+)[smhd]$/.test(v), {
+      message: 'JWT_EXPIRES_IN 포맷 (예: 30m / 24h) (ADR-020 §4.2.1 F)',
+    }),
+  /**
+   * ADR-020 §4.2.1 A. refresh JWT 의 별도 secret. 미설정 시 JWT_SECRET 으로 fallback
+   * (Phase 6 AuthModule). production 에서는 명시 권장.
+   */
+  JWT_REFRESH_SECRET: z
+    .string()
+    .min(32, 'JWT_REFRESH_SECRET 은 최소 32자 (ADR-020 §4.2.1 A)')
+    .optional(),
+  /** ADR-020 §4.2.1 F. Q-R3 정식 14d. */
+  JWT_REFRESH_EXPIRES_IN: z
+    .string()
+    .default('14d')
+    .refine((v) => /^(\d+)[smhd]$/.test(v), {
+      message: 'JWT_REFRESH_EXPIRES_IN 포맷 (예: 14d) (ADR-020 §4.2.1 F)',
+    }),
+  /**
+   * ADR-020 §4.2.1 D. production 에서 명시 권장 (subdomain hijack 방어 — Agent B G2).
+   * dev/staging Tailscale IP 환경에서는 미설정 (host-only cookie, RFC 6265 §4.1.2.3).
+   * 값에 IP 입력은 거부 (브라우저가 IP 에 Domain 속성 무시 — 오인 방지).
+   */
+  COOKIE_DOMAIN: z
+    .string()
+    .optional()
+    .refine((v) => v === undefined || !/^\d+\.\d+\.\d+\.\d+$/.test(v), {
+      message: 'COOKIE_DOMAIN 에 IPv4 입력은 거부 (host-only cookie 사용, ADR-020 §4.2.1 D)',
+    }),
   // ADR-011 P1 운영 교체 후 ollama가 primary. anthropic은 평가/베이스라인 용도.
   LLM_PROVIDER: z.enum(['anthropic', 'ollama']).default('anthropic'),
   // anthropic provider일 때만 필수. ollama는 키 없음 — LlmClient에서 fail-closed 처리.
