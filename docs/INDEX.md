@@ -114,7 +114,9 @@ docs/
     ├── oss-primary-model-selection-2026-04-15.md  # R2 결과 + M3 primary 확정 3+1 합의 원문
     ├── notion-mcp-permission-policy.md            # Notion MCP 권한 3단 정책 + 판단 근거
     ├── ux-redesign-brief-v1.md                    # UX 재설계 브리프 v1 (Phase 0 입력)
-    └── sm2-spaced-repetition-brief-v1.md          # SM-2 SR 도입 Phase 0 브리프 (2026-04-24)
+    ├── sm2-spaced-repetition-brief-v1.md          # SM-2 SR 도입 Phase 0 브리프 (2026-04-24)
+    ├── main-page-design-brief.md                  # 메인 페이지 디자인 브리프 v1 (2026-04-28, 외부 도구/디자이너 핸드오프)
+    └── main-page-redesign-concept-d.md            # 메인 페이지 시안 D 구현 핸드오프 v1 (2026-04-28, PR-8b)
 ```
 
 ---

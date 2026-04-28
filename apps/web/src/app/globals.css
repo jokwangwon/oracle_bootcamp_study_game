@@ -31,6 +31,13 @@
   --error: #dc2626;
   --border: #e2e8f0;
 
+  /* PR-8b 시안 D 토큰 (메인 페이지 Hero 코드 영역 + Primary 카드 그라디언트) */
+  --brand-strong: #0369a1;
+  --code-bg: #0f172a;
+  --code-tab-bg: #1e293b;
+  --syntax-blank: #fde047;
+  --syntax-blank-fg: #422006;
+
   /* PR-5 shadcn HSL 토큰 (slate baseColor) */
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
@@ -64,6 +71,13 @@
   --success: #4ade80;
   --error: #f87171;
   --border: #334155;
+
+  /* PR-8b 시안 D 토큰 (코드 영역은 의도적 always-dark, blank/tab 라이트와 동일) */
+  --brand-strong: #0ea5e9;
+  --code-bg: #0f172a;
+  --code-tab-bg: #1e293b;
+  --syntax-blank: #fde047;
+  --syntax-blank-fg: #422006;
 
   /* PR-5 shadcn HSL 토큰 */
   --background: 222.2 84% 4.9%;
@@ -103,6 +117,35 @@ body {
     'Segoe UI',
     sans-serif;
   min-height: 100vh;
+}
+
+/*
+ * PR-8b 시안 D — 페이지 배경 글라스 블롭 (Apple Vision 톤).
+ *
+ * Hero 우측 글라스 패널의 backdrop-blur 가 의미 있게 보이려면 뒤에 색이 있어야 함.
+ * fixed pseudo-element 로 viewport 전체에 brand / brand-strong radial-gradient 두 개.
+ *
+ * - light: brand 0.18 alpha 좌상단 + brand-strong 0.15 우상단 (절제)
+ * - dark : brand 0.20 alpha 좌상단 + brand-strong 0.18 우상단 (대비 강화)
+ *
+ * pointer-events: none — 인터랙션 영향 없음.
+ * z-index: -1 — main 컨텐츠 아래로.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(900px 480px at 12% -8%, rgba(2, 132, 199, 0.18), transparent 60%),
+    radial-gradient(800px 520px at 100% 18%, rgba(3, 105, 161, 0.15), transparent 60%);
+}
+
+.dark body::before {
+  background-image:
+    radial-gradient(900px 480px at 12% -8%, rgba(56, 189, 248, 0.20), transparent 55%),
+    radial-gradient(800px 520px at 100% 18%, rgba(14, 165, 233, 0.18), transparent 55%);
 }
 
 button {

@@ -28,8 +28,18 @@ module.exports = {
         'fg-muted': 'var(--fg-muted)',
         brand: 'var(--brand)',
         'brand-fg': 'var(--brand-fg)',
+        'brand-strong': 'var(--brand-strong)',
         success: 'var(--success)',
         error: 'var(--error)',
+        // PR-8b 시안 D — 코드 영역 + 빈칸 highlight
+        code: {
+          DEFAULT: 'var(--code-bg)',
+          tab: 'var(--code-tab-bg)',
+        },
+        syntax: {
+          blank: 'var(--syntax-blank)',
+          'blank-fg': 'var(--syntax-blank-fg)',
+        },
 
         // shadcn 토큰 (HSL)
         background: 'hsl(var(--background))',
@@ -70,6 +80,15 @@ module.exports = {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      backgroundImage: {
+        // PR-8b — Primary 카드 그라디언트 (135도, brand → brand-strong)
+        'brand-gradient':
+          'linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%)',
+      },
+      gridTemplateColumns: {
+        // PR-8b — Journey strip 20-day 진행 막대
+        20: 'repeat(20, minmax(0, 1fr))',
       },
       keyframes: {
         'accordion-down': {
