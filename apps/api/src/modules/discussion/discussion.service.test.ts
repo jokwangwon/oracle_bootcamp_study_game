@@ -1,8 +1,9 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { Repository } from 'typeorm';
+import { IsNull, type Repository } from 'typeorm';
 
 import { DiscussionService, type ThreadCursor } from './discussion.service';
+import { DiscussionPostEntity } from './entities/discussion-post.entity';
 import { DiscussionThreadEntity } from './entities/discussion-thread.entity';
 
 /**
@@ -22,6 +23,8 @@ import { DiscussionThreadEntity } from './entities/discussion-thread.entity';
 const NOW = new Date('2026-04-29T00:00:00Z');
 const QUESTION_ID = '00000000-0000-4000-8000-0000000000a1';
 const THREAD_ID = '00000000-0000-4000-8000-0000000000b1';
+const POST_ID = '00000000-0000-4000-8000-0000000000d1';
+const PARENT_POST_ID = '00000000-0000-4000-8000-0000000000d2';
 const USER_ID = '00000000-0000-4000-8000-0000000000c1';
 const OTHER_USER_ID = '00000000-0000-4000-8000-0000000000c2';
 
@@ -43,9 +46,10 @@ function makeRepo(): MockRepo {
   };
 }
 
-function makeService(threadRepo: MockRepo) {
+function makeService(threadRepo: MockRepo, postRepo: MockRepo = makeRepo()) {
   return new DiscussionService(
     threadRepo as unknown as Repository<DiscussionThreadEntity>,
+    postRepo as unknown as Repository<DiscussionPostEntity>,
     { now: () => NOW },
   );
 }
@@ -61,6 +65,23 @@ function makeThread(overrides: Partial<DiscussionThreadEntity> = {}): Discussion
     postCount: 0,
     lastActivityAt: NOW,
     isDeleted: false,
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+function makePost(overrides: Partial<DiscussionPostEntity> = {}): DiscussionPostEntity {
+  return {
+    id: POST_ID,
+    threadId: THREAD_ID,
+    authorId: USER_ID,
+    parentId: null,
+    body: '<p>답변 본문</p>',
+    score: 0,
+    isAccepted: false,
+    isDeleted: false,
+    relatedQuestionId: null,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -281,6 +302,197 @@ describe('DiscussionService — Thread CRUD (Phase 4a)', () => {
         ForbiddenException,
       );
       expect(threadRepo.update).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('DiscussionService — Post CRUD (Phase 4b)', () => {
+  let threadRepo: MockRepo;
+  let postRepo: MockRepo;
+
+  beforeEach(() => {
+    threadRepo = makeRepo();
+    postRepo = makeRepo();
+  });
+
+  describe('createPost', () => {
+    it('thread 미존재 → NotFoundException (post insert 미호출)', async () => {
+      threadRepo.findOne.mockResolvedValue(null);
+      const service = makeService(threadRepo, postRepo);
+
+      await expect(
+        service.createPost(USER_ID, THREAD_ID, { body: '<p>답변</p>' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(postRepo.insert).not.toHaveBeenCalled();
+    });
+
+    it('parentId 지정 + parent 미존재 → NotFoundException', async () => {
+      threadRepo.findOne.mockResolvedValue(makeThread());
+      postRepo.findOne.mockResolvedValue(null);
+      const service = makeService(threadRepo, postRepo);
+
+      await expect(
+        service.createPost(USER_ID, THREAD_ID, {
+          body: '<p>대댓글</p>',
+          parentId: PARENT_POST_ID,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(postRepo.insert).not.toHaveBeenCalled();
+    });
+
+    it('parentId 지정 + parent.parentId !== null (2-level 시도) → BadRequestException', async () => {
+      threadRepo.findOne.mockResolvedValue(makeThread());
+      postRepo.findOne.mockResolvedValue(
+        makePost({ id: PARENT_POST_ID, parentId: 'some-other-post' }),
+      );
+      const service = makeService(threadRepo, postRepo);
+
+      await expect(
+        service.createPost(USER_ID, THREAD_ID, {
+          body: '<p>3-level 시도</p>',
+          parentId: PARENT_POST_ID,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(postRepo.insert).not.toHaveBeenCalled();
+    });
+
+    it('정상 INSERT — sanitize body + thread.postCount++ + lastActivityAt=now', async () => {
+      threadRepo.findOne.mockResolvedValue(makeThread({ postCount: 4 }));
+      postRepo.insert.mockResolvedValue({
+        identifiers: [{ id: POST_ID }],
+        raw: [],
+        generatedMaps: [],
+      });
+      threadRepo.update.mockResolvedValue({ affected: 1, raw: [], generatedMaps: [] });
+      const service = makeService(threadRepo, postRepo);
+
+      const out = await service.createPost(USER_ID, THREAD_ID, {
+        body: '<p>ok</p><script>alert(1)</script>',
+      });
+
+      // post insert
+      expect(postRepo.insert).toHaveBeenCalledOnce();
+      const inserted = postRepo.insert.mock.calls[0]![0];
+      expect(inserted).toMatchObject({
+        threadId: THREAD_ID,
+        authorId: USER_ID,
+        parentId: null,
+        score: 0,
+        isAccepted: false,
+        isDeleted: false,
+      });
+      expect(inserted.body).toBe('<p>ok</p>');
+      expect(inserted.body).not.toMatch(/<script/i);
+
+      // thread postCount + lastActivityAt 갱신
+      expect(threadRepo.update).toHaveBeenCalledOnce();
+      const [where, patch] = threadRepo.update.mock.calls[0]!;
+      expect(where).toEqual({ id: THREAD_ID });
+      expect(patch.postCount).toBe(5);
+      expect(patch.lastActivityAt).toEqual(NOW);
+
+      expect(out.id).toBe(POST_ID);
+    });
+  });
+
+  describe('listPostsByThread', () => {
+    it('parentId undefined → 직속 답변만 (parentId IsNull) + createdAt ASC', async () => {
+      postRepo.find.mockResolvedValue([makePost()]);
+      const service = makeService(threadRepo, postRepo);
+
+      await service.listPostsByThread(THREAD_ID, {});
+
+      const args = postRepo.find.mock.calls[0]![0];
+      expect(args.where.threadId).toBe(THREAD_ID);
+      expect(args.where.parentId).toEqual(IsNull()); // typeorm FindOperator
+      expect(args.order).toEqual({ createdAt: 'ASC' });
+    });
+
+    it('parentId 지정 → 그 값으로 필터 (1-level children)', async () => {
+      postRepo.find.mockResolvedValue([]);
+      const service = makeService(threadRepo, postRepo);
+
+      await service.listPostsByThread(THREAD_ID, { parentId: PARENT_POST_ID });
+
+      const args = postRepo.find.mock.calls[0]![0];
+      expect(args.where).toMatchObject({
+        threadId: THREAD_ID,
+        parentId: PARENT_POST_ID,
+      });
+    });
+
+    it('isDeleted=true 인 post 의 body 가 "[삭제된 게시물]" 로 치환된다', async () => {
+      postRepo.find.mockResolvedValue([
+        makePost({ id: 'p1', body: '<p>살아있음</p>' }),
+        makePost({ id: 'p2', isDeleted: true, body: '<p>지워짐</p>' }),
+      ]);
+      const service = makeService(threadRepo, postRepo);
+
+      const out = await service.listPostsByThread(THREAD_ID, {});
+
+      expect(out[0]!.body).toBe('<p>살아있음</p>');
+      expect(out[1]!.body).toBe('[삭제된 게시물]');
+    });
+  });
+
+  describe('updatePost (IDOR)', () => {
+    it('author 일치 → sanitize 후 UPDATE', async () => {
+      postRepo.findOne.mockResolvedValue(makePost());
+      postRepo.update.mockResolvedValue({ affected: 1, raw: [], generatedMaps: [] });
+      const service = makeService(threadRepo, postRepo);
+
+      await service.updatePost(USER_ID, POST_ID, {
+        body: '<p>수정</p><img src=x onerror=alert(1)>',
+      });
+
+      expect(postRepo.update).toHaveBeenCalledOnce();
+      const [where, patch] = postRepo.update.mock.calls[0]!;
+      expect(where).toEqual({ id: POST_ID });
+      expect(patch.body).toBe('<p>수정</p>');
+      expect(patch.body).not.toMatch(/onerror|<img/i);
+    });
+
+    it('author 불일치 → ForbiddenException (UPDATE 미호출)', async () => {
+      postRepo.findOne.mockResolvedValue(makePost({ authorId: OTHER_USER_ID }));
+      const service = makeService(threadRepo, postRepo);
+
+      await expect(
+        service.updatePost(USER_ID, POST_ID, { body: 'x' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(postRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('post 미존재 → NotFoundException', async () => {
+      postRepo.findOne.mockResolvedValue(null);
+      const service = makeService(threadRepo, postRepo);
+
+      await expect(
+        service.updatePost(USER_ID, POST_ID, { body: 'x' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('deletePost (IDOR + soft delete)', () => {
+    it('author 일치 → isDeleted=true UPDATE', async () => {
+      postRepo.findOne.mockResolvedValue(makePost());
+      postRepo.update.mockResolvedValue({ affected: 1, raw: [], generatedMaps: [] });
+      const service = makeService(threadRepo, postRepo);
+
+      await service.deletePost(USER_ID, POST_ID);
+
+      const [where, patch] = postRepo.update.mock.calls[0]!;
+      expect(where).toEqual({ id: POST_ID });
+      expect(patch.isDeleted).toBe(true);
+    });
+
+    it('author 불일치 → ForbiddenException', async () => {
+      postRepo.findOne.mockResolvedValue(makePost({ authorId: OTHER_USER_ID }));
+      const service = makeService(threadRepo, postRepo);
+
+      await expect(service.deletePost(USER_ID, POST_ID)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(postRepo.update).not.toHaveBeenCalled();
     });
   });
 });

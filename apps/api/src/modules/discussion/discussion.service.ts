@@ -1,7 +1,13 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { IsNull, LessThan, Repository } from 'typeorm';
 
+import { DiscussionPostEntity } from './entities/discussion-post.entity';
 import { DiscussionThreadEntity } from './entities/discussion-thread.entity';
 import { sanitizePostBody, sanitizeTitle } from './sanitize-post-body';
 
@@ -36,11 +42,17 @@ export type ListThreadsOpts = {
   limit?: number;
 };
 
+export type CreatePostDto = { body: string; parentId?: string | null };
+export type UpdatePostDto = { body: string };
+export type ListPostsOpts = { parentId?: string | null };
+
 @Injectable()
 export class DiscussionService {
   constructor(
     @InjectRepository(DiscussionThreadEntity)
     private readonly threadRepo: Repository<DiscussionThreadEntity>,
+    @InjectRepository(DiscussionPostEntity)
+    private readonly postRepo: Repository<DiscussionPostEntity>,
     private readonly opts: { now?: () => Date } = {},
   ) {}
 
@@ -48,9 +60,9 @@ export class DiscussionService {
     return this.opts.now ? this.opts.now() : new Date();
   }
 
-  /** §5.4 — isDeleted=true 인 thread 의 body 를 응답 시 치환 (DB 원본 보존). */
-  private mask(thread: DiscussionThreadEntity): DiscussionThreadEntity {
-    return thread.isDeleted ? { ...thread, body: DELETED_BODY_PLACEHOLDER } : thread;
+  /** §5.4 — isDeleted=true 시 body 를 응답에서 치환 (DB 원본 보존). */
+  private mask<T extends { body: string; isDeleted: boolean }>(entity: T): T {
+    return entity.isDeleted ? { ...entity, body: DELETED_BODY_PLACEHOLDER } : entity;
   }
 
   async createThread(
@@ -129,5 +141,91 @@ export class DiscussionService {
     if (!existing) throw new NotFoundException('thread_not_found');
     if (existing.authorId !== authorId) throw new ForbiddenException('discussion_idor');
     await this.threadRepo.update({ id: threadId }, { isDeleted: true });
+  }
+
+  // ───────────────────────────── Post (Phase 4b) ─────────────────────────────
+
+  async createPost(
+    authorId: string,
+    threadId: string,
+    dto: CreatePostDto,
+  ): Promise<DiscussionPostEntity> {
+    const thread = await this.threadRepo.findOne({ where: { id: threadId } });
+    if (!thread) throw new NotFoundException('thread_not_found');
+
+    const parentId = dto.parentId ?? null;
+    if (parentId) {
+      const parent = await this.postRepo.findOne({ where: { id: parentId } });
+      if (!parent) throw new NotFoundException('parent_post_not_found');
+      // §5.4 — 1-level nested only. parent.parentId 가 null 이어야 함.
+      if (parent.parentId !== null) {
+        throw new BadRequestException('nested_depth_exceeded');
+      }
+    }
+
+    const now = this.now();
+    const draft: Partial<DiscussionPostEntity> = {
+      threadId,
+      authorId,
+      parentId,
+      body: sanitizePostBody(dto.body),
+      score: 0,
+      isAccepted: false,
+      isDeleted: false,
+      relatedQuestionId: null,
+    };
+    const result = await this.postRepo.insert(draft as DiscussionPostEntity);
+    const id = result.identifiers[0]?.id as string;
+
+    // thread.postCount++ + lastActivityAt=now (cache)
+    await this.threadRepo.update(
+      { id: threadId },
+      { postCount: thread.postCount + 1, lastActivityAt: now },
+    );
+
+    return {
+      ...(draft as DiscussionPostEntity),
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  async listPostsByThread(
+    threadId: string,
+    opts: ListPostsOpts = {},
+  ): Promise<DiscussionPostEntity[]> {
+    // parentId 미지정 → 직속 답변만 (parentId IS NULL).
+    // parentId 명시 → 그 값으로 1-level 자식 조회.
+    const parentClause =
+      opts.parentId === undefined || opts.parentId === null
+        ? IsNull()
+        : opts.parentId;
+    const list = await this.postRepo.find({
+      where: { threadId, parentId: parentClause },
+      order: { createdAt: 'ASC' },
+    });
+    return list.map((p) => this.mask(p));
+  }
+
+  async updatePost(
+    authorId: string,
+    postId: string,
+    dto: UpdatePostDto,
+  ): Promise<void> {
+    const existing = await this.postRepo.findOne({ where: { id: postId } });
+    if (!existing) throw new NotFoundException('post_not_found');
+    if (existing.authorId !== authorId) throw new ForbiddenException('discussion_idor');
+    await this.postRepo.update(
+      { id: postId },
+      { body: sanitizePostBody(dto.body) },
+    );
+  }
+
+  async deletePost(authorId: string, postId: string): Promise<void> {
+    const existing = await this.postRepo.findOne({ where: { id: postId } });
+    if (!existing) throw new NotFoundException('post_not_found');
+    if (existing.authorId !== authorId) throw new ForbiddenException('discussion_idor');
+    await this.postRepo.update({ id: postId }, { isDeleted: true });
   }
 }
