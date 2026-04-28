@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-28 (**Session 9 — ADR-020 PR-8 + PR-8b 시안 D 메인 페이지 통합 완성, 3 PR 머지**): PR #33 (stack 머지 누락 PR-2/4/5 cherry-pick 복구) + PR #34 (PR-8 Header + 홈 + 로그인/회원가입 Tailwind 마이그레이션) + PR #35 (**PR-8b 시안 D 통합 — Hero 3-layer 글라스 패널 + Journey strip + 비대칭 카드 + 페이지 배경 블롭**, Apple Vision 톤). 신규 디자인 문서 2종 (`main-page-design-brief.md` + `main-page-redesign-concept-d.md`). 신규 토큰 5종 + Tailwind 매핑 3종. **테스트 955+1s 그대로 (web 변경 only)**. 외부 노트북 검증 4회. **다음 세션**: 보안 게이트 (PR-3 helmet+CSP / PR-7 pre-commit 재귀) 또는 PR-9 (`/play/solo` Tailwind) 또는 시안 D mock → 실 API 연결.
+**최종 업데이트**: 2026-04-28 (**Session 10 — 보안 게이트 2 PR 머지 + 플레이/오답 디자인 brief 작성**): PR #37 (PR-7 CRITICAL-B5 pre-commit Layer 3-a3 재귀) + PR #38 (PR-3a CRITICAL-B1 helmet + production-only HSTS, 3+1 합의 87% 가중) — 보안 게이트 2건 클로즈. 추가로 **`docs/rationale/play-and-mistakes-design-brief.md` v1 신규** (시안 D 톤 통합 디자인 시스템 확장 brief — `/play/solo` 3 phase + `/review/mistakes`, 외부 도구 핸드오프용). 테스트 955+1s → **976+1s** (+18 helmet, +3 helper). **다음 세션**: 사용자 외부 도구로 시안 도출 → 시안 명세 문서 + PR-9a/9b/9c/9d 단계 분할 / PR-3b CSP Report-Only / 시안 D mock → 실 API 연결.
 
 ---
 
