@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-28 (**Session 10 — 보안 게이트 2 PR 머지 + 플레이/오답 디자인 brief 작성**): PR #37 (PR-7 CRITICAL-B5 pre-commit Layer 3-a3 재귀) + PR #38 (PR-3a CRITICAL-B1 helmet + production-only HSTS, 3+1 합의 87% 가중) — 보안 게이트 2건 클로즈. 추가로 **`docs/rationale/play-and-mistakes-design-brief.md` v1 신규** (시안 D 톤 통합 디자인 시스템 확장 brief — `/play/solo` 3 phase + `/review/mistakes`, 외부 도구 핸드오프용). 테스트 955+1s → **976+1s** (+18 helmet, +3 helper). **다음 세션**: 사용자 외부 도구로 시안 도출 → 시안 명세 문서 + PR-9a/9b/9c/9d 단계 분할 / PR-3b CSP Report-Only / 시안 D mock → 실 API 연결.
+**최종 업데이트**: 2026-04-28 (**Session 10 종료 — 7 PR 머지: 보안 게이트 2건 + UX 디자인 시스템 4 PR 정착**): PR #37 (PR-7 CRITICAL-B5 pre-commit Layer 3-a3 재귀) + PR #38 (PR-3a CRITICAL-B1 helmet + production-only HSTS, **3+1 합의 87% 가중**, PR-3 → 3a/3b/3c 분할) + PR #39 (`/play/solo`+`/review/mistakes` 통합 brief) + PR #40 (시안 β Flow Glass concept) + PR #41 (PR-9a 시안 β §3.1 코드 — TrackSelector / ModeMultiSelect / ConfigForm + lib/play + URL `?track=practice`) + PR #42 (solo-play-config 시각 풍부함 brief) + PR #43 (시안 ε Hero Mirror concept, 단일 PR-9a' polish 명세). **테스트 955+1s → 976+1s** (+18 helmet e2e + 3 PII helper). 메인 시안 D 톤이 `/play/solo` config phase 까지 확장된 통합 디자인 시스템 phase 1 형성. **다음 세션 0순위**: PR-9a' 시안 ε Hero Mirror polish — Hero anchor + split form + WeekDayPicker + WeeklyStatsStrip + 토큰 6종 (`--difficulty-{easy,medium,hard}` foreground+bg). 1순위: PR-9b/9c (playing/finished phase) / PR-9d (mistakes). 2순위: PR-3b CSP Report-Only / 백엔드 endpoint 5종 / 시안 D mock → 실 API.
 
 ---
 
