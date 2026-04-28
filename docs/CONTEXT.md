@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-28 (**Session 11 종료 — PR-9a' 시안 ε (Hero Mirror) polish 단일 PR 완주**): PR #45 (시안 ε §11 의 11단계 작업 순서 그대로 11 commit, +1391/−312, 16 파일). 신규 토큰 6종 (`--difficulty-{easy,medium,hard}` + bg) + Tailwind 매핑 enforce. 신규 컴포넌트 4종 (`<CodePreviewPanel>` 추출 / `<ConfigHero>` Hero anchor + 시간대별 인사 / `<WeekDayPicker>` 20-dot strip + 4상태 / `<WeeklyStatsStrip>` 4-metric). 시각 upgrade 3종 (`<TrackSelector>` 36px+stats row, `<ModeMultiSelect>` 가로 4 col + lucide 아이콘 매핑 + 메타 색 분기, `<ConfigForm>` split + 난이도 chip 강도 dot 3중 인코딩). `lib/code/types.ts` 추출 (코드 라인 모델 home↔play 공유). page.tsx 6 영역 통합 + `ConfigContainer` `max-w-5xl` 분리. mock 6종 + page.tsx mock 상수 7종 (`useUser()` 도입 시 1:1 swap 지점). `/play/solo` 8.83 → **15.3 kB**. 테스트 976+1s 그대로 (web only). `getMockLiveUserCount()` 제거. ADR-020 §11 +1 행. 메인 시안 D 톤이 `/play/solo` config phase 까지 확장된 통합 디자인 시스템 **phase 2 정착**. **다음 세션 0순위**: PR #45 외부 노트북 검증 (axe DevTools 라이트/다크 + 키보드 풀 플로우 + 시안 ε 시각 일치). 1순위 후보: PR-9b (playing phase + framer-motion) / `useUser()` 훅 도입 (page.tsx mock 상수 1:1 swap) / 백엔드 endpoint 5종 (`weekly-stats` / `recommended-preview` / `mode-stats` / `recommended-week` / `last-session`). 2순위: PR-3b CSP Report-Only / PR-9c finished / PR-9d mistakes.
+**최종 업데이트**: 2026-04-28 (**Session 12 종료 — CTA 즉시 시작 (PR #47) + 정식 PR-10 3+1 합의 (PR #48 — consensus-010) + 임시 완화 + ADR-020 §4.2.1 부속서**): (1) PR #47 — 시안 ε §3.1.4 명시적 confirm 패턴 제거. `startGame(overrides?: Partial<SoloConfigSelection>)` 시그니처 확장 → 즉시 게임 시작 (1 클릭). (2) **PR #48 — 정식 PR-10 3+1 합의** (CLAUDE.md §3 보안 변경). Agent A·B·C 병렬 + Reviewer — **합의율 70%** (만장일치 7 / 부분 4 / 불일치 3 / 누락 채택 5). 사용자 5결정 (a/a/b/b/a): Q-R1 임시 `JWT_EXPIRES_IN=24h` (PR-10a 머지까지) / Q-R2 SameSite=Lax + Origin / Q-R3 정식 30m/14d / Q-R4 PR-10 → 10a (cookie+refresh+revoke 2d) / 10b (R4+sanitize+vote 2d) / 10c (CSRF 1d) 3분할 / Q-R5 ADR-020 §4.2.1 부속서. **CRITICAL 4건 해소**: refresh reuse detection (Redis SETNX + family revoke) / logout revoke (token_epoch ALTER + ADR-018 epoch 통합) / Tailscale Strict 미검증 (Lax 채택) / 5도메인 단일 PR 인지 부하 (분할). 변경: `.env.example` JWT_EXPIRES_IN 24h / ADR-020 §2 + §4.2 + **§4.2.1 부속서 신설 (A~J 9 sub-section)** + §6 PR 분할표 (12 → 14 PR) + §11 변경 이력 / 신규 `consensus-010-pr-10-security.md`. **사용자 즉시 작업**: `.env JWT_EXPIRES_IN=24h` + API 재기동. 테스트 976+1s 그대로. **다음 세션 0순위**: PR #47/#48/docs PR 머지. **1순위**: PR-10a 작업 직전 선결 조건 3건 — Tailscale spike (~30분) / ADR-007 변경 영향 분석 / PR-10a TDD plan. **2순위**: PR-10a (cookie+refresh+revoke epoch 2d). **3순위**: PR #45 외부 검증 잔존 (axe + 키보드). **4순위**: PR-10b (R4+sanitize+vote) / PR-10c (CSRF 폐기 재합의) / 노션 Stage 2/3 (자동 일자/주제 증가) / 백엔드 endpoint 5종 / `useUser()` 훅.
 
 ---
 
@@ -164,7 +164,16 @@ Phase 4: 통합 테스트 + 배포
 - ✅ **Session 9 — ADR-020 PR-8 + PR-8b 시안 D 통합 (2026-04-28, 3 PR)** —
   - PR #33 (`a6713da`) — stack 머지 누락 PR-2/4/5 cherry-pick 복구 (3 commit)
   - PR #34 (`994e30b`, PR-8) — Header + 홈 + 로그인/회원가입 Tailwind 마이그레이션. inline-style → Tailwind utility + shadcn Button/Card/Input/Label
-  - PR #35 (`76e4086`, PR-8b 시안 D 통합) — Hero 3-layer 글라스 패널 + Journey strip 20-day + 비대칭 1.4:1:1 카드 + 페이지 배경 블롭. Apple Vision 톤 (사용자 결정). 신규 토큰 5종 (`--brand-strong` / `--code-bg` / `--code-tab-bg` / `--syntax-blank` / `--syntax-blank-fg`) + Tailwind 매핑 3종 (`brand-gradient` / `grid-cols-20` / code+syntax colors). 신규 web 6 파일 (`lib/home/{types,mock,data}.ts` + `components/home/{hero-live-panel,journey-strip,feature-cards}.tsx`). 신규 디자인 문서 2종 (`main-page-design-brief.md` 외부 핸드오프 + `main-page-redesign-concept-d.md` 시안 D 명세). ADR-020 §11 변경 기록 2행. 외부 노트북 검증 4회.
+  - PR #35 (`76e4086`, PR-8b 시안 D 통합) — Hero 3-layer 글라스 패널 + Journey strip 20-day + 비대칭 1.4:1:1 카드 + 페이지 배경 블롭. Apple Vision 톤 (사용자 결정). 신규 토큰 5종 + 신규 web 6 파일 + 신규 디자인 문서 2종. 외부 노트북 검증 4회.
+- ✅ **Session 10 — 보안 게이트 2 PR + UX 디자인 시스템 4 PR (2026-04-28, 7 PR 머지, 955+1s → 976+1s)** — 보안: PR #37 PR-7 (CRITICAL-B5 pre-commit Layer 3-a3 재귀) + PR #38 PR-3a (CRITICAL-B1 helmet, **3+1 합의 87% 가중**, PR-3 → 3a/3b/3c 분할). UX: PR #39 4 화면 통합 brief / PR #40 시안 β Flow Glass concept / PR #41 PR-9a (시안 β §3.1 코드 — TrackSelector / ModeMultiSelect / ConfigForm) / PR #42 solo-play-config 시각 풍부함 brief / PR #43 시안 ε Hero Mirror concept (PR-9a' polish 명세). 신규 의존성 helmet / supertest.
+- ✅ **Session 11 — PR-9a' 시안 ε (Hero Mirror) polish 단일 PR (2026-04-28, PR #45 머지, 11 commit, +1391/−312)** — 신규 토큰 6종 + 컴포넌트 4 + 시각 upgrade 3 + `lib/code/types.ts` 추출 + page.tsx 6 영역 통합. `/play/solo` 8.83 → 15.3 kB. 메인 시안 D 톤이 `/play/solo` config phase 까지 확장된 **통합 디자인 시스템 phase 2 정착**. 외부 노트북 검증 0회 (PR description 미체크 항목 잔존).
+- 🟡 **Session 12 — CTA 즉시 시작 (PR #47) + 정식 PR-10 3+1 합의 (PR #48 — consensus-010) + 임시 완화 + ADR-020 §4.2.1 부속서 (2026-04-28)** —
+  - PR #47 — 시안 ε §3.1.4 명시적 confirm 패턴 제거. `startGame(overrides?: Partial<SoloConfigSelection>)` 시그니처 확장 → `추천으로 시작` / `이어서 학습` 클릭 시 즉시 게임 시작 (1 클릭). spec §3.1.4/§7.3/§13.1/§16 변경.
+  - **PR #48 — 정식 PR-10 3+1 합의** (CLAUDE.md §3 보안 변경). Agent A·B·C 병렬 + Reviewer — **합의율 70%** (만장일치 7 / 부분 4 / 불일치 3 / 누락 채택 5). 사용자 5결정 (a/a/b/b/a): Q-R1 임시 `JWT_EXPIRES_IN=24h` (PR-10a 머지까지) / Q-R2 SameSite=Lax + Origin (CSRF token 폐기 검토) / Q-R3 정식 30m/14d / Q-R4 PR-10 → 10a (cookie+refresh+revoke 2d) / 10b (R4+sanitize+vote 2d) / 10c (CSRF 1d) 3분할 / Q-R5 ADR-020 §4.2.1 부속서.
+  - **CRITICAL 4건 해소**: refresh reuse detection (Redis SETNX + family revoke) / logout revoke (token_epoch ALTER + ADR-018 epoch 통합) / Tailscale Strict 미검증 (Lax 채택) / 5도메인 단일 PR 인지 부하 (분할).
+  - 변경: `.env.example` JWT_EXPIRES_IN 24h + 코멘트 / ADR-020 §2 + §4.2 + **§4.2.1 부속서 신설 (A~J 9 sub-section)** + §6 PR 분할표 (12 → 14 PR) + §11 변경 이력 / 신규 합의 보고서 `consensus-010-pr-10-security.md`.
+  - **사용자 즉시 작업**: `.env JWT_EXPIRES_IN=24h` + API 컨테이너 재기동 (24h 동안 재로그인 없이 사용 가능).
+  - 테스트 976+1s 그대로. PR-10a/10b/10c 코드 작업은 별도 세션.
 - 🔴 MVP-C (3주) — 주차별 미니 캡스톤 + 3-entity + 주제 팩 4종 + MT7. ADR-014
 - 🔴 MVP-C' (2주) — 최종 캡스톤 2트랙(SQL/PL-SQL). ADR-014
 - 🔴 MVP-D (2주) — 주간 릴리스 cron + grading_appeals UI + mc-distractor assertion. ADR-015/016/017
@@ -195,73 +204,80 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-**0순위 — 시안 D 평가 후속 (조건부)**
+**0순위 — 본 세션 3 PR 머지**
 
-외부 노트북 평가 결과에 따라:
-- (a) 토큰 패치 (색감/스페이싱/대비) — 가벼운 폴리시 PR
-- (b) 미세 조정 (모바일 reflow, 글라스 GPU 부하 등) — concept-d §13 미해결 항목
-- (c) 만족 시 다음 PR 진행
+- PR #47 (CTA 즉시 시작) — `feature/cta-immediate-start`
+- PR #48 (PR-10 3+1 합의 + 임시 완화) — `feature/pr-10-consensus-and-mitigation`
+- docs PR (Session 12 마무리) — `docs/session-2026-04-28-session-12`
 
-**1순위 — ADR-020 §6 남은 PR**
+**1순위 — PR-10a 작업 직전 선결 조건 3건 (ADR-020 §4.2.1 I 절)**
 
-**보안 게이트 (CRITICAL, 시각 변경 0, 독립 병렬)**:
-- **PR-3** (CRITICAL-B1) — `helmet` + CSP + Next.js `headers()`
-- **PR-7** (CRITICAL-B5) — pre-commit Layer 3-a3 재귀 + pii-regression 확장
+1. **Tailscale spike** (~30분, 사용자 환경) — Lax + Origin 헤더 검증 + `secure: NODE_ENV==='production'` 분기 + http://api.local 동작 확인
+2. **ADR-007 변경 영향 분석** — JwtAuthGuard 영향 컨트롤러 9개 + web 6 페이지 호출처 추적 (api-client + login/register/play/review/Header)
+3. **PR-10a TDD plan** — refresh_tokens migration / token_epoch ALTER / Redis SETNX mutex / family revocation / cookie extractor 단계 분해
 
-**UX 후속**:
-- **PR-9** — `/play/solo` Tailwind 마이그레이션 (PR-8b 글라스 톤 재사용 가능)
+**2순위 — PR-10a 본 작업** (cookie + refresh rotation + revoke epoch, 2d)
 
-**대규모 (PR-3, PR-6 의존)**:
-- **PR-10** — httpOnly 쿠키 + refresh + CSRF + R4 discussion + sanitize-html (CRITICAL-B2 + C-B4 부분, 3d 추정). 머지 시 `lib/home/data.ts` RSC 로 환원 가능
-- **PR-11** — R6 vote UNIQUE + self-vote CHECK + race (CRITICAL-B4)
-- **PR-12** — discussion 페이지 + VoteButton + rehype-sanitize (CRITICAL-B1)
+- `refresh_tokens` entity + migration 1714000010000 (jti / userId / familyId / generation / expiresAt / revokedAt / replacedBy)
+- `users.token_epoch` ALTER + ADR-018 epoch 통합 (logout / revoke 시 ++)
+- `RefreshTokenService.refresh()` — reuse detection + family revoke + Redis SETNX TTL 5초 grace
+- `JwtStrategy` cookie extractor (dual support: cookie + Bearer for migration)
+- web 6 페이지 마이그레이션 — `api-client.ts` `credentials:'include'` + `auth-storage.ts` 제거
+- `env.validation` refine 4건 (`JWT_REFRESH_SECRET` / `COOKIE_DOMAIN` 등)
+- 11+ TDD cases
+- 머지 시 임시 완화 24h → 정식 30m 회귀 (.env / .env.example / env.validation default)
 
-**2순위 — 시안 D mock → 실 API 연결**
+**3순위 — PR #45 외부 검증 잔존 (Session 11 부터 이월)**
 
-`lib/home/data.ts` 가 mock 반환. 실 데이터 연결 시점:
-- `todayQuestion` — 챕터 시드 + AI 생성 후 오늘 챕터 추출
-- `ticker` — Phase B 운영 모니터링 또는 별도 endpoint
-- `journey` — `user_progress` 집계
-- `cards.primary.chapterProgress` — 동일
-- `cards.ranking` — 기존 ranking endpoint (현재 `/rankings` 미구현)
-- `streak` — 별도 ADR + 백엔드 PR (concept-d §13)
+axe DevTools 라이트/다크 + 키보드 풀 플로우 (TrackSelector / ModeMultiSelect / WeekDayPicker / ConfigForm 난이도 chips) + 시안 ε 시각 일치. PR-10a 작업과 병렬 가능.
 
-**3순위 — ADR-019 24h 관측 결과**
+**4순위 — PR-10b / PR-10c**
 
-24h 후 `@Cron(EVERY_DAY_AT_MIDNIGHT)` 자동 실행 확인: `sr_metrics_daily` 1행 INSERT.
-SR 혼합 편성 실사용 피드백 (2회차 이후 due 우선 편성).
+- **PR-10b** (R4 + sanitize + vote 무결성, 2d) — discussion_threads/posts/votes 3 entity + R6 UNIQUE + self-vote CHECK + sanitize-html 화이트리스트 (allowedTags/Schemes 명시) + 저장·표시 양쪽 적용 + IDOR author 검증 + 50종 OWASP XSS negative test
+- **PR-10c** (CSRF 또는 폐기, 1d) — Origin/Referer 가드 글로벌 등록. **위협 모델 변화 시 reviewer 재합의 필수**.
 
-**4순위 — Session 8+ 기술 부채 (이월)**
+**5순위 — ADR-020 잔여 PR**
+
+- **PR-3b** — CSP Report-Only + `/api/csp-report` + 1주 관측 (Session 10 PR-3 분할 후속)
+- **PR-3c** — middleware nonce + inline style className 화 + CSP enforce
+- **PR-9b** — playing phase 시안 β + framer-motion
+- **PR-9c** — finished phase 시안 β
+- **PR-9d** — `/review/mistakes` 시안 β
+- **PR-12** — discussion 페이지 + VoteButton + rehype-sanitize (PR-10b/10c 의존)
+
+**6순위 — 시안 D / ε mock → 실 API 연결**
+
+- `lib/home/data.ts` (Home) — todayQuestion / ticker / journey / cards / streak (concept-d §13)
+- `apps/web/src/app/play/solo/page.tsx` mock 상수 7종 (`MOCK_NICKNAME` 등) — `useUser()` 훅 도입 시 1:1 swap
+- 백엔드 endpoint 5종 신규 — `weekly-stats` / `recommended-preview` / `mode-stats` / `recommended-week` / `last-session`
+
+**7순위 — 노션 자동 일자/주제 증가 (Session 12 사용자 피드백, 후속)**
+
+현재 NotionSyncService 는 `notion_documents` 테이블만 갱신 — `weekly_scope`/`questions` 자동 증가 없음. Stage 2 (LLM 정리) + Stage 3 (자동 범위 추론) 미구현. 별도 ADR 가능성.
+
+**8순위 — Session 8+ 기술 부채 (이월)**
 
 - `Round.startedAt: number` 필드 + `timeTakenMs = answer.submittedAt - round.startedAt` + 프론트 epoch ms 전송 (ADR-019 §8.1)
-- 해소 후 quality 공식 `timePenalty` 재도입 평가 (현재 Q5=a 로 제거됨)
+- 해소 후 quality 공식 `timePenalty` 재도입 평가 (Q5=a 제거)
 
-**전체 12 PR 로드맵** (ADR-020 §6 참조):
-1. Tailwind 인프라
-2. theme token 브리지 + light 팔레트
-3. helmet + CSP (CRITICAL-B1)
-4. next-themes + Header 토글
-5. shadcn/ui 초기화 + Button/Card/Dialog/Input
-6. auth rate limit (CRITICAL-B3)
-7. pre-commit 재귀 (CRITICAL-B5)
-8. Header + `/`, `/login`, `/register` Tailwind
-9. `/play/solo` Tailwind 이전
-10. **(Q11=a 통합)** httpOnly 쿠키 + refresh + CSRF + R4 discussion + sanitize-html (CRITICAL-B2 + C-B4 부분)
-11. R6 vote UNIQUE + self-vote CHECK + race (CRITICAL-B4)
-12. discussion 페이지 + VoteButton + rehype-sanitize (CRITICAL-B1)
+**9순위 — ADR-019 24h 관측 결과 (자동)**
 
-**2순위 — ADR-019 24h 관측 (자동)**
-- 24h 후 `@Cron(EVERY_DAY_AT_MIDNIGHT)` 자동 실행 확인: `sr_metrics_daily` 1행 INSERT.
-- SR 혼합 편성 실사용 피드백 (2회차 이후 due 우선 편성).
+`@Cron(EVERY_DAY_AT_MIDNIGHT)` 자동 실행: `sr_metrics_daily` 1행 INSERT. SR 혼합 편성 실사용 피드백 (2회차 이후 due 우선 편성).
 
-**3순위 — Session 8+ 기술 부채 해소 (ADR-019 §8.1)**
-- `Round.startedAt: number` 필드 + `timeTakenMs = answer.submittedAt - round.startedAt` + 프론트 epoch ms 전송.
-- 해소 후 quality 공식에 `timePenalty` 재도입 평가 (현재 Q5=a 로 제거됨).
-
-**3순위 — 합의 산출물 백로그 (이월)**
-- 에러 타입 행동 분기 (`truly_invalid_syntax` → 즉시 FAIL) + 전처리 Rewriter (`(+)` → ANSI JOIN, `NVL` → `COALESCE`). `grader_digest` 재현성 재설계 선행 필요.
-- Session 9: 작성형 gold set 15+건 (Mode 1 variants 준비).
-- Session 10: Mode 1 variants 실제 도입 + free-form seed 가동 (`ENABLE_FREE_FORM_GRADING=true` 전환).
+**전체 14 PR 로드맵** (Session 12 갱신 — ADR-020 §6 참조):
+1. Tailwind 인프라 ✅
+2. theme token 브리지 + light 팔레트 ✅
+3a. helmet + CSP ✅ / 3b CSP Report-Only / 3c middleware nonce + enforce
+4. next-themes + Header 토글 ✅
+5. shadcn/ui 초기화 ✅
+6. auth rate limit (CRITICAL-B3) ✅
+7. pre-commit Layer 3-a3 재귀 ✅
+8. Header + `/`, `/login`, `/register` Tailwind ✅
+9. `/play/solo` 시안 β/ε 시리즈 — 9a ✅ / 9a' ✅ / 9b playing / 9c finished / 9d mistakes
+10a. **httpOnly cookie + refresh rotation + revoke epoch** (CRITICAL-B2)
+10b. **R4 discussion + sanitize-html + vote 무결성** (CRITICAL-B4)
+10c. **CSRF Origin-only 또는 폐기** — 위협 모델 재합의 필수
+12. discussion 페이지 + VoteButton + rehype-sanitize
 
 **Session 8+ 유보 (ADR-018 §10 트리거 조건)**
 - R2 dual-salt overlap — salt rotation 후 24h 동안 구 salt 병행 수용. 현재는 없음.
