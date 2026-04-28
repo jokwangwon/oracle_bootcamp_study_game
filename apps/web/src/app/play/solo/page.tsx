@@ -12,7 +12,7 @@ import { getToken } from '@/lib/auth-storage';
 import { ReviewBadge } from '@/components/ReviewBadge';
 import { ConfigForm } from '@/components/play/config-form';
 import { TrackSelector } from '@/components/play/track-selector';
-import { DEFAULT_CONFIG, PRACTICE_INITIAL_CONFIG, getMockLiveUserCount } from '@/lib/play/mock';
+import { DEFAULT_CONFIG, MOCK_PRACTICE_TRACK_STATS, MOCK_RANKED_TRACK_STATS, PRACTICE_INITIAL_CONFIG } from '@/lib/play/mock';
 import type { SoloConfigSelection, SoloTrack } from '@/lib/play/types';
 
 type Phase = 'config' | 'playing' | 'finished';
@@ -162,7 +162,8 @@ function SoloPlayPageInner() {
         <TrackSelector
           value={config.track}
           onChange={handleTrackChange}
-          liveUserCount={token ? getMockLiveUserCount() : undefined}
+          rankedStats={token ? MOCK_RANKED_TRACK_STATS : undefined}
+          practiceStats={token ? MOCK_PRACTICE_TRACK_STATS : undefined}
         />
 
         {/* 시안 β §3.1.3~§3.1.6 — Layer 2/3/4 + CTA */}
