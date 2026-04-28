@@ -501,6 +501,7 @@ Q11=a 로 PR-6+PR-11 통합 → 총 **12 PR**. 각 PR 는 세션 1회 완료 가
 | 2026-04-24 | 본 ADR 최초 Accepted | Phase 0 브리프 + Phase 1 consensus-009 + 사용자 Q4~Q15 |
 | 2026-04-27 | PR-2/PR-5 토큰 rename — 우리 `--accent`/`--accent-fg` → `--brand`/`--brand-fg` (shadcn 표준 `--accent` 가 hover bg 의미라 충돌). shadcn HSL 토큰 (`--primary`/`--card`/...) 도 §3.3 에 공존 등록. light/dark 양쪽 적용 22 위치 sed | Session 8 PR #29 (PR-2) + PR #31 (PR-5) |
 | 2026-04-28 | PR-8b 시안 D — 신규 토큰 5종 (`--brand-strong` / `--code-bg` / `--code-tab-bg` / `--syntax-blank` / `--syntax-blank-fg`) 추가. Tailwind `theme.extend` 에 `brand-gradient` background-image + `grid-cols-20` 추가. 메인 페이지 Hero 3-layer 패널 + Journey strip + 비대칭 카드 | `docs/rationale/main-page-redesign-concept-d.md` §5 |
+| 2026-04-28 | PR-7 (CRITICAL-B5) — `.githooks/pre-commit` Layer 3-a3 glob 을 `apps/api/src/**/*.prompt.ts` 재귀로 확장 (+ `*.test.ts` 제외). `pii-regression.test.ts` 에 `findPromptFilesRecursively` helper 분리 + 단위 테스트 3종 추가, 기존 PII 회귀 스캔도 `apps/api/src` 전체 재귀로 변경. 신규 모듈 `prompts/` 자동 커버 | ADR-020 §4.5 |
 
 ---
 
