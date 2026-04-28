@@ -31,6 +31,13 @@
   --error: #dc2626;
   --border: #e2e8f0;
 
+  /* PR-8b 시안 D 토큰 (메인 페이지 Hero 코드 영역 + Primary 카드 그라디언트) */
+  --brand-strong: #0369a1;
+  --code-bg: #0f172a;
+  --code-tab-bg: #1e293b;
+  --syntax-blank: #fde047;
+  --syntax-blank-fg: #422006;
+
   /* PR-5 shadcn HSL 토큰 (slate baseColor) */
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
@@ -64,6 +71,13 @@
   --success: #4ade80;
   --error: #f87171;
   --border: #334155;
+
+  /* PR-8b 시안 D 토큰 (코드 영역은 의도적 always-dark, blank/tab 라이트와 동일) */
+  --brand-strong: #0ea5e9;
+  --code-bg: #0f172a;
+  --code-tab-bg: #1e293b;
+  --syntax-blank: #fde047;
+  --syntax-blank-fg: #422006;
 
   /* PR-5 shadcn HSL 토큰 */
   --background: 222.2 84% 4.9%;

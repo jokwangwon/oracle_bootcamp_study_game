@@ -1,9 +1,29 @@
+'use client';
+
+/**
+ * 메인 페이지 — 시안 D PR-8b PR-1 (Hero 교체).
+ *
+ * **PR-1 범위**: Hero 영역만 시안 D 의 3-layer 통합 패널로 교체. Journey strip
+ * (PR-2) 와 비대칭 카드 그리드 (PR-3) 는 후속 PR.
+ *
+ * **`'use client'` 사유**: 인증 분기가 localStorage 기반 (`auth-storage.ts`)
+ * 이라 RSC 에서 토큰을 볼 수 없다. PR-10 (httpOnly 쿠키) 머지 후 RSC 로 환원.
+ * `mounted` 가드로 hydration mismatch 방지 — PR-8 Header 와 동일 패턴.
+ *
+ * 출처: `docs/rationale/main-page-redesign-concept-d.md`
+ */
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BookOpen, Trophy, Settings2 } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
+import { HeroLivePanel } from '@/components/home/hero-live-panel';
+import { getHomeViewModelClient } from '@/lib/home/data';
+import { guestMock } from '@/lib/home/mock';
+import type { HomeViewModel } from '@/lib/home/types';
 
-const cards = [
+const featureCards = [
   {
     href: '/play/solo',
     title: '솔로 플레이',
@@ -28,19 +48,23 @@ const cards = [
 ] as const;
 
 export default function HomePage() {
-  return (
-    <main className="mx-auto max-w-5xl px-6 py-16">
-      <section className="mb-12">
-        <h1 className="mb-4 text-4xl font-bold tracking-tight text-fg sm:text-5xl">
-          Oracle DBA 학습 게임
-        </h1>
-        <p className="max-w-2xl text-base text-fg-muted sm:text-lg">
-          부트캠프에서 배우는 SQL/PL/SQL 용어와 함수를 게임으로 자연스럽게 외우자.
-        </p>
-      </section>
+  const [vm, setVm] = useState<HomeViewModel>(guestMock);
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {cards.map((c) => (
+  useEffect(() => {
+    setVm(getHomeViewModelClient());
+  }, []);
+
+  return (
+    <main className="mx-auto max-w-5xl px-6 py-12 sm:py-16">
+      <HeroLivePanel
+        hero={vm.hero}
+        todayQuestion={vm.todayQuestion}
+        ticker={vm.ticker}
+        guestTickerCopy={vm.guestTickerCopy}
+      />
+
+      <section className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {featureCards.map((c) => (
           <Link key={c.href} href={c.href} className="group block focus:outline-none">
             <Card
               className={
