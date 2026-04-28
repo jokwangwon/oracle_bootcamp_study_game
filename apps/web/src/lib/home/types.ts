@@ -24,14 +24,9 @@ export type HeroData = {
   secondaryCta: CtaLink;
 };
 
-export type CodeSegmentKind = 'keyword' | 'fn' | 'highlight' | 'plain';
+export type { CodeLine, CodeSegment, CodeSegmentKind } from '@/lib/code/types';
 
-export type CodeSegment = {
-  text: string;
-  kind?: CodeSegmentKind;
-};
-
-export type CodeLine = CodeSegment[];
+import type { CodeLine } from '@/lib/code/types';
 
 export type TodayQuestion = {
   filename: string;
