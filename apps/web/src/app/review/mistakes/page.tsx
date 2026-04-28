@@ -231,7 +231,7 @@ export default function MistakesPage() {
               <p style={{ color: 'var(--fg-muted)', fontSize: '0.85rem', margin: '0.2rem 0 0 0' }}>
                 {data.total} 문제{' '}
                 {activeFilterCount > 0 ? (
-                  <span style={{ color: 'var(--accent)' }}>(필터 적용됨)</span>
+                  <span style={{ color: 'var(--brand)' }}>(필터 적용됨)</span>
                 ) : null}
               </p>
             ) : null}
@@ -354,7 +354,7 @@ function SidebarSection({
                 style={sidebarItemStyle(active)}
               >
                 <span>{item.label}</span>
-                <span style={{ color: active ? '#0f172a' : 'var(--fg-muted)', fontSize: '0.75rem' }}>
+                <span style={{ color: active ? 'var(--brand-fg)' : 'var(--fg-muted)', fontSize: '0.75rem' }}>
                   {item.count}
                 </span>
               </button>
@@ -622,8 +622,8 @@ function sidebarItemStyle(active: boolean): React.CSSProperties {
     alignItems: 'center',
     width: '100%',
     padding: '0.35rem 0.5rem',
-    background: active ? 'var(--accent)' : 'transparent',
-    color: active ? '#0f172a' : 'var(--fg)',
+    background: active ? 'var(--brand)' : 'transparent',
+    color: active ? 'var(--brand-fg)' : 'var(--fg)',
     border: 'none',
     borderRadius: 4,
     fontSize: '0.82rem',

@@ -96,7 +96,7 @@ export default function RegisterPage() {
 
       <p style={{ marginTop: '1.5rem', color: 'var(--fg-muted)' }}>
         이미 계정이 있나요?{' '}
-        <Link href="/login" style={{ color: 'var(--accent)' }}>
+        <Link href="/login" style={{ color: 'var(--brand)' }}>
           로그인
         </Link>
       </p>
@@ -133,10 +133,10 @@ const inputStyle: React.CSSProperties = {
 
 const buttonStyle: React.CSSProperties = {
   padding: '0.75rem 1.5rem',
-  background: 'var(--accent)',
+  background: 'var(--brand)',
   border: 'none',
   borderRadius: 8,
-  color: '#0f172a',
+  color: 'var(--brand-fg)',
   fontWeight: 700,
   cursor: 'pointer',
   width: '100%',

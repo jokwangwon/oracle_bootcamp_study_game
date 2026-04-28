@@ -2,15 +2,88 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * ADR-020 §3.3 — light/dark 팔레트.
+ *
+ * - :root  = light (Q15=b 기본). next-themes 가 .dark 토글.
+ * - .dark  = dark.
+ *
+ * WCAG 2.1 AA (ADR-020 §7): 대비비 ≥ 4.5:1 보장.
+ *
+ * 두 토큰 시스템 공존 (PR-5 shadcn 통합):
+ *  1. PR-2 hex 토큰 (`--bg`, `--brand`, ...) — 페이지 inline-style 용.
+ *     기존 `--accent` 는 `--brand` 로 rename (PR-5) — shadcn 의 `--accent`
+ *     (hover bg, light grey) 와 의미 충돌 방지.
+ *  2. shadcn HSL 토큰 (`--background`, `--primary`, ...) — shadcn 컴포넌트
+ *     (`@/components/ui/*`) 의 alpha 호환 위해 HSL 형식.
+ *  - `--primary` 는 우리 `--brand` 와 동일한 색을 HSL 로 표현.
+ *  - 페이지 마이그레이션 (PR-8/9) 시 점진적으로 hex 토큰을 HSL 로 통합 가능.
+ */
 :root {
+  /* PR-2 hex 토큰 (페이지 inline-style 용) */
+  --bg: #ffffff;
+  --bg-elevated: #f8fafc;
+  --fg: #0f172a;
+  --fg-muted: #64748b;
+  --brand: #0284c7;
+  --brand-fg: #ffffff;
+  --success: #16a34a;
+  --error: #dc2626;
+  --border: #e2e8f0;
+
+  /* PR-5 shadcn HSL 토큰 (slate baseColor) */
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 199.4 88.7% 39.4%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 199.4 88.7% 39.4%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  /* PR-2 hex 토큰 */
   --bg: #0f172a;
   --bg-elevated: #1e293b;
   --fg: #f1f5f9;
   --fg-muted: #94a3b8;
-  --accent: #38bdf8;
+  --brand: #38bdf8;
+  --brand-fg: #0f172a;
   --success: #4ade80;
   --error: #f87171;
   --border: #334155;
+
+  /* PR-5 shadcn HSL 토큰 */
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 198.4 93.2% 59.6%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 198.4 93.2% 59.6%;
 }
 
 * {
