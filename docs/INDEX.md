@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-28 (Session 12 종료 — CTA 즉시 시작 (PR #47) + 정식 PR-10 3+1 합의 (PR #48 — consensus-010, 합의율 70%, 5결정 채택) + 임시 완화 `JWT_EXPIRES_IN=24h` + ADR-020 §4.2.1 부속서 신설 + §6 12 PR → 14 PR (PR-10 3분할))
+**최종 업데이트**: 2026-04-29 (Session 13 진행 — PR-10a 머지 전 선결 조건 2건 완료: ADR-007 SYSTEM 4차원 영향 분석 + 11 Phase 40+ TDD case 단계 분해. Tailscale spike 는 사용자 환경 의존으로 잔존)
 
 ---
 
@@ -105,7 +105,10 @@ docs/
 │   ├── consensus-006-adr-018-salt-rotation.md                  # ADR-018 salt rotation 합의 (2026-04-22)
 │   ├── consensus-007-session-6-grading-wiring.md               # Session 6 PR#1/#2 grading 배선 합의 (2026-04-23)
 │   ├── consensus-008-sm2-spaced-repetition.md                  # SM-2 SR 합의 (2026-04-24)
-│   └── consensus-009-ux-redesign.md                            # UX 재설계 합의 (2026-04-24, CRITICAL 5건 Session 4 룰)
+│   ├── consensus-009-ux-redesign.md                            # UX 재설계 합의 (2026-04-24, CRITICAL 5건 Session 4 룰)
+│   ├── consensus-010-pr-10-security.md                         # PR-10 보안 합의 (2026-04-28, Session 12)
+│   ├── impact-pr-10a-cookie-refresh-revoke.md                  # PR-10a 변경 영향 분석 (2026-04-29, ADR-007 SYSTEM 4차원)
+│   └── tdd-plan-pr-10a-cookie-refresh-revoke.md                # PR-10a TDD 단계 분해 plan (2026-04-29, 11 Phase / 40+ cases)
 │
 └── rationale/                            # 판단 근거 (의사결정 narrative)
     ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
