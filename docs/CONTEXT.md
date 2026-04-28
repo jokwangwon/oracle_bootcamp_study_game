@@ -2,7 +2,7 @@
 
 > **AI 에이전트가 세션 시작 시 반드시 읽어야 하는 현재 상태 문서**
 
-**최종 업데이트**: 2026-04-28 (**Session 12 종료 — CTA 즉시 시작 (PR #47) + 정식 PR-10 3+1 합의 (PR #48 — consensus-010) + 임시 완화 + ADR-020 §4.2.1 부속서**): (1) PR #47 — 시안 ε §3.1.4 명시적 confirm 패턴 제거. `startGame(overrides?: Partial<SoloConfigSelection>)` 시그니처 확장 → 즉시 게임 시작 (1 클릭). (2) **PR #48 — 정식 PR-10 3+1 합의** (CLAUDE.md §3 보안 변경). Agent A·B·C 병렬 + Reviewer — **합의율 70%** (만장일치 7 / 부분 4 / 불일치 3 / 누락 채택 5). 사용자 5결정 (a/a/b/b/a): Q-R1 임시 `JWT_EXPIRES_IN=24h` (PR-10a 머지까지) / Q-R2 SameSite=Lax + Origin / Q-R3 정식 30m/14d / Q-R4 PR-10 → 10a (cookie+refresh+revoke 2d) / 10b (R4+sanitize+vote 2d) / 10c (CSRF 1d) 3분할 / Q-R5 ADR-020 §4.2.1 부속서. **CRITICAL 4건 해소**: refresh reuse detection (Redis SETNX + family revoke) / logout revoke (token_epoch ALTER + ADR-018 epoch 통합) / Tailscale Strict 미검증 (Lax 채택) / 5도메인 단일 PR 인지 부하 (분할). 변경: `.env.example` JWT_EXPIRES_IN 24h / ADR-020 §2 + §4.2 + **§4.2.1 부속서 신설 (A~J 9 sub-section)** + §6 PR 분할표 (12 → 14 PR) + §11 변경 이력 / 신규 `consensus-010-pr-10-security.md`. **사용자 즉시 작업**: `.env JWT_EXPIRES_IN=24h` + API 재기동. 테스트 976+1s 그대로. **다음 세션 0순위**: PR #47/#48/docs PR 머지. **1순위**: PR-10a 작업 직전 선결 조건 3건 — Tailscale spike (~30분) / ADR-007 변경 영향 분석 / PR-10a TDD plan. **2순위**: PR-10a (cookie+refresh+revoke epoch 2d). **3순위**: PR #45 외부 검증 잔존 (axe + 키보드). **4순위**: PR-10b (R4+sanitize+vote) / PR-10c (CSRF 폐기 재합의) / 노션 Stage 2/3 (자동 일자/주제 증가) / 백엔드 endpoint 5종 / `useUser()` 훅.
+**최종 업데이트**: 2026-04-29 (**Session 13 종료 — PR-10a 머지 전 선결 조건 docs (PR #50) + PR-10a 11 phase 코드 머지 (PR #51 — httpOnly cookie + refresh rotation + revoke epoch)**): (1) PR #50 — ADR-007 SYSTEM 4차원 영향 분석 (502L) + PR-10a TDD plan (644L) + INDEX 진행 표기. Tailscale spike 는 환경 사실 확정으로 추가 spike 불필요 결론. (2) **PR #51 — PR-10a 11 phase 자율 진행** (`a626ff1`~`0f8126a`). Phase 1 token_epoch + refresh_tokens migration / Phase 2 entity / Phase 3 utils / Phase 4 RefreshTokenService rotation+reuse+SETNX+family revoke (12 cases) / Phase 5 UsersService.incrementTokenEpoch / Phase 6 AuthService refresh+epoch claim / Phase 7 JwtStrategy dual-mode / Phase 8 AuthController logout+refresh+cookie / Phase 9 cookie-parser+env.validation refine / Phase 10 web credentials:include + 401 auto-refresh + Header me() polling / Phase 11 JWT_EXPIRES_IN 24h→30m 회귀. **테스트 976+1s → 1037+1s (+59 cases)**, 회귀 0. **CRITICAL 4건 해소**: refresh rotation reuse detection 알고리즘 / logout revoke 메커니즘 / dev secure cookie 분기 / SameSite=Lax. **사용자 즉시 작업**: `.env JWT_EXPIRES_IN=30m` + `JWT_REFRESH_SECRET=$(openssl rand -base64 32)` + API 재기동. dual-mode 1주일 — follow-up PR 로 Bearer extractor + auth-storage 정리. **다음 세션 0순위**: PR-10b (R4+sanitize+vote 2d) — ADR-020 §5.1 / §4.4 / §4.2.1 C 절 명세 이행. **1순위**: PR #45 외부 검증 (4번째 세션 잔존). **2순위**: PR-10c (CSRF Origin guard 또는 폐기) — 위협 모델 재합의 필수. **3순위**: 노션 Stage 2/3 / 백엔드 endpoint 5종 / `useUser()` 훅.
 
 ---
 
@@ -167,13 +167,13 @@ Phase 4: 통합 테스트 + 배포
   - PR #35 (`76e4086`, PR-8b 시안 D 통합) — Hero 3-layer 글라스 패널 + Journey strip 20-day + 비대칭 1.4:1:1 카드 + 페이지 배경 블롭. Apple Vision 톤 (사용자 결정). 신규 토큰 5종 + 신규 web 6 파일 + 신규 디자인 문서 2종. 외부 노트북 검증 4회.
 - ✅ **Session 10 — 보안 게이트 2 PR + UX 디자인 시스템 4 PR (2026-04-28, 7 PR 머지, 955+1s → 976+1s)** — 보안: PR #37 PR-7 (CRITICAL-B5 pre-commit Layer 3-a3 재귀) + PR #38 PR-3a (CRITICAL-B1 helmet, **3+1 합의 87% 가중**, PR-3 → 3a/3b/3c 분할). UX: PR #39 4 화면 통합 brief / PR #40 시안 β Flow Glass concept / PR #41 PR-9a (시안 β §3.1 코드 — TrackSelector / ModeMultiSelect / ConfigForm) / PR #42 solo-play-config 시각 풍부함 brief / PR #43 시안 ε Hero Mirror concept (PR-9a' polish 명세). 신규 의존성 helmet / supertest.
 - ✅ **Session 11 — PR-9a' 시안 ε (Hero Mirror) polish 단일 PR (2026-04-28, PR #45 머지, 11 commit, +1391/−312)** — 신규 토큰 6종 + 컴포넌트 4 + 시각 upgrade 3 + `lib/code/types.ts` 추출 + page.tsx 6 영역 통합. `/play/solo` 8.83 → 15.3 kB. 메인 시안 D 톤이 `/play/solo` config phase 까지 확장된 **통합 디자인 시스템 phase 2 정착**. 외부 노트북 검증 0회 (PR description 미체크 항목 잔존).
-- 🟡 **Session 12 — CTA 즉시 시작 (PR #47) + 정식 PR-10 3+1 합의 (PR #48 — consensus-010) + 임시 완화 + ADR-020 §4.2.1 부속서 (2026-04-28)** —
-  - PR #47 — 시안 ε §3.1.4 명시적 confirm 패턴 제거. `startGame(overrides?: Partial<SoloConfigSelection>)` 시그니처 확장 → `추천으로 시작` / `이어서 학습` 클릭 시 즉시 게임 시작 (1 클릭). spec §3.1.4/§7.3/§13.1/§16 변경.
-  - **PR #48 — 정식 PR-10 3+1 합의** (CLAUDE.md §3 보안 변경). Agent A·B·C 병렬 + Reviewer — **합의율 70%** (만장일치 7 / 부분 4 / 불일치 3 / 누락 채택 5). 사용자 5결정 (a/a/b/b/a): Q-R1 임시 `JWT_EXPIRES_IN=24h` (PR-10a 머지까지) / Q-R2 SameSite=Lax + Origin (CSRF token 폐기 검토) / Q-R3 정식 30m/14d / Q-R4 PR-10 → 10a (cookie+refresh+revoke 2d) / 10b (R4+sanitize+vote 2d) / 10c (CSRF 1d) 3분할 / Q-R5 ADR-020 §4.2.1 부속서.
-  - **CRITICAL 4건 해소**: refresh reuse detection (Redis SETNX + family revoke) / logout revoke (token_epoch ALTER + ADR-018 epoch 통합) / Tailscale Strict 미검증 (Lax 채택) / 5도메인 단일 PR 인지 부하 (분할).
-  - 변경: `.env.example` JWT_EXPIRES_IN 24h + 코멘트 / ADR-020 §2 + §4.2 + **§4.2.1 부속서 신설 (A~J 9 sub-section)** + §6 PR 분할표 (12 → 14 PR) + §11 변경 이력 / 신규 합의 보고서 `consensus-010-pr-10-security.md`.
-  - **사용자 즉시 작업**: `.env JWT_EXPIRES_IN=24h` + API 컨테이너 재기동 (24h 동안 재로그인 없이 사용 가능).
-  - 테스트 976+1s 그대로. PR-10a/10b/10c 코드 작업은 별도 세션.
+- ✅ **Session 12 — CTA 즉시 시작 (PR #47) + 정식 PR-10 3+1 합의 (PR #48 — consensus-010) + 임시 완화 + ADR-020 §4.2.1 부속서 (2026-04-28, 3 PR 머지)** — PR #47 즉시 시작 / PR #48 합의율 70% 5결정 / docs PR #49 마무리. 임시 완화 `JWT_EXPIRES_IN=24h` (PR-10a 머지까지). 테스트 976+1s 그대로.
+- ✅ **Session 13 — PR-10a 머지 전 선결 조건 docs (PR #50) + PR-10a 11 phase 코드 (PR #51) (2026-04-29, 2 PR 머지, 976+1s → 1037+1s, +59 cases)** —
+  - PR #50 — ADR-007 SYSTEM 4차원 영향 분석 (502L) + PR-10a TDD plan (644L) + INDEX 진행 표기. Tailscale spike 는 환경 사실 확정 (HTTP IP only) 으로 추가 spike 불필요 결론.
+  - **PR #51 — PR-10a 11 phase 자율 진행** — Phase 1 token_epoch+refresh_tokens migration / Phase 2 RefreshTokenEntity / Phase 3 utils 13 cases / Phase 4 RefreshTokenService rotation+reuse+SETNX+family revoke 12 cases / Phase 5 UsersService.incrementTokenEpoch 4 cases / Phase 6 AuthService refresh+epoch claim 4 cases / Phase 7 JwtStrategy dual-mode 5 cases / Phase 8 AuthController logout+refresh+cookie 10 cases / Phase 9 cookie-parser+env.validation refine / Phase 10 web credentials:include + 401 auto-refresh + Header me() polling / Phase 11 JWT_EXPIRES_IN 30m 회귀.
+  - **CRITICAL 4건 해소**: refresh rotation reuse detection 알고리즘 (SETNX 5s mutex + family revoke + grace) / logout revoke (atomic incrementTokenEpoch + revokeAllForUser Promise.all) / dev secure cookie 분기 (Tailscale IP host-only RFC 6265) / SameSite=Lax (Discord/슬랙 UX 보존).
+  - dual-mode 1주일 — cookie 우선 + Bearer fallback. **Follow-up PR**: Bearer extractor 제거 + auth-storage 폐기 + 응답 body 토큰 제거.
+  - **사용자 즉시 작업**: `.env JWT_EXPIRES_IN=30m` + `JWT_REFRESH_SECRET=$(openssl rand -base64 32)` 추가 + API 컨테이너 재기동.
 - 🔴 MVP-C (3주) — 주차별 미니 캡스톤 + 3-entity + 주제 팩 4종 + MT7. ADR-014
 - 🔴 MVP-C' (2주) — 최종 캡스톤 2트랙(SQL/PL-SQL). ADR-014
 - 🔴 MVP-D (2주) — 주간 릴리스 cron + grading_appeals UI + mc-distractor assertion. ADR-015/016/017
@@ -204,37 +204,38 @@ Phase 4: 통합 테스트 + 배포
 
 ### 다음 세션 우선순위
 
-**0순위 — 본 세션 3 PR 머지**
+**0순위 — Session 13 docs PR 머지 + 사용자 .env 작업**
 
-- PR #47 (CTA 즉시 시작) — `feature/cta-immediate-start`
-- PR #48 (PR-10 3+1 합의 + 임시 완화) — `feature/pr-10-consensus-and-mitigation`
-- docs PR (Session 12 마무리) — `docs/session-2026-04-28-session-12`
+- docs PR (Session 13 마무리) — `docs/session-2026-04-29-session-13`
+- 사용자 작업: `.env` `JWT_EXPIRES_IN=30m` 회귀 + `JWT_REFRESH_SECRET=$(openssl rand -base64 32)` 추가 + `sudo docker compose restart api`
 
-**1순위 — PR-10a 작업 직전 선결 조건 3건 (ADR-020 §4.2.1 I 절)**
+**1순위 — PR-10b 본 작업** (R4 discussion + sanitize-html + vote 무결성, 2d)
 
-1. **Tailscale spike** (~30분, 사용자 환경) — Lax + Origin 헤더 검증 + `secure: NODE_ENV==='production'` 분기 + http://api.local 동작 확인
-2. **ADR-007 변경 영향 분석** — JwtAuthGuard 영향 컨트롤러 9개 + web 6 페이지 호출처 추적 (api-client + login/register/play/review/Header)
-3. **PR-10a TDD plan** — refresh_tokens migration / token_epoch ALTER / Redis SETNX mutex / family revocation / cookie extractor 단계 분해
+ADR-020 §5.1 / §4.4 / §4.2.1 C 절 명세 이행. 6 phase 자율 진행 (Session 14):
 
-**2순위 — PR-10a 본 작업** (cookie + refresh rotation + revoke epoch, 2d)
+1. Phase 1 — `1714000011000-AddDiscussion` 3 테이블 (threads/posts/votes) + UNIQUE(user_id, target_type, target_id) + CHECK(value IN -1,1) + `1714000012000-AddDiscussionSelfVoteTrigger` plpgsql.
+2. Phase 2 — DiscussionThread/Post/Vote 3 entity + DiscussionModule TypeOrmModule.forFeature.
+3. Phase 3 — sanitize-post-body util (sanitize-html allowedTags 화이트리스트) + 50종 OWASP XSS negative test.
+4. Phase 4 — DiscussionService thread/post/vote CRUD + sanitize 적용 + ON CONFLICT race + score delta + ForbiddenException self-vote precheck (12+ cases).
+5. Phase 5 — DiscussionController REST endpoints (POST /threads / posts / votes) + JwtAuthGuard + IDOR author 검증 + ParseUUIDPipe (8+ cases).
+6. Phase 6 — AppModule 등록 + 회귀 검증 + PR open.
 
-- `refresh_tokens` entity + migration 1714000010000 (jti / userId / familyId / generation / expiresAt / revokedAt / replacedBy)
-- `users.token_epoch` ALTER + ADR-018 epoch 통합 (logout / revoke 시 ++)
-- `RefreshTokenService.refresh()` — reuse detection + family revoke + Redis SETNX TTL 5초 grace
-- `JwtStrategy` cookie extractor (dual support: cookie + Bearer for migration)
-- web 6 페이지 마이그레이션 — `api-client.ts` `credentials:'include'` + `auth-storage.ts` 제거
-- `env.validation` refine 4건 (`JWT_REFRESH_SECRET` / `COOKIE_DOMAIN` 등)
-- 11+ TDD cases
-- 머지 시 임시 완화 24h → 정식 30m 회귀 (.env / .env.example / env.validation default)
+추정 +30~40 신규 cases. 1037+1s → 1070+ 예상.
 
-**3순위 — PR #45 외부 검증 잔존 (Session 11 부터 이월)**
+**2순위 — PR #45 외부 검증 잔존 (Session 11~13 4번째 세션 잔존)**
 
-axe DevTools 라이트/다크 + 키보드 풀 플로우 (TrackSelector / ModeMultiSelect / WeekDayPicker / ConfigForm 난이도 chips) + 시안 ε 시각 일치. PR-10a 작업과 병렬 가능.
+axe DevTools 라이트/다크 + 키보드 풀 플로우 (TrackSelector / ModeMultiSelect / WeekDayPicker / ConfigForm 난이도 chips) + 시안 ε 시각 일치. PR-10b 작업과 병렬 가능.
 
-**4순위 — PR-10b / PR-10c**
+**3순위 — PR-10c CSRF Origin guard 또는 폐기 (1d)**
 
-- **PR-10b** (R4 + sanitize + vote 무결성, 2d) — discussion_threads/posts/votes 3 entity + R6 UNIQUE + self-vote CHECK + sanitize-html 화이트리스트 (allowedTags/Schemes 명시) + 저장·표시 양쪽 적용 + IDOR author 검증 + 50종 OWASP XSS negative test
-- **PR-10c** (CSRF 또는 폐기, 1d) — Origin/Referer 가드 글로벌 등록. **위협 모델 변화 시 reviewer 재합의 필수**.
+Origin/Referer 가드 글로벌 등록. **위협 모델 변화 시 reviewer 재합의 필수** — 단순 명세 이행이 아닌 결정 단계 필요.
+
+**4순위 — PR-10a follow-up (1주일 후, dual-mode 종료)**
+
+- JwtStrategy Bearer extractor 제거 (cookie-only)
+- api-client token 인자 제거
+- auth-storage.ts 폐기 + 6 페이지 setToken/getToken 호출 정리
+- API 응답 body 의 accessToken/refreshToken 제거
 
 **5순위 — ADR-020 잔여 PR**
 
