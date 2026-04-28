@@ -178,10 +178,10 @@ export default function SoloPlayPage() {
           style={{
             marginTop: '1.5rem',
             padding: '0.75rem 1.5rem',
-            background: 'var(--accent)',
+            background: 'var(--brand)',
             border: 'none',
             borderRadius: 8,
-            color: 'var(--accent-fg)',
+            color: 'var(--brand-fg)',
             fontWeight: 700,
           }}
         >
@@ -263,10 +263,10 @@ export default function SoloPlayPage() {
         onClick={() => setPhase('config')}
         style={{
           padding: '0.75rem 1.5rem',
-          background: 'var(--accent)',
+          background: 'var(--brand)',
           border: 'none',
           borderRadius: 8,
-          color: 'var(--accent-fg)',
+          color: 'var(--brand-fg)',
           fontWeight: 700,
         }}
       >
@@ -407,10 +407,10 @@ function RoundPlayer({
             disabled={submitting}
             style={{
               padding: '0.6rem 1.25rem',
-              background: 'var(--accent)',
+              background: 'var(--brand)',
               border: 'none',
               borderRadius: 8,
-              color: 'var(--accent-fg)',
+              color: 'var(--brand-fg)',
               fontWeight: 700,
               opacity: submitting ? 0.5 : 1,
               cursor: submitting ? 'wait' : 'pointer',
@@ -425,10 +425,10 @@ function RoundPlayer({
             onClick={advance}
             style={{
               padding: '0.6rem 1.25rem',
-              background: 'var(--accent)',
+              background: 'var(--brand)',
               border: 'none',
               borderRadius: 8,
-              color: 'var(--accent-fg)',
+              color: 'var(--brand-fg)',
               fontWeight: 700,
             }}
             autoFocus
@@ -569,7 +569,7 @@ function ContextPanel({ scenario }: { scenario: string }) {
       style={{
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border)',
-        borderLeft: '3px solid var(--accent)',
+        borderLeft: '3px solid var(--brand)',
         borderRadius: 8,
         padding: '0.9rem 1.1rem',
         marginBottom: '1rem',
