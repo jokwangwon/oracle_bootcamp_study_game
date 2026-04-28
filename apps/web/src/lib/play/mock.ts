@@ -47,16 +47,6 @@ export const PRACTICE_INITIAL_CONFIG: SoloConfigSelection = {
 };
 
 /**
- * 시안 β §3.1.2 — 랭킹 도전 타일의 라이브 동기 카운트.
- *
- * 본 PR-9a 는 mock 고정. 백엔드 `/api/users/active` 같은 endpoint 가 별도 트랙으로
- * 추가되면 1:1 swap.
- */
-export function getMockLiveUserCount(): number {
-  return 12;
-}
-
-/**
  * 적응형 난이도 흐름 mock — PR-9c 에서 finished 화면에 사용. 본 PR-9a 미사용.
  */
 export const MOCK_ADAPTIVE_HISTORY: AdaptiveHistoryEntry[] = [
@@ -203,8 +193,8 @@ export const MOCK_LAST_SESSION: LastSessionSummary | null = {
 /**
  * 시안 ε §3.2 / §10.5 — 트랙 타일 stats row mock.
  *
- * 두 트랙이 다른 stat 라인 노출. ranked 의 liveUserCount 는 기존
- * `getMockLiveUserCount()` 와 동일 의미 — 시안 ε 에서 트랙 타일 stats row 로 흡수.
+ * 두 트랙이 다른 stat 라인 노출. ranked 의 liveUserCount 는 기존 PR-9a 의 단일
+ * `liveUserCount` prop 을 흡수.
  */
 export const MOCK_RANKED_TRACK_STATS: RankedTrackStats = {
   liveUserCount: 12,
