@@ -43,6 +43,21 @@ module.exports = {
         // PR-9a 시안 β — FeedbackCard 정/오 wash (PR-9b 에서 활용)
         'feedback-correct': 'var(--feedback-correct)',
         'feedback-incorrect': 'var(--feedback-incorrect)',
+        // PR-9a' 시안 ε — 난이도 chip 색·강도 분기 (text-difficulty-easy / bg-difficulty-easy-bg / border-difficulty-easy)
+        difficulty: {
+          easy: {
+            DEFAULT: 'var(--difficulty-easy)',
+            bg: 'var(--difficulty-easy-bg)',
+          },
+          medium: {
+            DEFAULT: 'var(--difficulty-medium)',
+            bg: 'var(--difficulty-medium-bg)',
+          },
+          hard: {
+            DEFAULT: 'var(--difficulty-hard)',
+            bg: 'var(--difficulty-hard-bg)',
+          },
+        },
 
         // shadcn 토큰 (HSL)
         background: 'hsl(var(--background))',
