@@ -116,7 +116,8 @@ docs/
     ├── ux-redesign-brief-v1.md                    # UX 재설계 브리프 v1 (Phase 0 입력)
     ├── sm2-spaced-repetition-brief-v1.md          # SM-2 SR 도입 Phase 0 브리프 (2026-04-24)
     ├── main-page-design-brief.md                  # 메인 페이지 디자인 브리프 v1 (2026-04-28, 외부 도구/디자이너 핸드오프)
-    └── main-page-redesign-concept-d.md            # 메인 페이지 시안 D 구현 핸드오프 v1 (2026-04-28, PR-8b)
+    ├── main-page-redesign-concept-d.md            # 메인 페이지 시안 D 구현 핸드오프 v1 (2026-04-28, PR-8b)
+    └── play-and-mistakes-redesign-concept-beta.md  # 플레이+오답 시안 β (Flow Glass) 구현 핸드오프 v1 (2026-04-28, PR-9a~9d, 트랙 분기 + 옵션 1 다중 모드 + 적응형 난이도)
 ```
 
 ---
