@@ -45,6 +45,33 @@ export class UsersService {
     return this.userRepo.save(user);
   }
 
+  /**
+   * PR-10a §4.2.1 B 절 — atomic increment. logout / 비밀번호 변경 / 강제 revoke 시
+   * 호출. 기존 access JWT 전체 즉시 무효화 (JwtStrategy 가 epoch claim 비교).
+   *
+   * UPDATE ... SET token_epoch = token_epoch + 1 WHERE id = $1 — DB level atomic.
+   */
+  async incrementTokenEpoch(userId: string): Promise<number> {
+    const result = await this.userRepo.increment({ id: userId }, 'tokenEpoch', 1);
+    if (!result.affected) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+    const fresh = await this.userRepo.findOne({ where: { id: userId } });
+    if (!fresh) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+    return fresh.tokenEpoch;
+  }
+
+  /** JwtStrategy.validate 가 매 요청 호출. 사용자 없으면 throw (401 변환). */
+  async getTokenEpoch(userId: string): Promise<number> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+    return user.tokenEpoch;
+  }
+
   async getProgress(userId: string): Promise<UserProgressEntity[]> {
     return this.progressRepo.find({ where: { userId } });
   }
