@@ -32,6 +32,10 @@ export type TodayQuestion = {
   filename: string;
   modeLabel: string;
   code: CodeLine[];
+  /** PR-12 §3.2 — Hero 우하단 "토론 N개" 메타 칩 진입점. discussionCount > 0 시만 표시. */
+  questionId?: string;
+  /** PR-12 §3.2 — 토론 개수. undefined / 0 시 칩 미표시 (silent). */
+  discussionCount?: number;
 };
 
 export type LiveTicker = {

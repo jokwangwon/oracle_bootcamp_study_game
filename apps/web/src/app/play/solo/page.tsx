@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Notebook, Sparkles } from 'lucide-react';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -348,6 +349,51 @@ function SoloPlayPageInner() {
       )}
 
       {error && <p style={{ color: 'var(--error)', marginBottom: '1rem' }}>{error}</p>}
+
+      {/* PR-12 §3.1 — Round 별 "토론 보기" CTA. consensus-012 Q-R5-04=a. */}
+      {rounds.length > 0 && (
+        <section
+          aria-labelledby="discussion-cta-heading"
+          style={{ marginBottom: '1.5rem' }}
+        >
+          <h2
+            id="discussion-cta-heading"
+            style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}
+          >
+            이 라운드 토론
+          </h2>
+          <ul
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+            }}
+            data-testid="finished-discussion-cta"
+          >
+            {rounds.map((round, idx) => (
+              <li key={round.id}>
+                <Link
+                  href={`/play/solo/${round.question.id}/discussion`}
+                  className="glass-button"
+                  style={{
+                    display: 'inline-block',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: 6,
+                    background: 'var(--bg-elevated)',
+                    color: 'var(--fg)',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  Round {idx + 1} 토론 보기 ({round.question.id.slice(0, 8)}…)
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <button
         type="button"

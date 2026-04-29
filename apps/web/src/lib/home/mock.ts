@@ -8,6 +8,9 @@
 import type { HomeViewModel } from './types';
 
 const today: HomeViewModel['todayQuestion'] = {
+  // PR-12 §3.2 mock — 실 API 연결 시 백엔드에서 채움.
+  questionId: '00000000-0000-4000-8000-000000000016',
+  discussionCount: 4,
   filename: 'day16-cursor.sql',
   modeLabel: '빈칸 · 객관식',
   code: [
