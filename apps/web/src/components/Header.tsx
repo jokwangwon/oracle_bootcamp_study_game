@@ -66,20 +66,13 @@ export function Header() {
   return (
     <header className="border-b border-border bg-bg-elevated">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-        {/*
-          게스트가 logo 클릭 시 / → middleware 가 /login 으로 redirect → 같은 페이지
-          → "변화 없음" UX 회귀. 인증 시에만 link, 게스트는 plain text.
-        */}
-        {mounted && authed ? (
-          <Link
-            href="/"
-            className="text-base font-bold text-fg no-underline transition-colors hover:text-brand"
-          >
-            Oracle DBA 학습 게임
-          </Link>
-        ) : (
-          <span className="text-base font-bold text-fg">Oracle DBA 학습 게임</span>
-        )}
+        {/* / 는 PUBLIC_PATHS — 게스트도 메인 화면으로 이동 가능. */}
+        <Link
+          href="/"
+          className="text-base font-bold text-fg no-underline transition-colors hover:text-brand"
+        >
+          Oracle DBA 학습 게임
+        </Link>
 
         <div className="flex min-h-8 items-center gap-2">
           <ThemeToggle />
