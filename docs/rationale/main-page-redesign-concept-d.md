@@ -38,7 +38,7 @@
 1. **Header** (변경 없음)
 2. **Hero** — 좌(개인화 카피) + 우(3-layer 통합 패널: 탭바 → 다크 코드 → 라이트 라이브 티커)
 3. **Journey strip** — 20-day 부트캠프 진행 막대 (신규)
-4. **비대칭 3-카드 그리드** — Primary 1.4 : Ranking 1 : Admin 1, Primary 만 그라디언트 + 챕터 진행 바
+4. **비대칭 4-카드 그리드** — Primary 1.4 : Ranking 1 : Admin 1 : Community 1, Primary 만 그라디언트 + 챕터 진행 바 (Session 15 ADR-021 — Community 카드 추가)
 
 핵심 디자인 의도: **"오늘 풀어야 할 코드 + 지금 12명이 같이 풀고 있다는 사실 + 부트캠프 전체에서 어디쯤 왔나"** 를 한 시야 안에서 전달.
 
@@ -193,11 +193,36 @@
 
 게스트일 때: 이 영역을 **챕터 미리보기 strip** 으로 대체한다 — 같은 형태지만 모든 막대가 `bg-border` 이고 라벨은 `1주차 SELECT · 2주차 JOIN · 3주차 PL/SQL`.
 
-### 3.4 비대칭 3-카드 그리드
+### 3.4 비대칭 4-카드 그리드 (Session 15 변경 — ADR-021 Community Hub Q-R6-12)
 
-전체: `mt-6 grid gap-2.5 grid-cols-1 sm:grid-cols-3 lg:grid-cols-[1.4fr_1fr_1fr]`
+> **변경 이력**: 2026-04-29 Session 15 (consensus-013 / ADR-021) — 비대칭 3-카드 → 4-카드.
+> Community 카드 신규 추가. `Primary 솔로 / Ranking / Admin / Community` 4종.
+> 사용자 결정 Q-R6-12 (옵션 3 — 비대칭 4번째 카드) 채택.
+> 외부 채널 부재 (Slack 미사용) 컨텍스트로 자유게시판이 부트캠프 정보 공유 메인 채널 → Hero 에서 발견성 필요.
 
-**모바일/태블릿(`< lg`)**: 균등 3열 (또는 1열). 비대칭은 데스크톱에서만.
+전체: `mt-6 grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]`
+
+**모바일(`< sm`)**: 1열. **태블릿(`sm` ~ `lg`)**: 균등 2열. **데스크톱(`>= lg`)**: 비대칭 4열 (Primary 1.4 : Ranking 1 : Admin 1 : Community 1).
+
+**구성**:
+- §3.4.1 Primary (솔로 플레이) — 변경 없음
+- §3.4.2 Ranking — 변경 없음
+- §3.4.3 Admin (학습 범위) — 변경 없음
+- §3.4.4 Community (자유게시판) — **신규 (ADR-021 Session 15)**
+
+**§3.4.4 Community 카드** (신규):
+- 배경: `bg-bg`, 보더 `border border-border rounded-lg`, 패딩 `p-3.5` (Ranking/Admin 패턴 재사용 — 글라스 톤 일관)
+- 헤더: 22px 라운드 아이콘 박스 `bg-emerald-100 dark:bg-emerald-900/30` + lucide `<Users />` (emerald 색) → `커뮤니티` 타이틀
+- 본문 — 카테고리별 최근 글 카운트:
+  - 1행: `📌 공지 · 3건` (`text-xs`)
+  - 2행: `💬 자유 · 12건` (`text-xs`)
+  - 3행: `📚 스터디 · 5건` (`text-xs`)
+  - 4행: `🔗 자료 · 8건` (`text-xs`)
+- 하단 CTA: `→ 자유게시판으로` (`text-[10px] opacity-70 mt-2`)
+- 클릭 → `/community` 진입 (인증 필수, middleware redirect 보호)
+- 게스트일 땐 `로그인 후 이용 가능` 표시 + click → `/login?next=/community`
+
+`<CommunityCard>` 컴포넌트 위치: `apps/web/src/components/home/feature-cards.tsx` 4번째 슬롯 추가.
 
 #### 3.4.1 Primary 카드 (솔로 플레이)
 

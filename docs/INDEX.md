@@ -2,7 +2,7 @@
 
 > **프로젝트 문서 전체 구조 및 읽는 순서**
 
-**최종 업데이트**: 2026-04-29 (Session 14 — **PR-12 web 토론 페이지 코드 PR (PR #60, Phase 4~7, 22 commits)**. Phase 4~7 5건 + 라이브 외부 노트북 hotfix 11건 + UX 결정 4건 + placeholder 2건. **149 web tests 신규 GREEN (api 1284 회귀 0)**. CRITICAL 5건 해소 (consensus-012 매핑 — Markdown raw + sanitize-schema 동등성 + RelatedQuestionBlur 2차 방어 + Phase 1~3 백엔드 의존 + UUID 검증). hotfix 11건 패턴 = 단위 테스트가 통합 차원 결함 미검출 (DI 누락 / EXTRACT IMMUTABLE / contract mismatch / SWR 무한 / throttle 부적합 / vote endpoint shape / self-vote 차단 / docker env 누락) → 통합 e2e 하네스 별도 PR-13 권장. 사용자 결정 5건 (D1 docs A 패턴 / D2 좋아요 ▼ 제거 + 0↔+1 토글 / D3 인증 게이트 2단계 변경 — 모든 페이지 차단 → 메인 공개로 완화 / D4 Hero CTA "이어서 풀기" → "솔로 게임 시작" / D5 다음 세션 ADR-021). 신규 의존성 11종 (react-markdown / rehype-sanitize / swr / @radix-ui/react-tabs / @axe-core/react + vitest-axe + 5 dev). 신규 라우트 4 (discussion 2 + placeholder 2 — `/rankings` `/admin/scope`). 신규 middleware (PUBLIC_PATHS = `/`, `/login`, `/register`). 다음 세션 0순위: ADR-021 (Community Hub) 3+1 합의 가동. **이전 (Session 13 후속4)**: PR-12 web 토론 페이지 docs PR (consensus-012). 3+1 합의 (만장일치 6.7% / 유효 100%) + 사용자 결정 15건 모두 권장 채택 ("전부 권장"). CRITICAL 5건 해소 + 신규 docs 4파일 + ADR-020 §4.2.1 C/§5.3/§6/§9/§11 패치. **이전 (Session 13 후속3)**: **PR-10c CSRF Origin guard 코드 머지 (PR #56, 1175+1s → 1218+1s, +43 cases)**. consensus-011 CRITICAL 3건 패치 (URL parse + protocol/host:port exact match / production CORS_ORIGIN fail-closed 이중 안전망 / SkipOriginCheck decorator + ORIGIN_GUARD_MODE=report 1주 관측 + 한국어 학습 힌트 + ORIGIN_GUARD_DISABLED kill-switch). 가드 순서 OriginGuard 글로벌 → ThrottlerGuard / JwtAuthGuard 컨트롤러. **PR-10 시리즈 완료** (10a httpOnly cookie + 10b R4 discussion + 10c CSRF Origin guard). 사용자 작업: `.env CORS_ORIGIN` 부트캠프 표준값 + `ORIGIN_GUARD_MODE=report` + API 재기동. 1주 후 enforce. 다음 세션 0순위: PR-12 (web 토론 페이지 + rehype-sanitize + hot/top raw query, 2.5d). **이전 (Session 13 후속2)**: PR-10c 위협 모델 재합의 (consensus-011) + ADR-020 §4.2.1 E·I·K 갱신 docs PR. 3+1 합의 (만장일치 35.7% / 유효 92.9%) + 사용자 6결정 모두 추천값 채택 (a/a/a/b/a/a). CRITICAL 3건 식별 (startsWith bypass / CORS_ORIGIN fail-OPEN / 운영 회귀) → §4.2.1 E 절 명세 17 → 25~30 LOC 갱신 + §K 절 신설 (PR-10c 머지 전 추가 선결 조건 + 미래 재검토 트리거 4종). CSRF token 폐기 = 명목상 작업 0 (csurf/xsrf grep 0건). Sec-Fetch-Site hybrid 채택 거부 (Tailscale HTTP 환경에서 미전송). 다음 작업: 본 docs PR 머지 → 코드 PR (Phase 1~3, ~140 LOC + 33 cases TDD) → 1주 Report-Only 관측 → enforce 전환.)
+**최종 업데이트**: 2026-04-29 (**Session 15 — ADR-021 (Community Hub) + PR-13 (통합 e2e 하네스) docs PR (consensus-013)**). 3+1 합의 (Agent A·B·C 병렬 + Reviewer). **합의율 만장일치 12.5% (1/8) / 유효 100% (8/8)**. 결정 8건 (도메인 / 카테고리 / 라우트 / 권한 / Header / 모더레이션 + PR-13 우선순위 + PR-13 도구). **CRITICAL 격상 3건**: middleware PUBLIC_PATHS 모순 (Q-R5-11 번복 확정) / PR-13 1주 선행 머지 / audit log 부재 (CWE-778, ADR-016 §7 D3 Hybrid 재사용). **옵션 공간 재오픈** (Agent C 단독 제안 옵션 F=Q&A mview / G=virtual root question 시드) — consensus-012 의 5개 매트릭스 Gap 메우기. **사용자 결정 12건 (Q-R6-01~12) — 항목별 검토 패턴**. Reviewer 권장 대비 변경 4건: Q-R6-02 격상 (외부 채널 부재 — Slack 미사용, Zoom 만, 정보 공유 커뮤니티 없음 → 카테고리 1기 도입 4종 notice/free/study/resource) / Q-R6-09 격상 (강사 = operator role, 학생 글 수정 코드 강제) / Q-R6-10 종속 격상 (1기 3-tier user/operator/admin) / Q-R6-12 변경 (시안 D §3.4 비대칭 3-카드 → 4-카드, Community 카드 추가). **사용자 결정 12건 채택값**: Q-R6-04 옵션1 (read 인증 필수) / Q-R6-06 옵션1 (audit log 1기) / Q-R6-11 옵션1 (PR-13 1주 선행) / Q-R6-01 옵션 G (virtual root) / Q-R6-02 후보2 (4종) / Q-R6-03 옵션2 (path segment) / Q-R6-05 옵션1 (이중 방어) / Q-R6-07 옵션1 (NestJS 기본 + CI) / Q-R6-09 옵션2 (operator) / Q-R6-10 자동 (3-tier) / Q-R6-12 옵션3 (4번째 카드) / Q-R6-08 N/A. **신규 docs 9개**: consensus-013 + ADR-021 + community-hub-design + community-rbac-design + community-moderation-design + audit-log-design + integrated-e2e-harness-design + tdd-plan + impact. **패치 docs 2개**: ADR-020 §11 + 시안 D §1·§3.4 (4-카드). **추정 분량**: ADR-021 docs 1d (본 PR) + PR-13 코드 4d (Phase 2 1주 선행) + ADR-021 코드 4분할 6d (Phase 3 = 마이그레이션 1d + API/RBAC 2d + UI 2d + 모더레이션 1.5d). **다음 세션 0순위**: PR-13 코드 PR (Phase 2, 1주 선행 머지). **이전 (Session 14)**: PR-12 web 토론 페이지 코드 PR (PR #60, Phase 4~7, 22 commits). Phase 4~7 5건 + 라이브 외부 노트북 hotfix 11건 + UX 결정 4건 + placeholder 2건. 149 web tests 신규 GREEN (api 1284 회귀 0). CRITICAL 5건 해소 (consensus-012 매핑). hotfix 11건 패턴 = 단위 테스트가 통합 차원 결함 미검출 → PR-13 가동 근거. **이전 (Session 13 후속4)**: PR-12 web 토론 페이지 docs PR (consensus-012). 3+1 합의 (만장일치 6.7% / 유효 100%) + 사용자 결정 15건 모두 권장 채택 ("전부 권장"). CRITICAL 5건 해소 + 신규 docs 4파일 + ADR-020 §4.2.1 C/§5.3/§6/§9/§11 패치. **이전 (Session 13 후속3)**: **PR-10c CSRF Origin guard 코드 머지 (PR #56, 1175+1s → 1218+1s, +43 cases)**. consensus-011 CRITICAL 3건 패치 (URL parse + protocol/host:port exact match / production CORS_ORIGIN fail-closed 이중 안전망 / SkipOriginCheck decorator + ORIGIN_GUARD_MODE=report 1주 관측 + 한국어 학습 힌트 + ORIGIN_GUARD_DISABLED kill-switch). 가드 순서 OriginGuard 글로벌 → ThrottlerGuard / JwtAuthGuard 컨트롤러. **PR-10 시리즈 완료** (10a httpOnly cookie + 10b R4 discussion + 10c CSRF Origin guard). 사용자 작업: `.env CORS_ORIGIN` 부트캠프 표준값 + `ORIGIN_GUARD_MODE=report` + API 재기동. 1주 후 enforce. 다음 세션 0순위: PR-12 (web 토론 페이지 + rehype-sanitize + hot/top raw query, 2.5d). **이전 (Session 13 후속2)**: PR-10c 위협 모델 재합의 (consensus-011) + ADR-020 §4.2.1 E·I·K 갱신 docs PR. 3+1 합의 (만장일치 35.7% / 유효 92.9%) + 사용자 6결정 모두 추천값 채택 (a/a/a/b/a/a). CRITICAL 3건 식별 (startsWith bypass / CORS_ORIGIN fail-OPEN / 운영 회귀) → §4.2.1 E 절 명세 17 → 25~30 LOC 갱신 + §K 절 신설 (PR-10c 머지 전 추가 선결 조건 + 미래 재검토 트리거 4종). CSRF token 폐기 = 명목상 작업 0 (csurf/xsrf grep 0건). Sec-Fetch-Site hybrid 채택 거부 (Tailscale HTTP 환경에서 미전송). 다음 작업: 본 docs PR 머지 → 코드 PR (Phase 1~3, ~140 LOC + 33 cases TDD) → 1주 Report-Only 관측 → enforce 전환.)
 
 ---
 
@@ -66,7 +66,12 @@ docs/
 │   ├── change-impact-analysis-design.md         # 변경 영향 분석
 │   ├── oracle-dba-learning-game-design.md       # Oracle DBA 학습 게임 SDD
 │   ├── oss-model-evaluation-design.md           # OSS 모델 평가 SDD (초안)
-│   └── pr-12-discussion-page-design.md          # PR-12 web 토론 페이지 SDD (2026-04-29 후속4, consensus-012, 사용자 결정 15건 채택)
+│   ├── pr-12-discussion-page-design.md          # PR-12 web 토론 페이지 SDD (2026-04-29 후속4, consensus-012, 사용자 결정 15건 채택)
+│   ├── community-hub-design.md                  # ADR-021 Community Hub 도메인 모델 + 카테고리 + 라우트 SDD (2026-04-29 Session 15, consensus-013)
+│   ├── community-rbac-design.md                 # ADR-021 1기 3-tier RBAC + RolesGuard + 이중 방어 SDD (2026-04-29 Session 15)
+│   ├── community-moderation-design.md           # ADR-021 모더레이션 1기/2기/3기 단계 SDD (2026-04-29 Session 15)
+│   ├── audit-log-design.md                      # ADR-021 audit log CWE-778 + WORM + ADR-016 §7 D3 Hybrid 재사용 SDD (2026-04-29 Session 15)
+│   └── integrated-e2e-harness-design.md         # PR-13 통합 e2e 하네스 SDD (NestJS testing + Playwright smoke + MSW + 5종 안전장치, 2026-04-29 Session 15)
 │
 ├── guides/                               # 개발 가이드
 │   ├── DEVELOPMENT_GUIDE.md              # 개발 프로세스, Git 규칙
@@ -93,7 +98,8 @@ docs/
 │   ├── ADR-017-mt6-mt7-mt8-metrics.md           # 운영 지표 MT6/MT7/MT8 (v2.9)
 │   ├── ADR-018-user-token-hash-salt-rotation.md # USER_TOKEN_HASH_SALT rotation 정책 (2026-04-22)
 │   ├── ADR-019-sm2-spaced-repetition.md         # SM-2 Spaced Repetition 도입 (2026-04-24)
-│   └── ADR-020-ux-redesign.md                   # UX 재설계: Tailwind + shadcn/ui + R4 토론 + R6 voting (2026-04-24)
+│   ├── ADR-020-ux-redesign.md                   # UX 재설계: Tailwind + shadcn/ui + R4 토론 + R6 voting (2026-04-24)
+│   └── ADR-021-community-hub.md                 # Community Hub: 자유게시판 + 카테고리 4종 + 1기 3-tier RBAC + 모더레이션 + audit log (2026-04-29 Session 15, consensus-013)
 │
 ├── sessions/                             # 세션 로그
 │   └── ...
@@ -110,10 +116,13 @@ docs/
 │   ├── consensus-010-pr-10-security.md                         # PR-10 보안 합의 (2026-04-28, Session 12)
 │   ├── consensus-011-pr-10c-csrf.md                            # PR-10c CSRF 위협 모델 재합의 (2026-04-28 후속, Session 13)
 │   ├── consensus-012-pr-12-discussion-page.md                  # PR-12 web 토론 페이지 합의 (2026-04-29 후속4, Session 13, 만장일치 6.7% / 유효 100% / 사용자 결정 15건 모두 채택)
+│   ├── consensus-013-adr-021-community-hub.md                  # ADR-021 Community Hub + PR-13 합의 (2026-04-29 Session 15, 만장일치 12.5% / 유효 100% / 사용자 결정 12건 — Reviewer 권장 대비 변경 4건)
 │   ├── impact-pr-10a-cookie-refresh-revoke.md                  # PR-10a 변경 영향 분석 (2026-04-29, ADR-007 SYSTEM 4차원)
 │   ├── impact-pr-12-discussion-page.md                         # PR-12 변경 영향 분석 (2026-04-29 후속4, ADR-007 SYSTEM 4차원, HIGH 등급)
+│   ├── impact-adr-021-community-hub.md                         # ADR-021 변경 영향 분석 (2026-04-29 Session 15, ADR-007 4차원)
 │   ├── tdd-plan-pr-10a-cookie-refresh-revoke.md                # PR-10a TDD 단계 분해 plan (2026-04-29, 11 Phase / 40+ cases)
-│   └── tdd-plan-pr-12-discussion-page.md                       # PR-12 TDD 단계 분해 plan (2026-04-29 후속4, 7 Phase / ~103 cases)
+│   ├── tdd-plan-pr-12-discussion-page.md                       # PR-12 TDD 단계 분해 plan (2026-04-29 후속4, 7 Phase / ~103 cases)
+│   └── tdd-plan-adr-021-community-hub.md                       # ADR-021 + PR-13 TDD 단계 분해 plan (2026-04-29 Session 15, ~335 신규 cases)
 │
 └── rationale/                            # 판단 근거 (의사결정 narrative)
     ├── oss-model-selection-rationale.md           # OSS 모델 자체 호스팅 후보 선정 근거 (2026-04-09)
