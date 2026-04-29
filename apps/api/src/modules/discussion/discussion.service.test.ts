@@ -3,7 +3,12 @@ import { QueryFailedError } from 'typeorm';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { IsNull, type DataSource, type EntityManager, type Repository } from 'typeorm';
 
-import { DiscussionService, type ThreadCursor } from './discussion.service';
+import { DiscussionService } from './discussion.service';
+import type {
+  ThreadCursorHot,
+  ThreadCursorNew,
+  ThreadCursorTop,
+} from './cursor';
 import { DiscussionPostEntity } from './entities/discussion-post.entity';
 import { DiscussionThreadEntity } from './entities/discussion-thread.entity';
 import { DiscussionVoteEntity } from './entities/discussion-vote.entity';
@@ -228,50 +233,170 @@ describe('DiscussionService — Thread CRUD (Phase 4a)', () => {
     });
   });
 
-  describe('listThreadsByQuestion', () => {
-    it('default sort=new — createdAt DESC + isDeleted=false + take=20 (default limit)', async () => {
-      threadRepo.find.mockResolvedValue([makeThread()]);
+  describe('listThreadsByQuestion (Phase 2 raw query)', () => {
+    /**
+     * PR-12 §5.2 — sort 별 raw query. createQueryBuilder mock 으로 호출 인자를
+     * 캡처하고 정렬식·cursor·limit 분기를 검증.
+     */
+    type QbCalls = {
+      orderBy: ReturnType<typeof vi.fn>;
+      addOrderBy: ReturnType<typeof vi.fn>;
+      addSelect: ReturnType<typeof vi.fn>;
+      andWhere: ReturnType<typeof vi.fn>;
+      take: ReturnType<typeof vi.fn>;
+      where: ReturnType<typeof vi.fn>;
+      getMany: ReturnType<typeof vi.fn>;
+    };
+
+    function makeQb(rows: DiscussionThreadEntity[]): QbCalls {
+      const qb: Partial<QbCalls> = {};
+      qb.where = vi.fn(() => qb as QbCalls);
+      qb.andWhere = vi.fn(() => qb as QbCalls);
+      qb.addSelect = vi.fn(() => qb as QbCalls);
+      qb.orderBy = vi.fn(() => qb as QbCalls);
+      qb.addOrderBy = vi.fn(() => qb as QbCalls);
+      qb.take = vi.fn(() => qb as QbCalls);
+      qb.getMany = vi.fn(async () => rows);
+      return qb as QbCalls;
+    }
+
+    it('2.1 sort=new (default) — t.createdAt DESC + t.id DESC tie-break', async () => {
+      const qb = makeQb([makeThread()]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
       const service = makeService(threadRepo);
 
       await service.listThreadsByQuestion(QUESTION_ID, {});
 
-      expect(threadRepo.find).toHaveBeenCalledOnce();
-      const args = threadRepo.find.mock.calls[0]![0];
-      expect(args.where).toMatchObject({ questionId: QUESTION_ID, isDeleted: false });
-      expect(args.order).toEqual({ createdAt: 'DESC', id: 'DESC' });
-      expect(args.take).toBe(20);
+      expect(threadRepo.createQueryBuilder).toHaveBeenCalledWith('t');
+      expect(qb.orderBy).toHaveBeenCalledWith('t.createdAt', 'DESC');
+      expect(qb.addOrderBy).toHaveBeenCalledWith('t.id', 'DESC');
+      expect(qb.take).toHaveBeenCalledWith(20);
+      // questionId / isDeleted=false 필터링
+      expect(qb.where).toHaveBeenCalledWith('t.questionId = :questionId', {
+        questionId: QUESTION_ID,
+      });
+      expect(qb.andWhere).toHaveBeenCalledWith('t.isDeleted = false');
     });
 
-    it('limit > 50 은 50 으로 clamp (HIGH-6)', async () => {
-      threadRepo.find.mockResolvedValue([]);
+    it('2.2 sort=top — t.score DESC + t.id DESC tie-break', async () => {
+      const qb = makeQb([makeThread()]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const service = makeService(threadRepo);
+
+      await service.listThreadsByQuestion(QUESTION_ID, { sort: 'top' });
+
+      expect(qb.orderBy).toHaveBeenCalledWith('t.score', 'DESC');
+      expect(qb.addOrderBy).toHaveBeenCalledWith('t.id', 'DESC');
+    });
+
+    it('2.3 sort=hot — Reddit log10 expression + addSelect alias DESC + id DESC', async () => {
+      const qb = makeQb([makeThread()]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const service = makeService(threadRepo);
+
+      await service.listThreadsByQuestion(QUESTION_ID, { sort: 'hot' });
+
+      const addSelectCall = qb.addSelect.mock.calls[0]!;
+      const expr = addSelectCall[0] as string;
+      expect(expr).toMatch(/LOG\(GREATEST\(ABS\(t\.score\),\s*1\)\)\s*\*\s*SIGN\(t\.score\)/);
+      expect(expr).toMatch(/EXTRACT\(EPOCH FROM t\.last_activity_at\)\s*\/\s*45000/);
+      expect(qb.orderBy).toHaveBeenCalledWith('t_hot', 'DESC');
+      expect(qb.addOrderBy).toHaveBeenCalledWith('t.id', 'DESC');
+    });
+
+    it('2.4 sort=new cursor {c,i} — andWhere 에 createdAt < + tie-break', async () => {
+      const qb = makeQb([]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const service = makeService(threadRepo);
+      const cursor: ThreadCursorNew = { c: NOW.toISOString(), i: THREAD_ID };
+
+      await service.listThreadsByQuestion(QUESTION_ID, { cursor });
+
+      const whereCall = qb.andWhere.mock.calls.find(
+        ([sql]) => typeof sql === 'string' && sql.includes('t.createdAt'),
+      );
+      expect(whereCall).toBeDefined();
+      const params = whereCall![1] as { cAt: Date; cId: string };
+      expect(params.cAt).toBeInstanceOf(Date);
+      expect(params.cId).toBe(THREAD_ID);
+    });
+
+    it('2.5 sort=top cursor {s,i} — andWhere 에 score < + tie-break', async () => {
+      const qb = makeQb([]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const service = makeService(threadRepo);
+      const cursor: ThreadCursorTop = { s: 42, i: THREAD_ID };
+
+      await service.listThreadsByQuestion(QUESTION_ID, { sort: 'top', cursor });
+
+      const whereCall = qb.andWhere.mock.calls.find(
+        ([sql]) => typeof sql === 'string' && sql.includes('t.score'),
+      );
+      expect(whereCall).toBeDefined();
+      const params = whereCall![1] as { cScore: number; cId: string };
+      expect(params.cScore).toBe(42);
+      expect(params.cId).toBe(THREAD_ID);
+    });
+
+    it('2.6 sort=hot cursor {h,i} — andWhere 에 hot expression < + tie-break', async () => {
+      const qb = makeQb([]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const service = makeService(threadRepo);
+      const cursor: ThreadCursorHot = { h: 1234.5, i: THREAD_ID };
+
+      await service.listThreadsByQuestion(QUESTION_ID, { sort: 'hot', cursor });
+
+      const whereCall = qb.andWhere.mock.calls.find(
+        ([sql]) =>
+          typeof sql === 'string' &&
+          sql.includes('LOG(GREATEST(ABS(t.score)'),
+      );
+      expect(whereCall).toBeDefined();
+      const params = whereCall![1] as { cHot: number; cId: string };
+      expect(params.cHot).toBeCloseTo(1234.5, 4);
+      expect(params.cId).toBe(THREAD_ID);
+    });
+
+    it('2.7 sort 화이트리스트 — invalid 값 → BadRequestException', async () => {
+      const qb = makeQb([]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const service = makeService(threadRepo);
+
+      await expect(
+        service.listThreadsByQuestion(QUESTION_ID, {
+          sort: "'; DROP TABLE--" as never,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('2.8 limit > 50 은 50 으로 clamp (HIGH-6)', async () => {
+      const qb = makeQb([]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
       const service = makeService(threadRepo);
 
       await service.listThreadsByQuestion(QUESTION_ID, { limit: 9999 });
 
-      expect(threadRepo.find.mock.calls[0]![0].take).toBe(50);
+      expect(qb.take).toHaveBeenCalledWith(50);
     });
 
-    it('composite cursor (createdAt, id) — createdAt < cursor.createdAt OR (등호 시 id <)', async () => {
-      threadRepo.find.mockResolvedValue([]);
-      const service = makeService(threadRepo);
-      const cursor: ThreadCursor = { createdAt: NOW, id: THREAD_ID };
-
-      await service.listThreadsByQuestion(QUESTION_ID, { cursor });
-
-      const args = threadRepo.find.mock.calls[0]![0];
-      // composite cursor 는 raw query 표현식이라 호출 인자에 cursor 가 포함되었는지만 검증
-      expect(JSON.stringify(args.where)).toContain(THREAD_ID);
-    });
-
-    it('응답에 isDeleted=true 항목이 있어도 body 가 치환되어 반환된다', async () => {
-      threadRepo.find.mockResolvedValue([
-        makeThread({ id: 't1', isDeleted: false, body: '<p>살아있음</p>' }),
-        makeThread({ id: 't2', isDeleted: true, body: '<p>지워짐</p>' }),
-      ]);
+    it('2.9 thread 0건 시 빈 배열 반환 (empty result)', async () => {
+      const qb = makeQb([]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
       const service = makeService(threadRepo);
 
       const out = await service.listThreadsByQuestion(QUESTION_ID, {});
+      expect(out).toEqual([]);
+    });
 
+    it('2.10 isDeleted=true 항목 body 치환 (mask 회귀)', async () => {
+      const qb = makeQb([
+        makeThread({ id: 't1', isDeleted: false, body: '<p>살아있음</p>' }),
+        makeThread({ id: 't2', isDeleted: true, body: '<p>지워짐</p>' }),
+      ]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const service = makeService(threadRepo);
+
+      const out = await service.listThreadsByQuestion(QUESTION_ID, {});
       expect(out).toHaveLength(2);
       expect(out[0]!.body).toBe('<p>살아있음</p>');
       expect(out[1]!.body).toBe('[삭제된 게시물]');

@@ -66,20 +66,28 @@ describe('DiscussionController — handler delegate', () => {
     controller = new DiscussionController(service);
   });
 
-  it('listThreadsByQuestion — sort/cursor/limit 변환 후 service 호출', async () => {
+  it('listThreadsByQuestion — sort=hot/cursor/limit 변환 후 service 호출', async () => {
     service.listThreadsByQuestion.mockResolvedValue([]);
-    const cursor = encodeCursor({
-      createdAt: new Date('2026-04-29T00:00:00Z'),
-      id: THREAD_ID,
-    });
+    const cursor = encodeCursor({ h: 1234.5, i: THREAD_ID }, 'hot');
 
     await controller.listThreadsByQuestion(QUESTION_ID, 'hot', cursor, '30');
 
     expect(service.listThreadsByQuestion).toHaveBeenCalledWith(QUESTION_ID, {
       sort: 'hot',
-      cursor: { createdAt: new Date('2026-04-29T00:00:00Z'), id: THREAD_ID },
+      cursor: { h: 1234.5, i: THREAD_ID },
       limit: 30,
     });
+  });
+
+  it('listThreadsByQuestion — invalid sort → BadRequestException', async () => {
+    await expect(
+      controller.listThreadsByQuestion(
+        QUESTION_ID,
+        "'; DROP TABLE--",
+        undefined,
+        undefined,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
   });
 
   it('getThread — service.getThread(threadId)', async () => {
@@ -166,32 +174,63 @@ describe('DiscussionController — handler delegate', () => {
   });
 });
 
-describe('DiscussionController cursor base64url helpers', () => {
-  it('encode → decode round-trip 동일성', () => {
+describe('DiscussionController cursor base64url helpers (PR-12 sort 별 schema)', () => {
+  it('sort=new — encode → decode round-trip {c,i}', () => {
     const original = {
-      createdAt: new Date('2026-04-29T12:34:56.789Z'),
-      id: THREAD_ID,
+      c: '2026-04-29T12:34:56.789Z',
+      i: THREAD_ID,
     };
-    const decoded = decodeCursor(encodeCursor(original));
-    expect(decoded.createdAt.toISOString()).toBe(original.createdAt.toISOString());
-    expect(decoded.id).toBe(original.id);
+    const decoded = decodeCursor(encodeCursor(original, 'new'), 'new') as {
+      c: string;
+      i: string;
+    };
+    expect(decoded.c).toBe(original.c);
+    expect(decoded.i).toBe(original.i);
+  });
+
+  it('sort=top — encode → decode round-trip {s,i}', () => {
+    const original = { s: 42, i: THREAD_ID };
+    const decoded = decodeCursor(encodeCursor(original, 'top'), 'top') as {
+      s: number;
+      i: string;
+    };
+    expect(decoded).toEqual(original);
+  });
+
+  it('sort=hot — encode → decode round-trip {h,i}', () => {
+    const original = { h: 1234.5, i: THREAD_ID };
+    const decoded = decodeCursor(encodeCursor(original, 'hot'), 'hot') as {
+      h: number;
+      i: string;
+    };
+    expect(decoded.h).toBeCloseTo(1234.5, 4);
+    expect(decoded.i).toBe(THREAD_ID);
   });
 
   it('잘못된 base64 → BadRequestException("invalid_cursor")', () => {
-    expect(() => decodeCursor('!!!not-base64!!!')).toThrow('invalid_cursor');
+    expect(() => decodeCursor('!!!not-base64!!!', 'new')).toThrow(
+      'invalid_cursor',
+    );
   });
 
-  it('shape 불일치 (date 누락) → BadRequestException', () => {
-    const bad = Buffer.from(JSON.stringify({ x: 1 }), 'utf8').toString('base64url');
-    expect(() => decodeCursor(bad)).toThrow('invalid_cursor');
+  it('shape 불일치 (필드 누락) → BadRequestException', () => {
+    const bad = Buffer.from(JSON.stringify({ x: 1 }), 'utf8').toString(
+      'base64url',
+    );
+    expect(() => decodeCursor(bad, 'new')).toThrow('invalid_cursor');
   });
 
-  it('Invalid Date → BadRequestException', () => {
+  it('Invalid Date (sort=new) → BadRequestException', () => {
     const bad = Buffer.from(
       JSON.stringify({ c: 'not-a-date', i: THREAD_ID }),
       'utf8',
     ).toString('base64url');
-    expect(() => decodeCursor(bad)).toThrow('invalid_cursor');
+    expect(() => decodeCursor(bad, 'new')).toThrow('invalid_cursor');
+  });
+
+  it('schema 불일치 (top schema → sort=new) → BadRequestException', () => {
+    const wrong = encodeCursor({ s: 1, i: THREAD_ID }, 'top');
+    expect(() => decodeCursor(wrong, 'new')).toThrow('invalid_cursor');
   });
 });
 

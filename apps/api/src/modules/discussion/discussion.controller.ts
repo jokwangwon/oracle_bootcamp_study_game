@@ -28,9 +28,13 @@ import type { Request } from 'express';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
-  DiscussionService,
+  decodeCursor as decodeThreadCursor,
+  encodeCursor as encodeThreadCursor,
+  THREAD_SORTS,
   type ThreadCursor,
-} from './discussion.service';
+  type ThreadSort,
+} from './cursor';
+import { DiscussionService } from './discussion.service';
 import type { DiscussionPostEntity } from './entities/discussion-post.entity';
 import type { DiscussionThreadEntity } from './entities/discussion-thread.entity';
 import type { DiscussionVoteTarget } from './entities/discussion-vote.entity';
@@ -81,34 +85,20 @@ interface JwtUser {
   sub: string;
 }
 
-/** §5.4 cursor base64url wrapping. {c: ISO timestamp, i: uuid}. */
-export function encodeCursor(c: ThreadCursor): string {
-  return Buffer.from(
-    JSON.stringify({ c: c.createdAt.toISOString(), i: c.id }),
-    'utf8',
-  ).toString('base64url');
-}
+/**
+ * PR-12 §5.1 — cursor sort 별 schema 분기는 `cursor.ts` 모듈에 위임.
+ * 본 파일에는 controller 호환성을 위해 동일 이름 alias 만 export.
+ */
+export const encodeCursor = encodeThreadCursor;
+export const decodeCursor = decodeThreadCursor;
+export type { ThreadCursor };
 
-export function decodeCursor(s: string): ThreadCursor {
-  try {
-    const decoded = Buffer.from(s, 'base64url').toString('utf8');
-    const obj: unknown = JSON.parse(decoded);
-    if (
-      typeof obj === 'object' &&
-      obj !== null &&
-      typeof (obj as { c?: unknown }).c === 'string' &&
-      typeof (obj as { i?: unknown }).i === 'string'
-    ) {
-      const c = (obj as { c: string; i: string }).c;
-      const i = (obj as { c: string; i: string }).i;
-      const createdAt = new Date(c);
-      if (Number.isNaN(createdAt.valueOf())) throw new Error('invalid_date');
-      return { createdAt, id: i };
-    }
-    throw new Error('shape');
-  } catch {
-    throw new BadRequestException('invalid_cursor');
+function parseSort(raw: string | undefined): ThreadSort {
+  const sort = (raw ?? 'new') as ThreadSort;
+  if (!(THREAD_SORTS as ReadonlyArray<string>).includes(sort)) {
+    throw new BadRequestException('invalid_sort');
   }
+  return sort;
 }
 
 @Controller('discussion')
@@ -121,14 +111,15 @@ export class DiscussionController {
   @Get('questions/:questionId/threads')
   async listThreadsByQuestion(
     @Param('questionId', ParseUUIDPipe) questionId: string,
-    @Query('sort') sort?: 'new' | 'hot' | 'top',
+    @Query('sort') sortRaw?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
   ): Promise<DiscussionThreadEntity[]> {
+    const sort = parseSort(sortRaw);
     const limitNum = limit ? Number.parseInt(limit, 10) : undefined;
     return this.service.listThreadsByQuestion(questionId, {
       sort,
-      cursor: cursor ? decodeCursor(cursor) : undefined,
+      cursor: cursor ? decodeThreadCursor(cursor, sort) : undefined,
       limit: Number.isFinite(limitNum) ? limitNum : undefined,
     });
   }

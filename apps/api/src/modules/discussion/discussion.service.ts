@@ -8,11 +8,18 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
   IsNull,
-  LessThan,
   QueryFailedError,
   Repository,
 } from 'typeorm';
 
+import {
+  THREAD_SORTS,
+  type ThreadCursor,
+  type ThreadCursorHot,
+  type ThreadCursorNew,
+  type ThreadCursorTop,
+  type ThreadSort,
+} from './cursor';
 import { DiscussionPostEntity } from './entities/discussion-post.entity';
 import { DiscussionThreadEntity } from './entities/discussion-thread.entity';
 import {
@@ -21,6 +28,11 @@ import {
   type DiscussionVoteValue,
 } from './entities/discussion-vote.entity';
 import { sanitizePostBody, sanitizeTitle } from './sanitize-post-body';
+
+/** PR-12 §5.2 — Reddit log10 hot 공식. user input 미포함 const string. */
+export const HOT_EXPR =
+  '(LOG(GREATEST(ABS(t.score), 1)) * SIGN(t.score) + EXTRACT(EPOCH FROM t.last_activity_at)/45000)';
+const HOT_ALIAS = 't_hot';
 
 /**
  * PR-10b §5 — R4 토론 서비스 (Phase 4a: Thread CRUD).
@@ -36,9 +48,6 @@ import { sanitizePostBody, sanitizeTitle } from './sanitize-post-body';
  *  - Phase 4c: Vote / Accept (R6 UNIQUE + self-vote 트리거 활용 + 배타 accept)
  */
 
-/** §5.4 cursor — composite (createdAt, id) 로 sort=new/hot/top 모두 안정. */
-export type ThreadCursor = { createdAt: Date; id: string };
-
 /** §5.4 soft delete body 치환 문자열. */
 export const DELETED_BODY_PLACEHOLDER = '[삭제된 게시물]';
 
@@ -48,7 +57,7 @@ const MAX_LIMIT = 50; // §5.4 HIGH-6
 export type CreateThreadDto = { title: string; body: string };
 export type UpdateThreadDto = { title: string; body: string };
 export type ListThreadsOpts = {
-  sort?: 'new' | 'hot' | 'top';
+  sort?: ThreadSort;
   cursor?: ThreadCursor;
   limit?: number;
 };
@@ -125,21 +134,50 @@ export class DiscussionService {
     questionId: string,
     opts: ListThreadsOpts,
   ): Promise<DiscussionThreadEntity[]> {
+    const sort: ThreadSort = opts.sort ?? 'new';
+    if (!(THREAD_SORTS as ReadonlyArray<string>).includes(sort)) {
+      throw new BadRequestException('invalid_sort');
+    }
     const take = Math.min(Math.max(1, opts.limit ?? DEFAULT_LIMIT), MAX_LIMIT);
-    const base = { questionId, isDeleted: false } as const;
-    const where = opts.cursor
-      ? [
-          { ...base, createdAt: LessThan(opts.cursor.createdAt) },
-          { ...base, createdAt: opts.cursor.createdAt, id: LessThan(opts.cursor.id) },
-        ]
-      : base;
-    // sort=hot/top 의 정확한 정렬식 (§5.4) 은 PR-12 (web 토론 페이지) 시점에 raw query
-    // 로 도입. Phase 4a 는 sort=new (createdAt DESC) + composite cursor 안정화에 집중.
-    const list = await this.threadRepo.find({
-      where,
-      order: { createdAt: 'DESC', id: 'DESC' },
-      take,
-    });
+
+    const qb = this.threadRepo
+      .createQueryBuilder('t')
+      .where('t.questionId = :questionId', { questionId })
+      .andWhere('t.isDeleted = false')
+      .take(take);
+
+    if (sort === 'new') {
+      qb.orderBy('t.createdAt', 'DESC').addOrderBy('t.id', 'DESC');
+      if (opts.cursor) {
+        const c = opts.cursor as ThreadCursorNew;
+        qb.andWhere(
+          '(t.createdAt < :cAt) OR (t.createdAt = :cAt AND t.id < :cId)',
+          { cAt: new Date(c.c), cId: c.i },
+        );
+      }
+    } else if (sort === 'top') {
+      qb.orderBy('t.score', 'DESC').addOrderBy('t.id', 'DESC');
+      if (opts.cursor) {
+        const c = opts.cursor as ThreadCursorTop;
+        qb.andWhere(
+          '(t.score < :cScore) OR (t.score = :cScore AND t.id < :cId)',
+          { cScore: c.s, cId: c.i },
+        );
+      }
+    } else if (sort === 'hot') {
+      qb.addSelect(HOT_EXPR, HOT_ALIAS)
+        .orderBy(HOT_ALIAS, 'DESC')
+        .addOrderBy('t.id', 'DESC');
+      if (opts.cursor) {
+        const c = opts.cursor as ThreadCursorHot;
+        qb.andWhere(
+          `(${HOT_EXPR} < :cHot) OR (${HOT_EXPR} = :cHot AND t.id < :cId)`,
+          { cHot: c.h, cId: c.i },
+        );
+      }
+    }
+
+    const list = await qb.getMany();
     return list.map((t) => this.mask(t));
   }
 
