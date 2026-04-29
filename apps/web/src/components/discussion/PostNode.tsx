@@ -57,7 +57,7 @@ export function PostNode({
           target="post"
           targetId={post.id}
           initialScore={post.score}
-          initialMyVote={post.myVote ?? 0}
+          initialMyVote={post.myVote === 1 ? 1 : 0}
           isOwn={isOwn}
         />
       )}

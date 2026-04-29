@@ -31,7 +31,7 @@ export function ThreadDetail({ thread, currentUserId = null }: ThreadDetailProps
         target="thread"
         targetId={thread.id}
         initialScore={thread.score}
-        initialMyVote={thread.myVote ?? 0}
+        initialMyVote={thread.myVote === 1 ? 1 : 0}
         isOwn={isOwn}
       />
       <div className="flex flex-1 flex-col gap-2">
