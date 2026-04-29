@@ -47,8 +47,11 @@ export const authedMock: HomeViewModel = {
     title: '오늘의 PL/SQL,\n4문제만 풀고 가요',
     subtitle: '1위까지 880 XP · 8일째 연속 학습',
     streakIndicator: true,
-    primaryCta: { label: '이어서 풀기', href: '/play/solo?resume=1' },
-    secondaryCta: { label: '챕터 목록', href: '/play/solo' },
+    // 정식 resume (직전 세션 복원) 은 백엔드 GET /games/solo/last-session
+    // endpoint 가 필요 — 별도 PR. 현재는 새 세션 config 화면으로 진입하는
+    // "솔로 게임 시작" 으로 명명해 동작/문구 일치.
+    primaryCta: { label: '솔로 게임 시작', href: '/play/solo' },
+    secondaryCta: { label: '오답 노트', href: '/review/mistakes' },
   },
   todayQuestion: today,
   ticker: {
