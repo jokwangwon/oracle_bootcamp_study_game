@@ -95,7 +95,7 @@ export function DiscussionListClient({ questionId }: Props) {
           토론을 불러오는 중…
         </p>
       )}
-      {data && <ThreadList threads={data.items} questionId={questionId} />}
+      {data && <ThreadList threads={data} questionId={questionId} />}
     </div>
   );
 }

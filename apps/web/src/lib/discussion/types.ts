@@ -50,14 +50,12 @@ export type ThreadCursorTop = { s: number; i: string };
 export type ThreadCursorHot = { h: number; i: string };
 export type ThreadCursor = ThreadCursorNew | ThreadCursorTop | ThreadCursorHot;
 
-export interface ListThreadsResponse {
-  items: ThreadDto[];
-  nextCursor: string | null;
-}
-
-export interface ListPostsResponse {
-  items: PostDto[];
-  nextCursor: string | null;
-}
+/**
+ * 백엔드 (apps/api/src/modules/discussion/discussion.controller.ts) 의
+ * listThreadsByQuestion / listPostsByThread 가 array 를 직접 반환.
+ * cursor 페이지네이션은 마지막 item 의 createdAt/score/hot value 로 다음 cursor 계산.
+ */
+export type ListThreadsResponse = ThreadDto[];
+export type ListPostsResponse = PostDto[];
 
 export const BLUR_TOKEN = '[[BLUR:related-question]]';

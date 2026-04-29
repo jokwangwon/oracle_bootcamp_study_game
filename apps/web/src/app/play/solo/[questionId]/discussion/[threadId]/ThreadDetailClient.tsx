@@ -60,7 +60,7 @@ export function ThreadDetailClient({ questionId, threadId }: Props) {
       {thread && <ThreadDetail thread={thread} />}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">답변 ({postsResponse?.items.length ?? 0})</h2>
+        <h2 className="text-lg font-semibold">답변 ({postsResponse?.length ?? 0})</h2>
         {postsError && (
           <p role="alert" className="text-sm text-destructive">
             답변을 불러오지 못했어요.
@@ -71,7 +71,7 @@ export function ThreadDetailClient({ questionId, threadId }: Props) {
         )}
         {postsResponse && thread && (
           <PostTree
-            posts={postsResponse.items}
+            posts={postsResponse}
             threadId={threadId}
             threadAuthorId={thread.authorId}
             onPostCreated={() => {
