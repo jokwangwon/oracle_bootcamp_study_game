@@ -8,6 +8,7 @@ import { PostTree } from '@/components/discussion/PostTree';
 import { ThreadDetail } from '@/components/discussion/ThreadDetail';
 import { discussionApi } from '@/lib/discussion/api-client';
 import type { ListPostsResponse, ThreadDto } from '@/lib/discussion/types';
+import { useCurrentUserId } from '@/lib/discussion/use-current-user';
 
 interface Props {
   questionId: string;
@@ -19,6 +20,7 @@ interface Props {
  * 비인증 사용자도 read-only 로 진입 가능. 답글 폼은 인증 필요 (서버 401).
  */
 export function ThreadDetailClient({ questionId, threadId }: Props) {
+  const currentUserId = useCurrentUserId();
   const threadKey = `discussion-thread:${threadId}`;
   const postsKey = `discussion-posts:${threadId}`;
 
@@ -68,7 +70,7 @@ export function ThreadDetailClient({ questionId, threadId }: Props) {
       {threadLoading && (
         <p className="text-sm text-muted-foreground">토론 불러오는 중…</p>
       )}
-      {thread && <ThreadDetail thread={thread} />}
+      {thread && <ThreadDetail thread={thread} currentUserId={currentUserId} />}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">답변 ({postsResponse?.length ?? 0})</h2>
@@ -85,6 +87,7 @@ export function ThreadDetailClient({ questionId, threadId }: Props) {
             posts={postsResponse}
             threadId={threadId}
             threadAuthorId={thread.authorId}
+            currentUserId={currentUserId}
             onPostCreated={() => {
               mutatePosts();
               mutateThread();
