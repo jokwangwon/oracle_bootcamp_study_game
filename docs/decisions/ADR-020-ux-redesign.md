@@ -389,9 +389,11 @@ async logout(@CurrentUser() user, @Res({ passthrough: true }) res) {
 
 **근거**: B 의 "logout 후 access 1~14분 유효" CRITICAL 해소. ADR-018 epoch 패턴 재사용 → 신규 인프라 0.
 
-#### C. sanitize-html 화이트리스트 (HIGH — B G5 채택)
+#### C. sanitize-html 화이트리스트 (HIGH — B G5 채택, **consensus-012 갱신**)
 
-R4 discussion post 본문 처리 시:
+R4 discussion post 본문 처리 시.
+
+**저장 형식 (consensus-012 Q-R5-01=b)**: 서버는 **Markdown raw** 저장. `sanitizePostBody` 는 markdown raw 입력에 대한 **1차 검증** (위험 토큰 strip + 화이트리스트 외 HTML 태그 strip):
 
 ```ts
 import sanitizeHtml from 'sanitize-html';
@@ -402,12 +404,25 @@ const POST_SANITIZE_OPTS: sanitizeHtml.IOptions = {
   allowedSchemes: ['http', 'https', 'mailto'],   // data: / javascript: 차단
   allowedSchemesAppliedToAttributes: ['href'],
   disallowedTagsMode: 'discard',
-  // Markdown 변환기 (remark-rehype) 의 raw HTML pass-through 차단:
   parser: { lowerCaseTags: true, recognizeSelfClosing: true },
 };
 ```
 
-**저장 시 + 표시 시 양쪽 적용** (defense in depth). pii-regression.test.ts 에 50종 OWASP XSS payload negative test 추가.
+**클라 표시 형식 (consensus-012 Q-R5-02=a)**: `react-markdown` + `rehype-sanitize` + **사용자 정의 schema**. schema 는 `apps/web/src/lib/discussion/sanitize-schema.ts` 단일 모듈이 export → **서버 화이트리스트와 1:1 동등성** (테스트로 회귀 검증):
+
+```ts
+import { defaultSchema } from 'rehype-sanitize';
+export const discussionSchema = {
+  ...defaultSchema,
+  tagNames: ['p','br','strong','em','code','pre','ul','ol','li','blockquote','a','hr'],
+  attributes: { a: ['href','title'], code: [], pre: [] },
+  protocols: { href: ['http','https','mailto'] },
+};
+```
+
+**rehype-raw 사용 금지** (XSS 우회 footgun). `<ReactMarkdown rehypePlugins={[[rehypeSanitize, discussionSchema]]}>`.
+
+**저장 시 + 표시 시 양쪽 검증** (defense in depth). 50종 OWASP XSS payload negative test 는 PR-10b 의 `apps/api/src/modules/discussion/sanitize-post-body.test.ts` 76 cases + 클라 측 `apps/web/src/components/discussion/__tests__/sanitize-regression.test.tsx` 76 cases (서버와 fixture 공유).
 
 #### D. dev 환경 secure 분기 (HIGH — A·B·C 합의 C5)
 
@@ -755,13 +770,16 @@ export class DiscussionVoteEntity {
 ### 5.3 API 엔드포인트
 
 ```
-GET    /api/discussion/questions/:questionId/threads?sort=hot|new|top&cursor=<uuid>
-POST   /api/discussion/questions/:questionId/threads
+# Read endpoints — @Public() (consensus-012 Q-R5-11=a)
+GET    /api/discussion/questions/:questionId/threads?sort=hot|new|top&cursor=<base64url>
 GET    /api/discussion/threads/:threadId
+GET    /api/discussion/threads/:threadId/posts?parentId=<uuid>
+
+# Write endpoints — JwtAuthGuard
+POST   /api/discussion/questions/:questionId/threads
 PATCH  /api/discussion/threads/:threadId
 DELETE /api/discussion/threads/:threadId (soft delete)
 
-GET    /api/discussion/threads/:threadId/posts?parentId=<uuid>
 POST   /api/discussion/threads/:threadId/posts
 PATCH  /api/discussion/posts/:postId
 DELETE /api/discussion/posts/:postId (soft delete)
@@ -772,7 +790,19 @@ POST   /api/discussion/vote
 POST   /api/discussion/posts/:postId/accept (thread author only)
 ```
 
-모두 `JwtAuthGuard` + `RedisRateLimiter` 가드 (§4.3).
+**가드 정책 (consensus-012 Q-R5-11=a)**:
+- Read endpoint 4종 (`GET`): `@Public()` 데코레이터 + ThrottlerGuard (60/min IP 기반). JwtAuthGuard 는 `IS_PUBLIC_KEY` 메타데이터 시 user 옵셔널 attach (req.user undefined 통과).
+- Write endpoint 7종 (`POST/PATCH/DELETE`): `JwtAuthGuard` 강제 + ThrottlerGuard `discussion_write` named (5/min).
+- 비인증 read = 게스트 미리보기 (HIGH-3 블러 비활성, 학습 동기 부여).
+
+**응답 schema 확장 (consensus-012 Q-R5-08=a + Q-R5-03=a)**:
+- `myVote: -1|0|1` (인증 사용자만, 비투표 시 0 또는 undefined)
+- `isLocked: boolean` (HIGH-3 블러 — `related_question_id` 미풀이 시 body 마스킹)
+
+**cursor schema sort 별 분기 (consensus-012 Q-R5-14=b)**:
+- sort=new: `{c: ISO timestamp, i: uuid}` (createdAt + id)
+- sort=top: `{s: number, i: uuid}` (score + id)
+- sort=hot: `{h: number, i: uuid}` (hot value + id)
 
 ### 5.4 정책
 
@@ -803,7 +833,7 @@ Q11=a 로 PR-6+PR-11 통합 → 12 PR. **Session 12 합의 (consensus-010) — P
 | **PR-10a** | **httpOnly cookie + refresh rotation + revoke epoch** (refresh_tokens 테이블 + token_epoch ALTER + Redis SETNX mutex + reuse detection family revoke + dev secure 분기 + Domain 명시 + 4 secret refine + JwtAuthGuard cookie extractor + web 6 페이지 마이그레이션) | PR-3, PR-6 | **C-B2** | **2d** |
 | **PR-10b** | **R4 discussion 3-entity + sanitize-html + vote 무결성** (discussion_threads/posts/votes + R6 UNIQUE+self-vote CHECK + sanitize allowedTags 화이트리스트 + 저장·표시 양쪽 적용 + IDOR author 검증 + 50종 OWASP XSS negative test) | PR-10a | **C-B4** | 2d |
 | **PR-10c** | **CSRF Origin/Referer 검증** (OriginGuard 글로벌 등록 + double-submit token 폐기) — *위협 모델 변화 시 재합의* | PR-10a | — | 1d |
-| PR-12 | discussion 페이지 + VoteButton + `/play/solo` "토론 참여" 링크 + rehype-sanitize | PR-10b, PR-9 | **C-B1** | 2.5d |
+| PR-12 | **discussion 페이지 + VoteButton + react-markdown + rehype-sanitize 단일 schema + HIGH-3 서버 마스킹 + 비인증 read 패치 + hot expression index 마이그레이션 1714000012000 + axe-core 통합 + SWR 도입 + Hero todayQuestion 칩** *(consensus-012 — 사용자 결정 15건 모두 권장 채택)* | PR-10b, PR-9 | **C-B1** | 2.5d (실제 3.5d) |
 
 **총 추정**: 약 13d → **14d** (PR-10 3분할로 +1d). 세션당 1 PR 기준 **14 세션**.
 
@@ -867,7 +897,10 @@ Q11=a 로 PR-6+PR-11 통합 → 12 PR. **Session 12 합의 (consensus-010) — P
 | 실시간 반응 (Discord 스타일) | R6 범위 초과 | MVP-C 이후 별도 ADR |
 | Mantine / DaisyUI / Panda 재경쟁 | Q14=4 | Tailwind 유지보수 문제 발생 시 ADR-020-B |
 | 사용자 preference DB 저장 | 멀티 디바이스 | 필요 발생 시 별도 PR |
-| 토론 LLM 요약/추천 | pre-commit Layer 3-a3 확장 전제 | 별도 ADR-021 (가칭) |
+| 토론 LLM 요약/추천 | pre-commit Layer 3-a3 확장 전제 | 별도 ADR-021 (가칭, Community Hub + LLM 요약) |
+| 글로벌 `/community` 허브 (질문 무관 토론) | `discussion_threads.question_id` NOT NULL 잠금 + index leading column. PR-12 동봉 시 부피 1.5~2배 | **별도 ADR-021** (consensus-012 Q-R5-05=c) |
+| `auth-storage.ts` 잔존 제거 | PR-10a 머지 후 dual-mode 1주 관측 후 | **별도 chore PR** (consensus-012 Q-R5-10=b) |
+| A09 audit log (vote/accept/IDOR/blur 우회) | OWASP A09 권장, 본 ADR 범위 외 | MVP-D 이후 별도 ADR |
 
 ---
 
@@ -899,6 +932,7 @@ Q11=a 로 PR-6+PR-11 통합 → 12 PR. **Session 12 합의 (consensus-010) — P
 | 2026-04-28 | CTA 즉시 시작 — `/play/solo` config 의 `추천으로 시작` / `이어서 학습` 명시적 confirm 패턴 제거. `startGame(overrides?: Partial<SoloConfigSelection>)` 시그니처 확장 → 자동 폼 채움 + 즉시 게임 시작 (1 클릭). 사용자 피드백: 다시 시작 클릭은 redundant. concept-epsilon §3.1.4 / §7.3 / §13.1 / §16 변경 이력 갱신 | Session 12 사용자 결정 |
 | 2026-04-28 | **PR-10 분할 + 임시 완화 + Lax+Origin 정책 (Session 12 합의 consensus-010)** — 3+1 합의 (Agent A 구현 / Agent B 품질 / Agent C 대안 / Reviewer) 70% 만장일치. 사용자 5결정 (a/a/b/b/a): (Q-R1) 임시 `JWT_EXPIRES_IN=24h` 즉시, PR-10a 머지까지 / (Q-R2) SameSite=Lax + Origin 헤더 검증 (CSRF token 폐기 검토) / (Q-R3) 정식 만료 30m/14d (학습 세션 1~2h 기반) / (Q-R4) PR-10 → 10a (cookie+refresh+revoke epoch 2d) / 10b (R4+sanitize+vote 무결성 2d) / 10c (CSRF Origin-only 1d) 3분할 / (Q-R5) ADR-020 §4.2.1 부속서. CRITICAL 4건 해소: refresh reuse detection 알고리즘 (Redis SETNX mutex + family revoke) + logout revoke epoch (ADR-018 통합) + tailscale SameSite 미검증 (Lax 채택) + 5도메인 단일 PR 인지 부하 (분할). §4.2.1 부속서 + §6 PR 분할표 + §11 본 행 갱신 | `docs/decisions/ADR-020-ux-redesign.md` §4.2.1 / §6, Session 12 합의 |
 | 2026-04-28 후속 | **PR-10c CSRF 위협 모델 재합의 (Session 13 후속, consensus-011)** — ADR-020 §4.2.1 E 절 "유보" (PR-10c 머지 전 reviewer 재합의) 트리거. 3+1 합의 (Agent A·B·C 병렬 + Reviewer). 합의율 만장일치 35.7% / 유효 92.9% (좁은 단일 명세 검토). 사용자 6결정 모두 추천값 채택 (a/a/a/b/a/a). **CRITICAL 3건 식별** — (1) startsWith bypass (`example.com.attacker.com` / port prefix 우회) → URL 객체 parse + protocol/host:port exact match. (2) CORS_ORIGIN fail-OPEN (`''.split(',')` = `['']`, `'x'.startsWith('')` = true) → fail-closed (boot-time refine + runtime 이중 안전망). (3) 운영 회귀 (학생 curl/Postman 차단) → SkipOriginCheck decorator + Report-Only 1주 + 한국어 학습 힌트 + kill-switch. **§4.2.1 E 절 명세 코드 17 LOC → 25~30 LOC 갱신** (URL parse + 정규화 + report/enforce + decorator). **§4.2.1 I 절 정정** ("OriginGuard 글로벌 등록 + CSRF token 폐기 e2e" → PR-10c 분리). **§4.2.1 K 절 신설** (PR-10c 머지 전 추가 선결 조건 + 미래 재검토 트리거 4종). **CSRF token 폐기 처리** — `csurf`/`xsrf` grep 0건 확인, "폐기" = 명목상 작업 0. defense-in-depth 약화 보완은 SkipOriginCheck + Report-Only 로 완화. **Sec-Fetch-Site hybrid (C 추천) 채택 거부 사유**: Tailscale HTTP only 환경에서 브라우저가 secure context 만 헤더 전송 → 단독 무력. 미래 production HTTPS 전환 시 TR-CSRF-1 트리거 | `docs/review/consensus-011-pr-10c-csrf.md`, ADR-020 §4.2.1 E·I·K |
+| 2026-04-29 후속4 | **PR-12 web 토론 페이지 docs PR (consensus-012)** — 3+1 합의 (Agent A·B·C 병렬 + Reviewer). 합의율 만장일치 6.7% (1/15) / 유효 100% (15/15). 사용자 결정 15건 (Q-R5-01~15) 모두 Reviewer 권장값 채택 ("전부 권장"). **CRITICAL 5건 해소**: (C-1) 저장 형식 모순 → Markdown raw 저장 + 클라 단독 sanitize (Q-R5-01=b). (C-2) 클라 sanitize schema 미지정 → 서버=클라 1:1 단일 schema 모듈 + 동등성 테스트 (Q-R5-02=a). (C-3) HIGH-3 마스킹 0건 → 서버 정규식 마스킹 + 클라 글라스 블러 이중 방어 (Q-R5-03=a). (C-4) hot 공식 expression index 부재 → Reddit log10 + PG expression index 마이그레이션 1714000012000 (Q-R5-06=a). (C-5) discussion read 비인증 차단 (controller line 115 ADR 불일치) → read 4종 `@Public()` + write 7종 JwtAuthGuard 분리 (Q-R5-11=a). **§4.2.1 C 절** Markdown raw 저장 + 클라 단독 sanitize 명시 + rehype-raw 금지 + 76 OWASP 회귀 클라/서버 양쪽 명시. **§5.3 절** 가드 정책 분리 + 응답 schema 확장 (`myVote` / `isLocked`) + cursor sort 별 schema 분기 명시. **§6 PR-12 행** 확장 (단일 schema + 비인증 패치 + 마이그레이션 + axe-core + SWR + Hero 칩). **§9 유보 행 3건 추가** (글로벌 `/community` 허브 → ADR-021 분리 / auth-storage.ts → 별도 chore PR / A09 audit → MVP-D 이후). **사용자 추가 질문 "커뮤니티는 어디에 추가할지"** — Reviewer 분석 결과 옵션 A (질문 종속 only) + 옵션 C 후속 분리 권장 → 사용자 채택. 진입점 = 솔로 결과 직후 (round 별 CTA) + Hero `todayQuestion` 우하단 메타 칩 (Q-R5-04=a+b). Header 변경 없음 (시안 D §3.1). **B 단독 지적 5건 중 4건 채택 — 다관점 시스템 가치 입증** (특히 항목 11 비인증 처리 = ADR-코드 불일치). **신규 의존성 6종**: react-markdown@^9 / rehype-sanitize@^6 / swr@^2 / @radix-ui/react-tabs / @axe-core/react / vitest-axe. **신규 마이그레이션 1**: 1714000012000 expression index. **추정 신규 cases ~103** (백엔드 38 + web 65). **추정 분량 3.5d** (ADR-020 §6 추정 2.5d + axe-core + 외부 검증). | `docs/review/consensus-012-pr-12-discussion-page.md`, `docs/architecture/pr-12-discussion-page-design.md`, `docs/review/tdd-plan-pr-12-discussion-page.md`, `docs/review/impact-pr-12-discussion-page.md`, ADR-020 §4.2.1 C / §5.3 / §6 / §9 |
 
 ---
 
