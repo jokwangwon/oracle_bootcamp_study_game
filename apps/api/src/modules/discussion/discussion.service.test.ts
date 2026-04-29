@@ -231,6 +231,20 @@ describe('DiscussionService — Thread CRUD (Phase 4a)', () => {
 
       await expect(service.getThread(THREAD_ID)).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it('3.3 userId 시 myVote 응답 포함 (Phase 3a)', async () => {
+      const t = makeThread();
+      threadRepo.findOne.mockResolvedValue(t);
+      const voteRepo = makeRepo();
+      voteRepo.find.mockResolvedValue([
+        { userId: USER_ID, targetType: 'thread', targetId: THREAD_ID, value: 1 },
+      ]);
+      const service = makeService(threadRepo, makeRepo(), voteRepo);
+
+      const out = await service.getThread(THREAD_ID, USER_ID);
+
+      expect(out.myVote).toBe(1);
+    });
   });
 
   describe('listThreadsByQuestion (Phase 2 raw query)', () => {
@@ -400,6 +414,41 @@ describe('DiscussionService — Thread CRUD (Phase 4a)', () => {
       expect(out).toHaveLength(2);
       expect(out[0]!.body).toBe('<p>살아있음</p>');
       expect(out[1]!.body).toBe('[삭제된 게시물]');
+    });
+
+    // ── Phase 3a — myVote join (4 cases) ──────────────────────────────────
+
+    it('3.1 listThreads userId 시 myVote 응답 포함 (-1/0/+1 정확)', async () => {
+      const qb = makeQb([
+        makeThread({ id: 't1' }),
+        makeThread({ id: 't2' }),
+        makeThread({ id: 't3' }),
+      ]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const voteRepo = makeRepo();
+      voteRepo.find.mockResolvedValue([
+        { userId: USER_ID, targetType: 'thread', targetId: 't1', value: 1 },
+        { userId: USER_ID, targetType: 'thread', targetId: 't3', value: -1 },
+      ]);
+      const service = makeService(threadRepo, makeRepo(), voteRepo);
+
+      const out = await service.listThreadsByQuestion(QUESTION_ID, {}, USER_ID);
+
+      expect(out[0]!.myVote).toBe(1);
+      expect(out[1]!.myVote).toBe(0); // 비투표 = 0
+      expect(out[2]!.myVote).toBe(-1);
+    });
+
+    it('3.2 listThreads userId=null 시 myVote undefined (비인증 응답)', async () => {
+      const qb = makeQb([makeThread()]);
+      threadRepo.createQueryBuilder.mockReturnValue(qb);
+      const voteRepo = makeRepo();
+      const service = makeService(threadRepo, makeRepo(), voteRepo);
+
+      const out = await service.listThreadsByQuestion(QUESTION_ID, {}, null);
+
+      expect(out[0]!.myVote).toBeUndefined();
+      expect(voteRepo.find).not.toHaveBeenCalled();
     });
   });
 
@@ -869,6 +918,23 @@ describe('DiscussionService — Post CRUD (Phase 4b)', () => {
 
       expect(out[0]!.body).toBe('<p>살아있음</p>');
       expect(out[1]!.body).toBe('[삭제된 게시물]');
+    });
+
+    it('3.4 userId 시 각 post 별 myVote 응답 포함 (Phase 3a)', async () => {
+      postRepo.find.mockResolvedValue([
+        makePost({ id: 'p1' }),
+        makePost({ id: 'p2' }),
+      ]);
+      const voteRepo = makeRepo();
+      voteRepo.find.mockResolvedValue([
+        { userId: USER_ID, targetType: 'post', targetId: 'p2', value: -1 },
+      ]);
+      const service = makeService(threadRepo, postRepo, voteRepo);
+
+      const out = await service.listPostsByThread(THREAD_ID, {}, USER_ID);
+
+      expect(out[0]!.myVote).toBe(0); // 비투표
+      expect(out[1]!.myVote).toBe(-1);
     });
   });
 

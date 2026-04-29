@@ -7,6 +7,7 @@ import {
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
+  In,
   IsNull,
   QueryFailedError,
   Repository,
@@ -50,6 +51,16 @@ const HOT_ALIAS = 't_hot';
 
 /** §5.4 soft delete body 치환 문자열. */
 export const DELETED_BODY_PLACEHOLDER = '[삭제된 게시물]';
+
+/** PR-12 §5.4 — 응답에서 myVote 노출용 dto type (entity transient 확장). */
+export type ThreadDto = DiscussionThreadEntity & {
+  myVote?: -1 | 0 | 1;
+  isLocked?: boolean;
+};
+export type PostDto = DiscussionPostEntity & {
+  myVote?: -1 | 0 | 1;
+  isLocked?: boolean;
+};
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50; // §5.4 HIGH-6
@@ -98,6 +109,31 @@ export class DiscussionService {
     return entity.isDeleted ? { ...entity, body: DELETED_BODY_PLACEHOLDER } : entity;
   }
 
+  /**
+   * PR-12 §5.4 — userId 의 vote 들을 단일 query 로 batch 조회.
+   * 반환: Map<targetId, value(-1|1)>. row 미존재 = 비투표 (0).
+   */
+  private async fetchMyVotes(
+    userId: string,
+    targetType: DiscussionVoteTarget,
+    targetIds: ReadonlyArray<string>,
+  ): Promise<Map<string, DiscussionVoteValue>> {
+    if (targetIds.length === 0) return new Map();
+    const votes = await this.voteRepo.find({
+      where: { userId, targetType, targetId: In(targetIds as string[]) },
+    });
+    const map = new Map<string, DiscussionVoteValue>();
+    for (const v of votes) map.set(v.targetId, v.value);
+    return map;
+  }
+
+  private attachMyVote<T extends { id: string }>(
+    entity: T,
+    myVoteMap: Map<string, DiscussionVoteValue>,
+  ): T & { myVote: -1 | 0 | 1 } {
+    return Object.assign({}, entity, { myVote: (myVoteMap.get(entity.id) ?? 0) as -1 | 0 | 1 });
+  }
+
   async createThread(
     authorId: string,
     questionId: string,
@@ -124,16 +160,23 @@ export class DiscussionService {
     };
   }
 
-  async getThread(threadId: string): Promise<DiscussionThreadEntity> {
+  async getThread(
+    threadId: string,
+    userId: string | null = null,
+  ): Promise<ThreadDto> {
     const thread = await this.threadRepo.findOne({ where: { id: threadId } });
     if (!thread) throw new NotFoundException('thread_not_found');
-    return this.mask(thread);
+    const masked = this.mask(thread);
+    if (!userId) return masked;
+    const myVoteMap = await this.fetchMyVotes(userId, 'thread', [threadId]);
+    return this.attachMyVote(masked, myVoteMap);
   }
 
   async listThreadsByQuestion(
     questionId: string,
     opts: ListThreadsOpts,
-  ): Promise<DiscussionThreadEntity[]> {
+    userId: string | null = null,
+  ): Promise<ThreadDto[]> {
     const sort: ThreadSort = opts.sort ?? 'new';
     if (!(THREAD_SORTS as ReadonlyArray<string>).includes(sort)) {
       throw new BadRequestException('invalid_sort');
@@ -178,7 +221,14 @@ export class DiscussionService {
     }
 
     const list = await qb.getMany();
-    return list.map((t) => this.mask(t));
+    const masked = list.map((t) => this.mask(t));
+    if (!userId) return masked;
+    const myVoteMap = await this.fetchMyVotes(
+      userId,
+      'thread',
+      masked.map((t) => t.id),
+    );
+    return masked.map((t) => this.attachMyVote(t, myVoteMap));
   }
 
   async updateThread(
@@ -256,7 +306,8 @@ export class DiscussionService {
   async listPostsByThread(
     threadId: string,
     opts: ListPostsOpts = {},
-  ): Promise<DiscussionPostEntity[]> {
+    userId: string | null = null,
+  ): Promise<PostDto[]> {
     // parentId 미지정 → 직속 답변만 (parentId IS NULL).
     // parentId 명시 → 그 값으로 1-level 자식 조회.
     const parentClause =
@@ -267,7 +318,14 @@ export class DiscussionService {
       where: { threadId, parentId: parentClause },
       order: { createdAt: 'ASC' },
     });
-    return list.map((p) => this.mask(p));
+    const masked = list.map((p) => this.mask(p));
+    if (!userId) return masked;
+    const myVoteMap = await this.fetchMyVotes(
+      userId,
+      'post',
+      masked.map((p) => p.id),
+    );
+    return masked.map((p) => this.attachMyVote(p, myVoteMap));
   }
 
   async updatePost(
