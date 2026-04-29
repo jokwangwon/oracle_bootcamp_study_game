@@ -127,8 +127,14 @@ async function request<T>(
     credentials: 'include',
   });
 
-  // 401 → 자동 refresh 1회 retry (refresh / login / register endpoint 자체는 제외).
-  const skipRetry = path === '/auth/refresh' || path === '/auth/login' || path === '/auth/register';
+  // 401 → 자동 refresh 1회 retry. 단 본질적으로 게스트가 401 일 수 있는 endpoint
+  // (/auth/refresh, /auth/login, /auth/register, /users/me) 는 refresh 시도 자체가
+  // 무의미 — refresh cookie 도 없는 상태이면 retry 도 401 → 무한 호출 위험.
+  const skipRetry =
+    path === '/auth/refresh' ||
+    path === '/auth/login' ||
+    path === '/auth/register' ||
+    path === '/users/me';
   if (res.status === 401 && !retried && !skipRetry) {
     try {
       await refreshOnce();

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { apiClient } from '@/lib/api-client';
@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 
 export function Header() {
   const router = useRouter();
-  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [authed, setAuthed] = useState(false);
 
@@ -20,6 +19,9 @@ export function Header() {
    * 인증 상태 추적. 401 시 api-client 의 자동 refresh interceptor 가 1회 retry.
    * 그래도 401 이면 비인증.
    */
+  // mount 시 1회만 me() 호출. pathname 변경 (페이지 이동) 시 재호출은
+  // throttle 누적 + 401 무한 루프 위험. 같은 탭 인증 상태 갱신은 아래
+  // AUTH_CHANGED_EVENT 리스너가 처리.
   useEffect(() => {
     setMounted(true);
     let cancelled = false;
@@ -34,7 +36,7 @@ export function Header() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, []);
 
   // 같은 탭의 login/logout 즉시 반영 (login/register/logout 핸들러가 이벤트 발행).
   useEffect(() => {

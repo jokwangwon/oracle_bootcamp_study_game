@@ -14,7 +14,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   IsIn,
   IsInt,
@@ -114,6 +114,12 @@ function parseSort(raw: string | undefined): ThreadSort {
 
 @Controller('discussion')
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
+// AuthModule 의 ThrottlerModule.forRoot 에 등록된 모든 named throttler
+// (login 15분 5회 / register 1시간 3회 / discussion_write 분당 5회) 가 매 endpoint
+// 에 동시 적용 → read 가 가장 엄격한 한도(login 5회) 에 걸림.
+// 본 controller 는 클래스 수준에서 모두 skip 하고, 메서드 수준 @Throttle 로
+// write endpoint 에만 discussion_write 명시 (read = throttle 없음).
+@SkipThrottle({ login: true, register: true, discussion_write: true })
 export class DiscussionController {
   constructor(private readonly service: DiscussionService) {}
 
