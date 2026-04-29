@@ -72,11 +72,15 @@ function makeManager(overrides: Partial<MockManager> = {}): MockManager {
   };
 }
 
-function makeDataSource(manager: MockManager) {
+function makeDataSource(
+  manager: MockManager,
+  queryMock: ReturnType<typeof vi.fn> = vi.fn(async () => []),
+) {
   return {
     transaction: vi.fn(async (cb: (m: EntityManager) => unknown) => {
       return cb(manager as unknown as EntityManager);
     }),
+    query: queryMock,
   } as unknown as DataSource;
 }
 
@@ -935,6 +939,49 @@ describe('DiscussionService — Post CRUD (Phase 4b)', () => {
 
       expect(out[0]!.myVote).toBe(0); // 비투표
       expect(out[1]!.myVote).toBe(-1);
+    });
+
+    it('3.10 HIGH-3 N+1 회피 — relatedQuestionId 가진 post N개 → user_progress query 1회', async () => {
+      postRepo.find.mockResolvedValue([
+        makePost({ id: 'p1', relatedQuestionId: 'q1', authorId: OTHER_USER_ID }),
+        makePost({ id: 'p2', relatedQuestionId: 'q2', authorId: OTHER_USER_ID }),
+        makePost({ id: 'p3', relatedQuestionId: 'q3', authorId: OTHER_USER_ID }),
+      ]);
+      const queryMock = vi.fn(async () => [{ id: 'q1' }]); // q1 만 unlocked
+      const ds = makeDataSource(makeManager(), queryMock);
+      const voteRepo = makeRepo();
+      voteRepo.find.mockResolvedValue([]);
+      const service = makeService(threadRepo, postRepo, voteRepo, ds);
+
+      const out = await service.listPostsByThread(THREAD_ID, {}, USER_ID);
+
+      // user_progress query 1회 (N+1 회피 검증)
+      expect(queryMock).toHaveBeenCalledTimes(1);
+      const [, params] = queryMock.mock.calls[0]!;
+      expect(params).toEqual([['q1', 'q2', 'q3'], USER_ID]);
+
+      // q1 만 unlock → p1 공개, p2/p3 마스킹
+      expect(out[0]!.body).toBe('<p>답변 본문</p>');
+      expect(out[0]!.isLocked).toBeFalsy();
+      expect(out[1]!.body).toBe('[[BLUR:related-question]]');
+      expect(out[1]!.isLocked).toBe(true);
+      expect(out[2]!.body).toBe('[[BLUR:related-question]]');
+      expect(out[2]!.isLocked).toBe(true);
+    });
+
+    it('Phase 3b — 비인증 read (userId=null) 시 user_progress query 미호출 + 마스킹 0건', async () => {
+      postRepo.find.mockResolvedValue([
+        makePost({ id: 'p1', relatedQuestionId: 'q1', authorId: OTHER_USER_ID }),
+      ]);
+      const queryMock = vi.fn(async () => []);
+      const ds = makeDataSource(makeManager(), queryMock);
+      const service = makeService(threadRepo, postRepo, makeRepo(), ds);
+
+      const out = await service.listPostsByThread(THREAD_ID, {}, null);
+
+      expect(queryMock).not.toHaveBeenCalled();
+      expect(out[0]!.body).toBe('<p>답변 본문</p>');
+      expect(out[0]!.isLocked).toBeUndefined();
     });
   });
 

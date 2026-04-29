@@ -21,6 +21,7 @@ import {
   type ThreadCursorTop,
   type ThreadSort,
 } from './cursor';
+import { applyBlurPolicy } from './discussion-blur';
 import { DiscussionPostEntity } from './entities/discussion-post.entity';
 import { DiscussionThreadEntity } from './entities/discussion-thread.entity';
 import {
@@ -320,12 +321,60 @@ export class DiscussionService {
     });
     const masked = list.map((p) => this.mask(p));
     if (!userId) return masked;
+
+    // PR-12 §6.3 — N+1 회피: relatedQuestionId 가진 post 들의 user_progress
+    // 매칭 여부를 단일 query 로 batch 조회.
+    const unlockedIds = await this.fetchUnlockedQuestionIds(
+      userId,
+      masked
+        .map((p) => p.relatedQuestionId)
+        .filter((id): id is string => id !== null),
+    );
+
     const myVoteMap = await this.fetchMyVotes(
       userId,
       'post',
       masked.map((p) => p.id),
     );
-    return masked.map((p) => this.attachMyVote(p, myVoteMap));
+
+    return masked.map((p) => {
+      const blur = applyBlurPolicy({
+        post: {
+          isDeleted: p.isDeleted,
+          authorId: p.authorId,
+          relatedQuestionId: p.relatedQuestionId,
+          body: p.body,
+        },
+        userId,
+        isUnlocked: p.relatedQuestionId
+          ? unlockedIds.has(p.relatedQuestionId)
+          : false,
+      });
+      const withVote = this.attachMyVote(p, myVoteMap);
+      return blur.isLocked
+        ? Object.assign(withVote, { body: blur.body, isLocked: true })
+        : withVote;
+    });
+  }
+
+  /**
+   * PR-12 §6.3 — questions 의 topic+week 매칭 user_progress row 가 있는 question
+   * id 들을 단일 query 로 반환. relatedQuestionIds 가 [] 이면 query 스킵.
+   */
+  private async fetchUnlockedQuestionIds(
+    userId: string,
+    relatedQuestionIds: ReadonlyArray<string>,
+  ): Promise<Set<string>> {
+    if (relatedQuestionIds.length === 0) return new Set();
+    const rows = (await this.dataSource.query(
+      `SELECT DISTINCT q.id
+         FROM questions q
+         JOIN user_progress up
+           ON up.topic = q.topic AND up.week = q.week
+        WHERE q.id = ANY($1::uuid[]) AND up.user_id = $2`,
+      [relatedQuestionIds as string[], userId],
+    )) as Array<{ id: string }>;
+    return new Set(rows.map((r) => r.id));
   }
 
   async updatePost(
