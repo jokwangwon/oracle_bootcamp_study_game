@@ -126,14 +126,17 @@ export const discussionApi = {
   deletePost: (postId: string) =>
     request<void>('DELETE', `/discussion/posts/${postId}`),
 
+  // 백엔드 (PR-10b §5.3) 는 단일 endpoint POST /discussion/vote
+  // body: { targetType: 'thread'|'post', targetId, value: -1|0|1 }
+  // 응답: { change: number } — score 변동값만 (finalScore/myVote 는 클라가 계산).
   voteThread: (threadId: string, value: -1 | 0 | 1) =>
-    request<VoteResponseDto>('POST', `/discussion/threads/${threadId}/vote`, {
-      body: { value },
+    request<{ change: number }>('POST', '/discussion/vote', {
+      body: { targetType: 'thread', targetId: threadId, value },
     }),
 
   votePost: (postId: string, value: -1 | 0 | 1) =>
-    request<VoteResponseDto>('POST', `/discussion/posts/${postId}/vote`, {
-      body: { value },
+    request<{ change: number }>('POST', '/discussion/vote', {
+      body: { targetType: 'post', targetId: postId, value },
     }),
 
   acceptPost: (postId: string) =>

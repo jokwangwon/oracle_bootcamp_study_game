@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { discussionApi } from '@/lib/discussion/api-client';
-import type { VoteResponseDto } from '@/lib/discussion/types';
 
 interface VoteButtonProps {
   target: 'thread' | 'post';
@@ -16,7 +15,7 @@ interface VoteButtonProps {
   /** 비인증 클릭 시 redirect 할 next 경로. 미지정 시 현재 path. */
   loginNextPath?: string;
   /** SWR 캐시 갱신을 위한 콜백 (선택). */
-  onVoted?: (response: VoteResponseDto) => void;
+  onVoted?: (next: { finalScore: number; myVote: -1 | 0 | 1 }) => void;
 }
 
 /**
@@ -63,10 +62,11 @@ export function VoteButton({
             ? discussionApi.voteThread(targetId, next)
             : discussionApi.votePost(targetId, next);
         const res = await apiCall;
-        // 서버 응답으로 정확 동기화
-        setScore(res.finalScore);
-        setMyVote(res.myVote);
-        onVoted?.(res);
+        // 서버 응답 { change } 로 정확 동기화. myVote 는 클라가 보낸 값 그대로.
+        const finalScore = prevScore + res.change;
+        setScore(finalScore);
+        setMyVote(next);
+        onVoted?.({ finalScore, myVote: next });
       } catch (err) {
         // rollback
         setScore(prevScore);

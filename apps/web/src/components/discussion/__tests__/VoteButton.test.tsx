@@ -31,8 +31,8 @@ afterEach(() => {
 describe('<VoteButton />', () => {
   // 5.4.1 + 5.4.2 3-state 토글 + optimistic + 서버 응답 동기화
   it('3-state 토글 — 미투표 → 좋아요 → 토글로 0', async () => {
-    voteThreadMock.mockResolvedValueOnce({ finalScore: 6, myVote: 1 });
-    voteThreadMock.mockResolvedValueOnce({ finalScore: 5, myVote: 0 });
+    voteThreadMock.mockResolvedValueOnce({ change: 1 });
+    voteThreadMock.mockResolvedValueOnce({ change: -1 });
     const user = userEvent.setup();
     render(
       <VoteButton target="thread" targetId="t1" initialScore={5} initialMyVote={0} />,
@@ -130,19 +130,20 @@ describe('<VoteButton />', () => {
     expect(screen.getByLabelText(/싫어요/)).toBeDisabled();
   });
 
-  // 5.4.8 finalScore 응답 동기화
-  it('서버 응답 finalScore 가 optimistic 값과 다른 경우 서버 값 우선', async () => {
-    voteThreadMock.mockResolvedValueOnce({ finalScore: 99, myVote: 1 });
+  // 5.4.8 서버 change 값으로 최종 score 계산
+  it('서버 응답 { change } 로 prevScore + change = finalScore 계산', async () => {
+    voteThreadMock.mockResolvedValueOnce({ change: 2 });
     const user = userEvent.setup();
     render(
       <VoteButton target="thread" targetId="t1" initialScore={5} initialMyVote={0} />,
     );
     await user.click(screen.getByLabelText(/좋아요/));
-    await waitFor(() => expect(screen.getByText('99')).toBeInTheDocument());
+    // 5 + 2 (서버 change) = 7
+    await waitFor(() => expect(screen.getByText('7')).toBeInTheDocument());
   });
 
   it('target=post → votePost 호출', async () => {
-    votePostMock.mockResolvedValueOnce({ finalScore: 1, myVote: 1 });
+    votePostMock.mockResolvedValueOnce({ change: 1 });
     const user = userEvent.setup();
     render(
       <VoteButton target="post" targetId="p1" initialScore={0} initialMyVote={0} />,
