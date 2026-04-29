@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import {
@@ -31,9 +32,14 @@ import {
 } from './entities/discussion-vote.entity';
 import { sanitizePostBody, sanitizeTitle } from './sanitize-post-body';
 
-/** PR-12 §5.2 — Reddit log10 hot 공식. user input 미포함 const string. */
+/**
+ * PR-12 §5.2 — Reddit log10 hot 공식. user input 미포함 const string.
+ *
+ * `AT TIME ZONE 'UTC'` 로 timestamptz → timestamp 캐스트해서 EXTRACT(EPOCH) 를
+ * IMMUTABLE 로 만들어 expression index (마이그레이션 1714000013000) 활용.
+ */
 export const HOT_EXPR =
-  '(LOG(GREATEST(ABS(t.score), 1)) * SIGN(t.score) + EXTRACT(EPOCH FROM t.last_activity_at)/45000)';
+  '(LOG(GREATEST(ABS(t.score), 1)) * SIGN(t.score) + EXTRACT(EPOCH FROM t.last_activity_at AT TIME ZONE \'UTC\')/45000)';
 const HOT_ALIAS = 't_hot';
 
 /**
@@ -98,6 +104,7 @@ export class DiscussionService {
     private readonly voteRepo: Repository<DiscussionVoteEntity>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    @Optional()
     private readonly opts: { now?: () => Date } = {},
   ) {}
 

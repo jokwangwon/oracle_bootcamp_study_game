@@ -317,7 +317,9 @@ describe('DiscussionService — Thread CRUD (Phase 4a)', () => {
       const addSelectCall = qb.addSelect.mock.calls[0]!;
       const expr = addSelectCall[0] as string;
       expect(expr).toMatch(/LOG\(GREATEST\(ABS\(t\.score\),\s*1\)\)\s*\*\s*SIGN\(t\.score\)/);
-      expect(expr).toMatch(/EXTRACT\(EPOCH FROM t\.last_activity_at\)\s*\/\s*45000/);
+      expect(expr).toMatch(
+        /EXTRACT\(EPOCH FROM t\.last_activity_at AT TIME ZONE 'UTC'\)\s*\/\s*45000/,
+      );
       expect(qb.orderBy).toHaveBeenCalledWith('t_hot', 'DESC');
       expect(qb.addOrderBy).toHaveBeenCalledWith('t.id', 'DESC');
     });

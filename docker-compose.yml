@@ -231,6 +231,15 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-oracle_game}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-oracle_game}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
+      # PR-10a (httpOnly cookie + refresh rotation) — 부재 시 fallback to JWT_SECRET.
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-14d}
+      # dev/staging Tailscale IP — 비워두기 (RFC 6265 host-only).
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN}
+      # PR-10c (CSRF Origin guard) — 1주 관측은 report. 사고 시 ORIGIN_GUARD_DISABLED=true.
+      ORIGIN_GUARD_MODE: ${ORIGIN_GUARD_MODE:-enforce}
+      ORIGIN_GUARD_DISABLED: ${ORIGIN_GUARD_DISABLED:-false}
       LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL:-claude-opus-4-6}

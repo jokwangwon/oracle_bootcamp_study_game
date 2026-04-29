@@ -38,7 +38,9 @@ describe('AddDiscussionHotIndex1714000013000', () => {
     expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS idx_discussion_threads_hot/);
     expect(sql).toMatch(/ON discussion_threads/);
     expect(sql).toMatch(/LOG\(GREATEST\(ABS\(score\),\s*1\)\)\s*\*\s*SIGN\(score\)/);
-    expect(sql).toMatch(/EXTRACT\(EPOCH FROM last_activity_at\)\s*\/\s*45000/);
+    expect(sql).toMatch(
+      /EXTRACT\(EPOCH FROM last_activity_at AT TIME ZONE 'UTC'\)\s*\/\s*45000/,
+    );
   });
 
   it('up: index 가 DESC + id DESC tie-break + WHERE is_deleted=FALSE', async () => {

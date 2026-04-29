@@ -14,10 +14,12 @@ export class AddDiscussionHotIndex1714000013000 implements MigrationInterface {
   name = 'AddDiscussionHotIndex1714000013000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // last_activity_at 은 timestamptz → EXTRACT(EPOCH FROM tstz) 는 STABLE.
+    // `AT TIME ZONE 'UTC'` 로 timestamp(without tz) 캐스트하면 EXTRACT(EPOCH FROM ts) 는 IMMUTABLE.
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS idx_discussion_threads_hot
         ON discussion_threads (
-          (LOG(GREATEST(ABS(score), 1)) * SIGN(score) + EXTRACT(EPOCH FROM last_activity_at)/45000) DESC,
+          (LOG(GREATEST(ABS(score), 1)) * SIGN(score) + EXTRACT(EPOCH FROM last_activity_at AT TIME ZONE 'UTC')/45000) DESC,
           id DESC
         )
         WHERE is_deleted = FALSE;
