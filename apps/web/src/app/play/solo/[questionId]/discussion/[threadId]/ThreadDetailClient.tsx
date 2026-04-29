@@ -19,26 +19,37 @@ interface Props {
  * 비인증 사용자도 read-only 로 진입 가능. 답글 폼은 인증 필요 (서버 401).
  */
 export function ThreadDetailClient({ questionId, threadId }: Props) {
-  const threadKey = ['discussion-thread', threadId] as const;
-  const postsKey = ['discussion-posts', threadId] as const;
+  const threadKey = `discussion-thread:${threadId}`;
+  const postsKey = `discussion-posts:${threadId}`;
+
+  // 무한 재요청 방어 — 429/5xx 시 최대 2회만 retry, 30초 dedupe.
+  const swrOpts = {
+    revalidateOnFocus: false,
+    revalidateIfStale: false,
+    dedupingInterval: 30_000,
+    errorRetryCount: 2,
+    errorRetryInterval: 5_000,
+    shouldRetryOnError: (err: unknown) =>
+      (err as { status?: number }).status !== 429,
+  } as const;
 
   const {
     data: thread,
     error: threadError,
     isLoading: threadLoading,
     mutate: mutateThread,
-  } = useSWR<ThreadDto>(threadKey, () => discussionApi.getThread(threadId), {
-    revalidateOnFocus: true,
-  });
+  } = useSWR<ThreadDto>(threadKey, () => discussionApi.getThread(threadId), swrOpts);
 
   const {
     data: postsResponse,
     error: postsError,
     isLoading: postsLoading,
     mutate: mutatePosts,
-  } = useSWR<ListPostsResponse>(postsKey, () => discussionApi.listPosts(threadId), {
-    revalidateOnFocus: true,
-  });
+  } = useSWR<ListPostsResponse>(
+    postsKey,
+    () => discussionApi.listPosts(threadId),
+    swrOpts,
+  );
 
   return (
     <div className="flex flex-col gap-6">

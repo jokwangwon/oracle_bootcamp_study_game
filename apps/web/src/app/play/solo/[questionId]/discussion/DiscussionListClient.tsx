@@ -32,12 +32,19 @@ export function DiscussionListClient({ questionId }: Props) {
   const [sort, setSort] = useState<SortMode>(initialSort);
   const [showComposer, setShowComposer] = useState(false);
 
-  const swrKey = ['discussion-threads', questionId, sort] as const;
+  // SWR key 는 stable string — 매 render 새 array 면 dedupe 가 일부 환경에서 깨짐.
+  const swrKey = `discussion-threads:${questionId}:${sort}`;
   const { data, error, isLoading, mutate } = useSWR<ListThreadsResponse>(
     swrKey,
     () => discussionApi.listThreads(questionId, { sort }),
     {
-      revalidateOnFocus: true,
+      // 무한 재요청 방어 — 429/5xx 시 최대 2회만 retry, 1분 dedupe.
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      dedupingInterval: 30_000,
+      errorRetryCount: 2,
+      errorRetryInterval: 5_000,
+      shouldRetryOnError: (err) => (err as { status?: number }).status !== 429,
     },
   );
 
