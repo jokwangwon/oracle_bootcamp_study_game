@@ -34,6 +34,6 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // _next/static, _next/image, favicon, api 는 제외.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/).*)'],
+  // _next/*, favicon, icon (Next.js metadata API 자동 favicon), api 는 제외.
+  matcher: ['/((?!_next/|favicon.ico|icon|apple-icon|api/).*)'],
 };
