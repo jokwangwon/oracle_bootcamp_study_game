@@ -1,7 +1,10 @@
 import sanitizeHtml from 'sanitize-html';
 
+import { stripDangerousMarkdownTokens } from './discussion-sanitize-tokens';
+
 /**
  * PR-10b §4.2.1 C 절 — discussion post 본문 화이트리스트.
+ * PR-12 §4.2 — 입력 의미를 Markdown raw 로 재해석 (Q-R5-01=b).
  *
  * 정책:
  *  - allowedTags: 정렬 + 코드 + 리스트 + 인용 + 링크 + 줄바꿈만 허용
@@ -14,7 +17,8 @@ import sanitizeHtml from 'sanitize-html';
  *
  * 적용 시점 (defense in depth):
  *  - 저장 직전 (sanitizePostBody) — DB 에 안전한 형태만 영속화
- *  - 표시 직전 (web) — 저장 후 변형/마이그레이션 고려한 2차 방어 (별도 PR-12 범위)
+ *  - 표시 직전 (web) — `apps/web/src/lib/discussion/sanitize-schema.ts` 의
+ *    `discussionSchema` 가 본 화이트리스트와 1:1 매칭 (Q-R5-02=a).
  */
 export const POST_SANITIZE_OPTS: sanitizeHtml.IOptions = {
   allowedTags: [
@@ -43,9 +47,17 @@ export const POST_SANITIZE_OPTS: sanitizeHtml.IOptions = {
   },
 };
 
-/** post / thread body sanitize. 저장 + 표시 양쪽에서 동일 옵션 사용. */
-export function sanitizePostBody(rawHtml: string): string {
-  return sanitizeHtml(rawHtml, POST_SANITIZE_OPTS);
+/**
+ * post / thread body sanitize. 입력은 markdown raw 로 가정 (PR-12 Q-R5-01=b).
+ *
+ * 처리 순서:
+ *  1) markdown link/image 의 dangerous scheme (javascript/data/vbscript/livescript)
+ *     을 정규식으로 사전 무효화 — link/image 를 plain text 로 변환.
+ *  2) sanitize-html 화이트리스트로 raw HTML 토큰 strip.
+ */
+export function sanitizePostBody(rawMarkdown: string): string {
+  const linkSafe = stripDangerousMarkdownTokens(rawMarkdown);
+  return sanitizeHtml(linkSafe, POST_SANITIZE_OPTS);
 }
 
 /** thread title — 일반 텍스트만 허용 (모든 HTML strip). */

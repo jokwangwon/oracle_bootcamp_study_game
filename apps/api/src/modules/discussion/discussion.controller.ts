@@ -26,10 +26,19 @@ import {
 } from 'class-validator';
 import type { Request } from 'express';
 
+import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
-  DiscussionService,
+  decodeCursor as decodeThreadCursor,
+  encodeCursor as encodeThreadCursor,
+  THREAD_SORTS,
   type ThreadCursor,
+  type ThreadSort,
+} from './cursor';
+import {
+  DiscussionService,
+  type PostDto,
+  type ThreadDto,
 } from './discussion.service';
 import type { DiscussionPostEntity } from './entities/discussion-post.entity';
 import type { DiscussionThreadEntity } from './entities/discussion-thread.entity';
@@ -81,34 +90,26 @@ interface JwtUser {
   sub: string;
 }
 
-/** §5.4 cursor base64url wrapping. {c: ISO timestamp, i: uuid}. */
-export function encodeCursor(c: ThreadCursor): string {
-  return Buffer.from(
-    JSON.stringify({ c: c.createdAt.toISOString(), i: c.id }),
-    'utf8',
-  ).toString('base64url');
+/** PR-12 §7 — req.user 가 옵셔널 (@Public read endpoint). */
+function optionalUserId(req: Request): string | null {
+  const user = req.user as JwtUser | undefined;
+  return user?.sub ?? null;
 }
 
-export function decodeCursor(s: string): ThreadCursor {
-  try {
-    const decoded = Buffer.from(s, 'base64url').toString('utf8');
-    const obj: unknown = JSON.parse(decoded);
-    if (
-      typeof obj === 'object' &&
-      obj !== null &&
-      typeof (obj as { c?: unknown }).c === 'string' &&
-      typeof (obj as { i?: unknown }).i === 'string'
-    ) {
-      const c = (obj as { c: string; i: string }).c;
-      const i = (obj as { c: string; i: string }).i;
-      const createdAt = new Date(c);
-      if (Number.isNaN(createdAt.valueOf())) throw new Error('invalid_date');
-      return { createdAt, id: i };
-    }
-    throw new Error('shape');
-  } catch {
-    throw new BadRequestException('invalid_cursor');
+/**
+ * PR-12 §5.1 — cursor sort 별 schema 분기는 `cursor.ts` 모듈에 위임.
+ * 본 파일에는 controller 호환성을 위해 동일 이름 alias 만 export.
+ */
+export const encodeCursor = encodeThreadCursor;
+export const decodeCursor = decodeThreadCursor;
+export type { ThreadCursor };
+
+function parseSort(raw: string | undefined): ThreadSort {
+  const sort = (raw ?? 'new') as ThreadSort;
+  if (!(THREAD_SORTS as ReadonlyArray<string>).includes(sort)) {
+    throw new BadRequestException('invalid_sort');
   }
+  return sort;
 }
 
 @Controller('discussion')
@@ -119,25 +120,34 @@ export class DiscussionController {
   // ───────────────────────────── Thread (read) ─────────────────────────────
 
   @Get('questions/:questionId/threads')
+  @Public()
   async listThreadsByQuestion(
     @Param('questionId', ParseUUIDPipe) questionId: string,
-    @Query('sort') sort?: 'new' | 'hot' | 'top',
+    @Req() req: Request,
+    @Query('sort') sortRaw?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
-  ): Promise<DiscussionThreadEntity[]> {
+  ): Promise<ThreadDto[]> {
+    const sort = parseSort(sortRaw);
     const limitNum = limit ? Number.parseInt(limit, 10) : undefined;
-    return this.service.listThreadsByQuestion(questionId, {
-      sort,
-      cursor: cursor ? decodeCursor(cursor) : undefined,
-      limit: Number.isFinite(limitNum) ? limitNum : undefined,
-    });
+    return this.service.listThreadsByQuestion(
+      questionId,
+      {
+        sort,
+        cursor: cursor ? decodeThreadCursor(cursor, sort) : undefined,
+        limit: Number.isFinite(limitNum) ? limitNum : undefined,
+      },
+      optionalUserId(req),
+    );
   }
 
   @Get('threads/:threadId')
+  @Public()
   async getThread(
     @Param('threadId', ParseUUIDPipe) threadId: string,
-  ): Promise<DiscussionThreadEntity> {
-    return this.service.getThread(threadId);
+    @Req() req: Request,
+  ): Promise<ThreadDto> {
+    return this.service.getThread(threadId, optionalUserId(req));
   }
 
   // ───────────────────────────── Thread (write) ────────────────────────────
@@ -179,11 +189,17 @@ export class DiscussionController {
   // ───────────────────────────── Post ──────────────────────────────────────
 
   @Get('threads/:threadId/posts')
+  @Public()
   async listPostsByThread(
     @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Req() req: Request,
     @Query('parentId') parentId?: string,
-  ): Promise<DiscussionPostEntity[]> {
-    return this.service.listPostsByThread(threadId, { parentId });
+  ): Promise<PostDto[]> {
+    return this.service.listPostsByThread(
+      threadId,
+      { parentId },
+      optionalUserId(req),
+    );
   }
 
   @Post('threads/:threadId/posts')

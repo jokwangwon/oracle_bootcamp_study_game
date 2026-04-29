@@ -3,6 +3,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Request } from 'express';
 
+import { IS_PUBLIC_KEY } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   DiscussionController,
@@ -50,6 +51,11 @@ function makeReq(): Request {
   return { user: { sub: USER_ID } } as unknown as Request;
 }
 
+/** PR-12 §7 — @Public() endpoint 의 비인증 요청 (req.user 없음). */
+function makeAnonymousReq(): Request {
+  return {} as unknown as Request;
+}
+
 function readNamed(handler: object, name: string) {
   return {
     ttl: Reflect.getMetadata(THROTTLER_TTL_KEY + name, handler),
@@ -66,28 +72,63 @@ describe('DiscussionController — handler delegate', () => {
     controller = new DiscussionController(service);
   });
 
-  it('listThreadsByQuestion — sort/cursor/limit 변환 후 service 호출', async () => {
+  it('listThreadsByQuestion — sort=hot/cursor/limit + 인증 사용자 → service 에 userId 전달', async () => {
     service.listThreadsByQuestion.mockResolvedValue([]);
-    const cursor = encodeCursor({
-      createdAt: new Date('2026-04-29T00:00:00Z'),
-      id: THREAD_ID,
-    });
+    const cursor = encodeCursor({ h: 1234.5, i: THREAD_ID }, 'hot');
 
-    await controller.listThreadsByQuestion(QUESTION_ID, 'hot', cursor, '30');
+    await controller.listThreadsByQuestion(
+      QUESTION_ID,
+      makeReq(),
+      'hot',
+      cursor,
+      '30',
+    );
 
-    expect(service.listThreadsByQuestion).toHaveBeenCalledWith(QUESTION_ID, {
-      sort: 'hot',
-      cursor: { createdAt: new Date('2026-04-29T00:00:00Z'), id: THREAD_ID },
-      limit: 30,
-    });
+    expect(service.listThreadsByQuestion).toHaveBeenCalledWith(
+      QUESTION_ID,
+      {
+        sort: 'hot',
+        cursor: { h: 1234.5, i: THREAD_ID },
+        limit: 30,
+      },
+      USER_ID,
+    );
   });
 
-  it('getThread — service.getThread(threadId)', async () => {
+  it('listThreadsByQuestion — 비인증 요청 (@Public) → service 에 userId=null 전달', async () => {
+    service.listThreadsByQuestion.mockResolvedValue([]);
+    await controller.listThreadsByQuestion(QUESTION_ID, makeAnonymousReq());
+    expect(service.listThreadsByQuestion).toHaveBeenCalledWith(
+      QUESTION_ID,
+      expect.any(Object),
+      null,
+    );
+  });
+
+  it('listThreadsByQuestion — invalid sort → BadRequestException', async () => {
+    await expect(
+      controller.listThreadsByQuestion(
+        QUESTION_ID,
+        makeReq(),
+        "'; DROP TABLE--",
+        undefined,
+        undefined,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('getThread — 인증 사용자 → service.getThread(threadId, userId)', async () => {
     service.getThread.mockResolvedValue({} as never);
 
-    await controller.getThread(THREAD_ID);
+    await controller.getThread(THREAD_ID, makeReq());
 
-    expect(service.getThread).toHaveBeenCalledWith(THREAD_ID);
+    expect(service.getThread).toHaveBeenCalledWith(THREAD_ID, USER_ID);
+  });
+
+  it('getThread — 비인증 (@Public) → service.getThread(threadId, null)', async () => {
+    service.getThread.mockResolvedValue({} as never);
+    await controller.getThread(THREAD_ID, makeAnonymousReq());
+    expect(service.getThread).toHaveBeenCalledWith(THREAD_ID, null);
   });
 
   it('createThread — req.user.sub + questionId + dto delegate', async () => {
@@ -118,12 +159,24 @@ describe('DiscussionController — handler delegate', () => {
     expect(service.deleteThread).toHaveBeenCalledWith(USER_ID, THREAD_ID);
   });
 
-  it('listPostsByThread — parentId Query string passthrough', async () => {
+  it('listPostsByThread — parentId Query string passthrough + userId', async () => {
     service.listPostsByThread.mockResolvedValue([]);
-    await controller.listPostsByThread(THREAD_ID, POST_ID);
-    expect(service.listPostsByThread).toHaveBeenCalledWith(THREAD_ID, {
-      parentId: POST_ID,
-    });
+    await controller.listPostsByThread(THREAD_ID, makeReq(), POST_ID);
+    expect(service.listPostsByThread).toHaveBeenCalledWith(
+      THREAD_ID,
+      { parentId: POST_ID },
+      USER_ID,
+    );
+  });
+
+  it('listPostsByThread — 비인증 (@Public) → userId=null', async () => {
+    service.listPostsByThread.mockResolvedValue([]);
+    await controller.listPostsByThread(THREAD_ID, makeAnonymousReq());
+    expect(service.listPostsByThread).toHaveBeenCalledWith(
+      THREAD_ID,
+      expect.any(Object),
+      null,
+    );
   });
 
   it('createPost — req.user.sub + threadId + dto delegate', async () => {
@@ -166,32 +219,63 @@ describe('DiscussionController — handler delegate', () => {
   });
 });
 
-describe('DiscussionController cursor base64url helpers', () => {
-  it('encode → decode round-trip 동일성', () => {
+describe('DiscussionController cursor base64url helpers (PR-12 sort 별 schema)', () => {
+  it('sort=new — encode → decode round-trip {c,i}', () => {
     const original = {
-      createdAt: new Date('2026-04-29T12:34:56.789Z'),
-      id: THREAD_ID,
+      c: '2026-04-29T12:34:56.789Z',
+      i: THREAD_ID,
     };
-    const decoded = decodeCursor(encodeCursor(original));
-    expect(decoded.createdAt.toISOString()).toBe(original.createdAt.toISOString());
-    expect(decoded.id).toBe(original.id);
+    const decoded = decodeCursor(encodeCursor(original, 'new'), 'new') as {
+      c: string;
+      i: string;
+    };
+    expect(decoded.c).toBe(original.c);
+    expect(decoded.i).toBe(original.i);
+  });
+
+  it('sort=top — encode → decode round-trip {s,i}', () => {
+    const original = { s: 42, i: THREAD_ID };
+    const decoded = decodeCursor(encodeCursor(original, 'top'), 'top') as {
+      s: number;
+      i: string;
+    };
+    expect(decoded).toEqual(original);
+  });
+
+  it('sort=hot — encode → decode round-trip {h,i}', () => {
+    const original = { h: 1234.5, i: THREAD_ID };
+    const decoded = decodeCursor(encodeCursor(original, 'hot'), 'hot') as {
+      h: number;
+      i: string;
+    };
+    expect(decoded.h).toBeCloseTo(1234.5, 4);
+    expect(decoded.i).toBe(THREAD_ID);
   });
 
   it('잘못된 base64 → BadRequestException("invalid_cursor")', () => {
-    expect(() => decodeCursor('!!!not-base64!!!')).toThrow('invalid_cursor');
+    expect(() => decodeCursor('!!!not-base64!!!', 'new')).toThrow(
+      'invalid_cursor',
+    );
   });
 
-  it('shape 불일치 (date 누락) → BadRequestException', () => {
-    const bad = Buffer.from(JSON.stringify({ x: 1 }), 'utf8').toString('base64url');
-    expect(() => decodeCursor(bad)).toThrow('invalid_cursor');
+  it('shape 불일치 (필드 누락) → BadRequestException', () => {
+    const bad = Buffer.from(JSON.stringify({ x: 1 }), 'utf8').toString(
+      'base64url',
+    );
+    expect(() => decodeCursor(bad, 'new')).toThrow('invalid_cursor');
   });
 
-  it('Invalid Date → BadRequestException', () => {
+  it('Invalid Date (sort=new) → BadRequestException', () => {
     const bad = Buffer.from(
       JSON.stringify({ c: 'not-a-date', i: THREAD_ID }),
       'utf8',
     ).toString('base64url');
-    expect(() => decodeCursor(bad)).toThrow('invalid_cursor');
+    expect(() => decodeCursor(bad, 'new')).toThrow('invalid_cursor');
+  });
+
+  it('schema 불일치 (top schema → sort=new) → BadRequestException', () => {
+    const wrong = encodeCursor({ s: 1, i: THREAD_ID }, 'top');
+    expect(() => decodeCursor(wrong, 'new')).toThrow('invalid_cursor');
   });
 });
 
@@ -242,5 +326,32 @@ describe('DiscussionController @Throttle / @UseGuards 메타데이터 (ADR-020 �
     expect(guards).toBeDefined();
     expect(guards).toContain(JwtAuthGuard);
     expect(guards).toContain(ThrottlerGuard);
+  });
+});
+
+describe('DiscussionController — @Public() 메타데이터 (Phase 3c)', () => {
+  it('read 3종 (listThreadsByQuestion / getThread / listPostsByThread) 에 IS_PUBLIC_KEY=true', () => {
+    for (const h of [
+      DiscussionController.prototype.listThreadsByQuestion,
+      DiscussionController.prototype.getThread,
+      DiscussionController.prototype.listPostsByThread,
+    ]) {
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, h), h.name).toBe(true);
+    }
+  });
+
+  it('write 7종 (createThread/updateThread/deleteThread/createPost/updatePost/deletePost/castVote/acceptPost) 에 IS_PUBLIC_KEY 미적용', () => {
+    for (const h of [
+      DiscussionController.prototype.createThread,
+      DiscussionController.prototype.updateThread,
+      DiscussionController.prototype.deleteThread,
+      DiscussionController.prototype.createPost,
+      DiscussionController.prototype.updatePost,
+      DiscussionController.prototype.deletePost,
+      DiscussionController.prototype.castVote,
+      DiscussionController.prototype.acceptPost,
+    ]) {
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, h), h.name).toBeUndefined();
+    }
   });
 });
