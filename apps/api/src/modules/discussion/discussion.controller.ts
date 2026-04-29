@@ -26,6 +26,7 @@ import {
 } from 'class-validator';
 import type { Request } from 'express';
 
+import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   decodeCursor as decodeThreadCursor,
@@ -34,7 +35,11 @@ import {
   type ThreadCursor,
   type ThreadSort,
 } from './cursor';
-import { DiscussionService } from './discussion.service';
+import {
+  DiscussionService,
+  type PostDto,
+  type ThreadDto,
+} from './discussion.service';
 import type { DiscussionPostEntity } from './entities/discussion-post.entity';
 import type { DiscussionThreadEntity } from './entities/discussion-thread.entity';
 import type { DiscussionVoteTarget } from './entities/discussion-vote.entity';
@@ -85,6 +90,12 @@ interface JwtUser {
   sub: string;
 }
 
+/** PR-12 §7 — req.user 가 옵셔널 (@Public read endpoint). */
+function optionalUserId(req: Request): string | null {
+  const user = req.user as JwtUser | undefined;
+  return user?.sub ?? null;
+}
+
 /**
  * PR-12 §5.1 — cursor sort 별 schema 분기는 `cursor.ts` 모듈에 위임.
  * 본 파일에는 controller 호환성을 위해 동일 이름 alias 만 export.
@@ -109,26 +120,34 @@ export class DiscussionController {
   // ───────────────────────────── Thread (read) ─────────────────────────────
 
   @Get('questions/:questionId/threads')
+  @Public()
   async listThreadsByQuestion(
     @Param('questionId', ParseUUIDPipe) questionId: string,
+    @Req() req: Request,
     @Query('sort') sortRaw?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
-  ): Promise<DiscussionThreadEntity[]> {
+  ): Promise<ThreadDto[]> {
     const sort = parseSort(sortRaw);
     const limitNum = limit ? Number.parseInt(limit, 10) : undefined;
-    return this.service.listThreadsByQuestion(questionId, {
-      sort,
-      cursor: cursor ? decodeThreadCursor(cursor, sort) : undefined,
-      limit: Number.isFinite(limitNum) ? limitNum : undefined,
-    });
+    return this.service.listThreadsByQuestion(
+      questionId,
+      {
+        sort,
+        cursor: cursor ? decodeThreadCursor(cursor, sort) : undefined,
+        limit: Number.isFinite(limitNum) ? limitNum : undefined,
+      },
+      optionalUserId(req),
+    );
   }
 
   @Get('threads/:threadId')
+  @Public()
   async getThread(
     @Param('threadId', ParseUUIDPipe) threadId: string,
-  ): Promise<DiscussionThreadEntity> {
-    return this.service.getThread(threadId);
+    @Req() req: Request,
+  ): Promise<ThreadDto> {
+    return this.service.getThread(threadId, optionalUserId(req));
   }
 
   // ───────────────────────────── Thread (write) ────────────────────────────
@@ -170,11 +189,17 @@ export class DiscussionController {
   // ───────────────────────────── Post ──────────────────────────────────────
 
   @Get('threads/:threadId/posts')
+  @Public()
   async listPostsByThread(
     @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Req() req: Request,
     @Query('parentId') parentId?: string,
-  ): Promise<DiscussionPostEntity[]> {
-    return this.service.listPostsByThread(threadId, { parentId });
+  ): Promise<PostDto[]> {
+    return this.service.listPostsByThread(
+      threadId,
+      { parentId },
+      optionalUserId(req),
+    );
   }
 
   @Post('threads/:threadId/posts')
