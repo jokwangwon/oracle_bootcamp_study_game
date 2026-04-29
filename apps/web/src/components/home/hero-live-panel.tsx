@@ -25,13 +25,16 @@ export function HeroLivePanel({
   return (
     <section className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[0.9fr_1.1fr]">
       <HeroCopy hero={hero} isGuest={isGuest} cohortCopy={cohortCopy} />
-      <CodePreviewPanel
-        code={todayQuestion.code}
-        filename={todayQuestion.filename}
-        topLabel={todayQuestion.modeLabel}
-        ariaLabel="오늘의 문제 코드 미리보기"
-        bottomSlot={<HomeTickerBar ticker={ticker} guestTickerCopy={guestTickerCopy} />}
-      />
+      <div className="relative">
+        <CodePreviewPanel
+          code={todayQuestion.code}
+          filename={todayQuestion.filename}
+          topLabel={todayQuestion.modeLabel}
+          ariaLabel="오늘의 문제 코드 미리보기"
+          bottomSlot={<HomeTickerBar ticker={ticker} guestTickerCopy={guestTickerCopy} />}
+        />
+        <DiscussionMetaChip todayQuestion={todayQuestion} />
+      </div>
     </section>
   );
 }
@@ -83,6 +86,31 @@ function HeroCopy({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * PR-12 §3.2 — Hero `todayQuestion` 우하단 "토론 N개" 메타 칩.
+ * discussionCount > 0 + questionId 존재 시만 표시 (silent fallback).
+ * 비인증 사용자도 표시 (게스트 미리보기 — read-only 페이지로 진입).
+ */
+function DiscussionMetaChip({
+  todayQuestion,
+}: {
+  todayQuestion: TodayQuestion;
+}) {
+  const count = todayQuestion.discussionCount ?? 0;
+  if (!todayQuestion.questionId || count <= 0) return null;
+  return (
+    <Link
+      href={`/play/solo/${todayQuestion.questionId}/discussion`}
+      data-testid="discussion-meta-chip"
+      className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-card/80 px-2.5 py-1 text-xs font-medium text-fg shadow-sm backdrop-blur-md hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`토론 ${count}개 보기`}
+    >
+      <span aria-hidden="true">💬</span>
+      토론 {count}개
+    </Link>
   );
 }
 
