@@ -4,6 +4,7 @@ import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService, TokenExpiredError } from '@nestjs/jwt';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import type IORedis from 'ioredis';
+import * as jwt from 'jsonwebtoken';
 import { DataSource, IsNull, Repository } from 'typeorm';
 
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
@@ -242,7 +243,10 @@ export class RefreshTokenService {
       expiresIn: this.config.refreshExpiresIn,
       now: input.now,
     });
-    // payload 에 iat/exp 가 명시되어 있으므로 expiresIn 옵션은 미지정 (충돌 방지).
-    return this.jwt.signAsync(claims, { secret: this.config.refreshSecret });
+    // payload 에 iat/exp 가 명시되어 있고, NestJS JwtService 는 글로벌
+    // signOptions.expiresIn (JwtModule.register 의 default '15m') 을 자동 머지하므로
+    // jsonwebtoken 라이브러리의 "options.expiresIn + payload.exp 동시 지정 거부" 와
+    // 충돌한다. 해결: jsonwebtoken 직접 호출로 글로벌 default 우회.
+    return jwt.sign(claims, this.config.refreshSecret);
   }
 }
