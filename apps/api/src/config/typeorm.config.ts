@@ -1,4 +1,5 @@
 import type { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
@@ -10,13 +11,28 @@ import * as path from 'node:path';
  *    synchronize 가 처리 못 하는 DB 오브젝트를 부팅 시 반영.
  *
  * CLI 용 DataSource 는 `apps/api/src/config/data-source.ts` (별도 파일) — migrations generate/run/revert.
+ *
+ * PR-13 결함 #15 — typeorm glob `*.{ts,js}` 가 `migrations/*.test.ts` 까지 매칭하여
+ * e2e (vitest + ts-node register) 환경에서 test 파일을 require 시 vitest cjs/esm
+ * 충돌. timestamp prefix(`^\d+-`) + `.test/.spec` 접미사 제외 필터로 차단.
  */
+function discoverMigrationFiles(): string[] {
+  const dir = path.join(__dirname, '..', 'migrations');
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => /^\d+-.+\.(ts|js)$/.test(f))
+    .filter((f) => !/\.(test|spec)\.(ts|js)$/.test(f))
+    .map((f) => path.join(dir, f));
+}
+
 export function typeOrmConfig(): TypeOrmModuleOptions {
   const isProduction = process.env.NODE_ENV === 'production';
-
-  // dist 빌드 경로(프로덕션)와 src 경로(dev/test) 모두 포함 — 환경별 glob 자동 선택은 node-sql-parser
-  // 와 달리 TypeORM 이 실제 파일 시스템을 조회하므로 양쪽을 등록해도 중복 로드되지 않는다.
-  const migrationsDir = path.join(__dirname, '..', 'migrations', '*.{ts,js}');
+  // PR-13 결함 #16 — e2e (NODE_ENV=test) 의 빈 DB 첫 부팅 시 synchronize/migrationsRun
+  // 순서 충돌로 ALTER TABLE 마이그레이션이 fail. e2e 는 entity sync 만 사용하고
+  // 마이그레이션은 e2e 테스트가 필요할 때 직접 SQL 로 적용. dev (NODE_ENV=development)
+  // 는 누적 DB 라 충돌 없음.
+  const isE2E = process.env.NODE_ENV === 'test';
 
   return {
     type: 'postgres',
@@ -24,7 +40,7 @@ export function typeOrmConfig(): TypeOrmModuleOptions {
     autoLoadEntities: true,
     synchronize: !isProduction,
     logging: process.env.NODE_ENV === 'development',
-    migrations: [migrationsDir],
-    migrationsRun: true,
+    migrations: isE2E ? [] : discoverMigrationFiles(),
+    migrationsRun: !isE2E && !isProduction,
   };
 }

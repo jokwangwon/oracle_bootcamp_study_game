@@ -42,12 +42,17 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? '15m' },
       }),
     }),
-    ThrottlerModule.forRoot([
-      { name: 'login', ttl: 15 * 60_000, limit: 5 },
-      { name: 'register', ttl: 60 * 60_000, limit: 3 },
-      // PR-10b §5.3 — R4 토론 write endpoint (분당 5회). DiscussionController 가 사용.
-      { name: 'discussion_write', ttl: 60_000, limit: 5 },
-    ]),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        { name: 'login', ttl: 15 * 60_000, limit: 5 },
+        { name: 'register', ttl: 60 * 60_000, limit: 3 },
+        // PR-10b §5.3 — R4 토론 write endpoint (분당 5회). DiscussionController 가 사용.
+        { name: 'discussion_write', ttl: 60_000, limit: 5 },
+      ],
+      // PR-13 — e2e 환경에서 ThrottlerGuard 우회 (THROTTLE_DISABLED=1 에서만).
+      // Throttler 회귀는 단위 테스트 (auth.controller.test 등) 가 검증.
+      skipIf: () => process.env.THROTTLE_DISABLED === '1',
+    }),
   ],
   providers: [
     AuthService,

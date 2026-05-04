@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import {
@@ -98,6 +99,9 @@ export class DiscussionService {
     private readonly voteRepo: Repository<DiscussionVoteEntity>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    // PR-13 §5 hotfix #1 패턴 — opts 가 default `{}` 라도 emitDecoratorMetadata 가
+    // type 'Object' 로 추론하여 NestJS DI 가 inject 시도. @Optional() 로 차단.
+    @Optional()
     private readonly opts: { now?: () => Date } = {},
   ) {}
 

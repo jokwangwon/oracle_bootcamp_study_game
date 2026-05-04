@@ -1,0 +1,92 @@
+# PR-13 (consensus-013, ADR-021) — 통합 e2e docker-compose
+#
+# SDD §4 5종 안전장치:
+# §4.1 DB schema 격리 — postgres 5433 / redis 6380 (운영 5432/6379 분리)
+# §4.3 Langfuse no-op   — LANGFUSE_DISABLED=1 (trace queue 누수 차단)
+# §4.4 GB10 ulimit      — nofile 65536 (aarch64 connection pool 폭증 차단)
+# §4.5 환경변수 격리    — .env.test (dummy 만), 실 secret 은 GitHub Actions secrets
+
+services:
+  test-db:
+    image: postgres:16-alpine
+    container_name: oracle-game-e2e-db
+    restart: "no"
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:-test_only_dummy_password}
+      POSTGRES_DB: bootcamp_test
+    ports:
+      - "5435:5432"  # 5433 은 ai-bench-db 점유 → 5435 로 분리
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d bootcamp_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data  # 매 부팅 초기화 (격리 강화)
+
+  test-redis:
+    image: redis:7-alpine
+    container_name: oracle-game-e2e-redis
+    restart: "no"
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  test-api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    container_name: oracle-game-e2e-api
+    restart: "no"
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: test
+      PORT: 3000
+      DATABASE_URL: postgres://test_user:${TEST_DB_PASSWORD:-test_only_dummy_password}@test-db:5432/bootcamp_test
+      REDIS_URL: redis://test-redis:6379
+      JWT_SECRET: ${TEST_JWT_SECRET:-test_only_jwt_secret_dummy_for_e2e_min_32chars_xx}
+      JWT_REFRESH_SECRET: ${TEST_JWT_REFRESH_SECRET:-test_only_refresh_secret_dummy_for_e2e_min_32chars}
+      JWT_EXPIRES_IN: 30m
+      JWT_REFRESH_EXPIRES_IN: 14d
+      USER_TOKEN_HASH_SALT: ${TEST_HASH_SALT:-test_only_hash_salt_dummy_min_16}
+      CORS_ORIGIN: http://localhost:3001
+      ORIGIN_GUARD_MODE: enforce
+      LANGFUSE_DISABLED: "1"
+      LANGFUSE_PUBLIC_KEY: disabled-e2e-only
+      LANGFUSE_SECRET_KEY: disabled-e2e-only
+      LANGFUSE_HOST: http://disabled
+      LLM_PROVIDER: anthropic
+      LLM_API_KEY: disabled-e2e-only
+      LLM_MODEL: claude-opus-4-6
+      OLLAMA_BASE_URL: http://disabled:11434
+      ENABLE_FREE_FORM_GRADING: "false"
+      SEED_ON_BOOT: "false"
+    ports:
+      - "3002:3000"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  test-web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    container_name: oracle-game-e2e-web
+    restart: "no"
+    depends_on:
+      - test-api
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3002
+      NODE_ENV: test
+    ports:
+      - "3001:3000"

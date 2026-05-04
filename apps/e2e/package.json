@@ -1,0 +1,23 @@
+{
+  "name": "@oracle-game/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PR-13 (consensus-013) — Playwright smoke + MSW. 통합 e2e 하네스.",
+  "scripts": {
+    "test": "echo '@oracle-game/e2e: precommit skipped — Playwright/docker 의존. 실행은 npm run test:e2e'",
+    "test:e2e": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium --with-deps",
+    "compose:up": "docker compose -f docker-compose.test.yml up -d",
+    "compose:down": "docker compose -f docker-compose.test.yml down -v",
+    "compose:logs": "docker compose -f docker-compose.test.yml logs -f"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "msw": "^2.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0"
+  }
+}
